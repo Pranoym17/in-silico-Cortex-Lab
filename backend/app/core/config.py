@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    environment: str = "local"
     database_url: str = "postgresql+asyncpg://cortex:cortex@localhost:5432/cortexlab"
     redis_url: str = "redis://localhost:6379/0"
     aws_region: str = "us-east-1"
@@ -18,4 +19,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

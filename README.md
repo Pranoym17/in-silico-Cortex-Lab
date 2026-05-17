@@ -24,6 +24,9 @@ cp .env.example .env
 cp frontend/.env.example frontend/.env.local
 python -m venv .venv
 .venv/Scripts/python -m pip install -r backend/requirements-dev.txt
+cd backend
+../.venv/Scripts/python -m alembic upgrade head
+cd ..
 cd frontend
 npm install
 ```
