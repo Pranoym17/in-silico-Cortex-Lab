@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { ApiError, Experiment, createExperiment, listExperiments } from "@/lib/api";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
 
 function formatUpdatedAt(value: string) {
@@ -16,13 +17,44 @@ function formatUpdatedAt(value: string) {
 
 export function DashboardClient() {
   const accessToken = useAuthStore((state) => state.accessToken);
+  const email = useAuthStore((state) => state.email);
   const setAccessToken = useAuthStore((state) => state.setAccessToken);
+  const setSession = useAuthStore((state) => state.setSession);
   const [tokenDraft, setTokenDraft] = useState("");
+  const [emailDraft, setEmailDraft] = useState("");
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [name, setName] = useState("Untitled experiment");
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isSendingLink, setIsSendingLink] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const supabaseConfigured = isSupabaseConfigured();
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      return;
+    }
+
+    supabase.auth.getSession().then(({ data }) => {
+      setSession({
+        accessToken: data.session?.access_token ?? null,
+        email: data.session?.user.email ?? null
+      });
+    });
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession({
+        accessToken: session?.access_token ?? null,
+        email: session?.user.email ?? null
+      });
+    });
+
+    return () => {
+      data.subscription.unsubscribe();
+    };
+  }, [setSession]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -77,6 +109,59 @@ export function DashboardClient() {
     }
   }
 
+  async function handleMagicLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || !emailDraft.trim()) {
+      return;
+    }
+
+    setIsSendingLink(true);
+    setError(null);
+    setNotice(null);
+
+    const { error: signInError } = await supabase.auth.signInWithOtp({
+      email: emailDraft.trim(),
+      options: {
+        emailRedirectTo: window.location.origin + "/dashboard"
+      }
+    });
+
+    if (signInError) {
+      setError(signInError.message);
+    } else {
+      setNotice("Check your email for a sign-in link.");
+    }
+
+    setIsSendingLink(false);
+  }
+
+  async function handleGoogleSignIn() {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      return;
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin + "/dashboard"
+      }
+    });
+
+    if (signInError) {
+      setError(signInError.message);
+    }
+  }
+
+  async function handleSignOut() {
+    const supabase = getSupabaseBrowserClient();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    setAccessToken(null);
+  }
+
   return (
     <main className="shell">
       <div className="page-header">
@@ -89,29 +174,56 @@ export function DashboardClient() {
       {!accessToken ? (
         <section className="panel stack">
           <h2>Connect a session</h2>
-          <p>Paste a Supabase JWT when your project exists. For now, backend tests cover the same token contract.</p>
-          <form
-            className="token-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setAccessToken(tokenDraft.trim() || null);
-            }}
-          >
-            <input
-              aria-label="Access token"
-              value={tokenDraft}
-              onChange={(event) => setTokenDraft(event.target.value)}
-              placeholder="Bearer token value"
-            />
-            <button type="submit">Use token</button>
-          </form>
+          {supabaseConfigured ? (
+            <>
+              <form className="token-form" onSubmit={handleMagicLink}>
+                <input
+                  aria-label="Email"
+                  value={emailDraft}
+                  onChange={(event) => setEmailDraft(event.target.value)}
+                  placeholder="you@example.com"
+                  type="email"
+                />
+                <button type="submit" disabled={isSendingLink || !emailDraft.trim()}>
+                  {isSendingLink ? "Sending..." : "Email link"}
+                </button>
+              </form>
+              <button type="button" onClick={handleGoogleSignIn}>
+                Continue with Google
+              </button>
+            </>
+          ) : (
+            <>
+              <p>Supabase env vars are not set yet. Paste a development JWT to exercise the API contract.</p>
+              <form
+                className="token-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setAccessToken(tokenDraft.trim() || null);
+                }}
+              >
+                <input
+                  aria-label="Access token"
+                  value={tokenDraft}
+                  onChange={(event) => setTokenDraft(event.target.value)}
+                  placeholder="Bearer token value"
+                />
+                <button type="submit">Use token</button>
+              </form>
+            </>
+          )}
+          {notice ? <p>{notice}</p> : null}
+          {error ? <p className="error-text">{error}</p> : null}
         </section>
       ) : (
         <section className="panel stack">
           <div className="toolbar">
-            <h2>Your experiments</h2>
-            <button type="button" onClick={() => setAccessToken(null)}>
-              Clear token
+            <div>
+              <h2>Your experiments</h2>
+              {email ? <p>{email}</p> : null}
+            </div>
+            <button type="button" onClick={handleSignOut}>
+              Sign out
             </button>
           </div>
 
@@ -135,7 +247,7 @@ export function DashboardClient() {
                 <div>
                   <h3>{experiment.name}</h3>
                   <p>
-                    {experiment.status} · Updated {formatUpdatedAt(experiment.updated_at)}
+                    {experiment.status} - Updated {formatUpdatedAt(experiment.updated_at)}
                   </p>
                 </div>
                 <Link href={`/builder/${experiment.id}`}>Open</Link>

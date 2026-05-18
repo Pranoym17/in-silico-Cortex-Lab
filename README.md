@@ -31,6 +31,8 @@ cd frontend
 npm install
 ```
 
+Supabase is optional until the real login flow is exercised. When your Supabase project exists, fill in `frontend/.env.local` with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, then put the matching `SUPABASE_JWT_SECRET` in `.env`.
+
 Run backend tests:
 
 ```bash

@@ -113,7 +113,8 @@ button:disabled {
 }
 
 .experiment-row p,
-.page-header p {
+.page-header p,
+.toolbar p {
   color: var(--muted);
 }
 
