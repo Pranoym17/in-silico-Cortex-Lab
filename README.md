@@ -24,11 +24,23 @@ cp .env.example .env
 cp frontend/.env.example frontend/.env.local
 python -m venv .venv
 .venv/Scripts/python -m pip install -r backend/requirements-dev.txt
+cd frontend
+npm install
+cd ..
+```
+
+Start Postgres and Redis before running migrations:
+
+```bash
+docker compose up postgres redis
+```
+
+In a second terminal, apply migrations:
+
+```bash
 cd backend
 ../.venv/Scripts/python -m alembic upgrade head
 cd ..
-cd frontend
-npm install
 ```
 
 Supabase is optional until the real login flow is exercised. When your Supabase project exists, fill in `frontend/.env.local` with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, then put the matching `SUPABASE_JWT_SECRET` in `.env`.
@@ -51,7 +63,7 @@ npm run build
 Start local services:
 
 ```bash
-docker-compose up
+docker compose up
 ```
 
 Start the frontend dev server:
