@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, apiFetch, apiJson, createExperiment } from "./api";
+import { ApiError, apiFetch, apiJson, createBlock, createExperiment, reorderBlocks } from "./api";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -42,3 +42,37 @@ describe("createExperiment", () => {
   });
 });
 
+describe("block helpers", () => {
+  it("posts block metadata", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: "block_1", type: "text" }), { status: 201 })
+    );
+
+    await createBlock(
+      "exp_1",
+      {
+        type: "text",
+        condition: "language",
+        start_ms: 0,
+        duration_ms: 5000,
+        payload: { text: "hello" }
+      },
+      "token-123"
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/experiments/exp_1/blocks");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+  });
+
+  it("reorders blocks using the contract envelope", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("[]", { status: 200 }));
+
+    await reorderBlocks("exp_1", [{ id: "block_1", start_ms: 1000, duration_ms: 2000 }], "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/experiments/exp_1/blocks/reorder");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(
+      JSON.stringify({ blocks: [{ id: "block_1", start_ms: 1000, duration_ms: 2000 }] })
+    );
+  });
+});

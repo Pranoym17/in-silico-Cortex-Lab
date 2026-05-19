@@ -45,6 +45,44 @@ export type UpdateExperimentInput = Partial<{
   status: ExperimentStatus;
 }>;
 
+export type StimulusBlockType = "image" | "text" | "audio";
+
+export type StimulusBlock = {
+  id: string;
+  experiment_id: string;
+  type: StimulusBlockType;
+  condition: string | null;
+  start_ms: number;
+  duration_ms: number;
+  content_hash: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateBlockInput = {
+  type: StimulusBlockType;
+  condition?: string | null;
+  start_ms: number;
+  duration_ms: number;
+  content_hash?: string | null;
+  payload?: Record<string, unknown>;
+};
+
+export type UpdateBlockInput = Partial<{
+  condition: string | null;
+  start_ms: number;
+  duration_ms: number;
+  content_hash: string | null;
+  payload: Record<string, unknown>;
+}>;
+
+export type ReorderBlockInput = {
+  id: string;
+  start_ms: number;
+  duration_ms: number;
+};
+
 export async function apiFetch(path: string, token?: string | null, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
 
@@ -103,5 +141,41 @@ export function updateExperiment(id: string, input: UpdateExperimentInput, token
 export function archiveExperiment(id: string, token?: string | null) {
   return apiJson<void>(`/api/experiments/${id}`, token, {
     method: "DELETE"
+  });
+}
+
+export function listBlocks(experimentId: string, token?: string | null) {
+  return apiJson<StimulusBlock[]>(`/api/experiments/${experimentId}/blocks`, token);
+}
+
+export function createBlock(experimentId: string, input: CreateBlockInput, token?: string | null) {
+  return apiJson<StimulusBlock>(`/api/experiments/${experimentId}/blocks`, token, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function updateBlock(
+  experimentId: string,
+  blockId: string,
+  input: UpdateBlockInput,
+  token?: string | null
+) {
+  return apiJson<StimulusBlock>(`/api/experiments/${experimentId}/blocks/${blockId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
+export function deleteBlock(experimentId: string, blockId: string, token?: string | null) {
+  return apiJson<void>(`/api/experiments/${experimentId}/blocks/${blockId}`, token, {
+    method: "DELETE"
+  });
+}
+
+export function reorderBlocks(experimentId: string, blocks: ReorderBlockInput[], token?: string | null) {
+  return apiJson<StimulusBlock[]>(`/api/experiments/${experimentId}/blocks/reorder`, token, {
+    method: "PUT",
+    body: JSON.stringify({ blocks })
   });
 }

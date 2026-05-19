@@ -121,3 +121,48 @@ button:disabled {
 .error-text {
   color: #ff8f8f;
 }
+
+.builder-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) minmax(220px, 320px);
+  gap: 16px;
+  align-items: start;
+}
+
+.block-list,
+.validation-list {
+  display: grid;
+  gap: 8px;
+}
+
+.block-row {
+  display: grid;
+  grid-template-columns: 90px minmax(120px, 1fr) minmax(150px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.block-row-selected {
+  background: rgba(79, 179, 255, 0.08);
+}
+
+pre {
+  overflow: auto;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  background: #101114;
+}
+
+@media (max-width: 900px) {
+  .builder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .block-row {
+    grid-template-columns: 1fr;
+  }
+}
