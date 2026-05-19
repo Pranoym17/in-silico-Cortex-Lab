@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import {
   CreateBlockInput,
   Experiment,
+  StimulusBlock,
   StimulusBlockType,
   UpdateBlockInput,
   createBlock,
+  createUploadIntent,
   deleteBlock,
   getExperiment,
   listBlocks,
@@ -27,6 +29,12 @@ import {
   shiftBlockTiming,
   toReorderInput
 } from "@/lib/timelineControls";
+import {
+  buildUploadedStimulusMetadata,
+  createUploadIntentInput,
+  uploadFileToIntent,
+  validateUploadFile
+} from "@/lib/mediaUpload";
 
 function getNextStartMs(blocks: { start_ms: number; duration_ms: number }[]) {
   return blocks.reduce((max, block) => Math.max(max, block.start_ms + block.duration_ms), 0);
@@ -280,6 +288,39 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     await persistTimeline(resizeBlockDuration(blocks, blockId, deltaMs), "Failed to resize block");
   }
 
+  async function handleUploadBlockFile(block: StimulusBlock, file: File) {
+    if (!accessToken || (block.type !== "image" && block.type !== "audio")) {
+      return;
+    }
+
+    setIsMutating(true);
+    setError(null);
+
+    try {
+      validateUploadFile(block.type, file);
+      const intent = await createUploadIntent(createUploadIntentInput(experimentId, block, file), accessToken);
+      await uploadFileToIntent(file, intent);
+      const uploadedMetadata = await buildUploadedStimulusMetadata(block, file, intent);
+      const updatedBlock = await updateBlock(
+        experimentId,
+        block.id,
+        {
+          content_hash: uploadedMetadata.contentHash,
+          payload: uploadedMetadata.payload
+        },
+        accessToken
+      );
+      upsertBlock(updatedBlock);
+      selectBlock(updatedBlock.id);
+      setLastSavedAt(updatedBlock.updated_at);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to upload stimulus file");
+      throw caught;
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId);
   const saveStatus = isMutating ? "Saving..." : lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : "Ready";
 
@@ -378,6 +419,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
           isSaving={isMutating}
           onDelete={handleDeleteBlock}
           onSave={handleUpdateBlock}
+          onUpload={handleUploadBlockFile}
         />
 
         <ConditionsPanel blocks={blocks} isSaving={isMutating || !accessToken} onRenameCondition={handleRenameCondition} />

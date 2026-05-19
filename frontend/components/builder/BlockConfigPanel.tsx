@@ -12,12 +12,14 @@ export function BlockConfigPanel({
   block,
   isSaving,
   onSave,
-  onDelete
+  onDelete,
+  onUpload
 }: {
   block: StimulusBlock | undefined;
   isSaving: boolean;
   onSave: (blockId: string, input: UpdateBlockInput) => Promise<void>;
   onDelete: (blockId: string) => Promise<void>;
+  onUpload: (block: StimulusBlock, file: File) => Promise<void>;
 }) {
   const [condition, setCondition] = useState("");
   const [startMs, setStartMs] = useState(0);
@@ -37,6 +39,7 @@ export function BlockConfigPanel({
   const [audioMimeType, setAudioMimeType] = useState("audio/wav");
   const [channels, setChannels] = useState(1);
   const [sampleRateHz, setSampleRateHz] = useState(16000);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!block) {
@@ -58,6 +61,7 @@ export function BlockConfigPanel({
       setAudioMimeType("audio/wav");
       setChannels(1);
       setSampleRateHz(16000);
+      setUploadError(null);
       return;
     }
 
@@ -81,6 +85,7 @@ export function BlockConfigPanel({
     setAudioMimeType(typeof block.payload.mime_type === "string" ? block.payload.mime_type : "audio/wav");
     setChannels(typeof block.payload.channels === "number" ? block.payload.channels : 1);
     setSampleRateHz(typeof block.payload.sample_rate_hz === "number" ? block.payload.sample_rate_hz : 16000);
+    setUploadError(null);
   }, [block]);
 
   function buildPayloadFromFields(basePayload: Record<string, unknown>, block: StimulusBlock) {
@@ -138,6 +143,19 @@ export function BlockConfigPanel({
       content_hash: normalizeContentHash(contentHash),
       payload: buildPayloadFromFields(payload, block)
     });
+  }
+
+  async function handleUpload(file: File | undefined) {
+    if (!block || !file) {
+      return;
+    }
+
+    setUploadError(null);
+    try {
+      await onUpload(block, file);
+    } catch (caught) {
+      setUploadError(caught instanceof Error ? caught.message : "Failed to upload stimulus file.");
+    }
   }
 
   if (!block) {
@@ -215,6 +233,15 @@ export function BlockConfigPanel({
         {block.type === "image" ? (
           <>
             <label>
+              Upload image
+              <input
+                accept={IMAGE_MIME_TYPES.join(",")}
+                disabled={isSaving}
+                onChange={(event) => handleUpload(event.target.files?.[0])}
+                type="file"
+              />
+            </label>
+            <label>
               Library ID
               <input onChange={(event) => setLibraryId(event.target.value)} value={libraryId} />
             </label>
@@ -265,6 +292,15 @@ export function BlockConfigPanel({
         {block.type === "audio" ? (
           <>
             <label>
+              Upload audio
+              <input
+                accept={AUDIO_MIME_TYPES.join(",")}
+                disabled={isSaving}
+                onChange={(event) => handleUpload(event.target.files?.[0])}
+                type="file"
+              />
+            </label>
+            <label>
               Filename
               <input onChange={(event) => setFilename(event.target.value)} value={filename} />
             </label>
@@ -309,6 +345,7 @@ export function BlockConfigPanel({
           <textarea onChange={(event) => setPayloadText(event.target.value)} rows={10} value={payloadText} />
         </label>
         {payloadError ? <p className="error-text">{payloadError}</p> : null}
+        {uploadError ? <p className="error-text">{uploadError}</p> : null}
         <div className="config-actions">
           <button type="submit" disabled={isSaving}>
             {isSaving ? "Saving..." : "Save changes"}
