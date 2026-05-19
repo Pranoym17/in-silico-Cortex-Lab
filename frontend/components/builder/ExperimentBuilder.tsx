@@ -1,9 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CreateBlockInput, Experiment, StimulusBlockType, createBlock, deleteBlock, getExperiment, listBlocks } from "@/lib/api";
+import {
+  CreateBlockInput,
+  Experiment,
+  StimulusBlockType,
+  UpdateBlockInput,
+  createBlock,
+  deleteBlock,
+  getExperiment,
+  listBlocks,
+  updateBlock
+} from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { useExperimentStore } from "@/store/experimentStore";
+import { BlockConfigPanel } from "./BlockConfigPanel";
+import { BuilderTimeline } from "./BuilderTimeline";
 
 function getNextStartMs(blocks: { start_ms: number; duration_ms: number }[]) {
   return blocks.reduce((max, block) => Math.max(max, block.start_ms + block.duration_ms), 0);
@@ -135,6 +147,25 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     }
   }
 
+  async function handleUpdateBlock(blockId: string, input: UpdateBlockInput) {
+    if (!accessToken) {
+      return;
+    }
+
+    setIsMutating(true);
+    setError(null);
+
+    try {
+      const block = await updateBlock(experimentId, blockId, input, accessToken);
+      upsertBlock(block);
+      selectBlock(block.id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to update block");
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId);
 
   return (
@@ -170,25 +201,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
           {isLoading ? <p>Loading builder...</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
 
-          <div className="block-list">
-            {blocks.map((block) => (
-              <article
-                className={block.id === selectedBlockId ? "block-row block-row-selected" : "block-row"}
-                key={block.id}
-              >
-                <button type="button" onClick={() => selectBlock(block.id)}>
-                  {block.type}
-                </button>
-                <span>{block.condition ?? "No condition"}</span>
-                <span>
-                  {block.start_ms}ms - {block.start_ms + block.duration_ms}ms
-                </span>
-                <button type="button" onClick={() => handleDeleteBlock(block.id)} disabled={isMutating}>
-                  Delete
-                </button>
-              </article>
-            ))}
-          </div>
+          <BuilderTimeline blocks={blocks} selectedBlockId={selectedBlockId} onSelectBlock={selectBlock} />
 
           {validationErrors.length > 0 ? (
             <div className="validation-list">
@@ -201,19 +214,12 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
           ) : null}
         </section>
 
-        <section className="panel stack">
-          <h2>Selected block</h2>
-          {selectedBlock ? (
-            <>
-              <p>Type: {selectedBlock.type}</p>
-              <p>Condition: {selectedBlock.condition ?? "None"}</p>
-              <p>Duration: {selectedBlock.duration_ms}ms</p>
-              <pre>{JSON.stringify(selectedBlock.payload, null, 2)}</pre>
-            </>
-          ) : (
-            <p>Select a block to inspect its saved payload.</p>
-          )}
-        </section>
+        <BlockConfigPanel
+          block={selectedBlock}
+          isSaving={isMutating}
+          onDelete={handleDeleteBlock}
+          onSave={handleUpdateBlock}
+        />
       </div>
     </main>
   );
