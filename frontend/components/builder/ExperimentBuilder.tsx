@@ -190,12 +190,15 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     }
   }
 
-  async function handleApplyTemplate(template: ParadigmTemplate) {
+  async function handleApplyTemplate(template: ParadigmTemplate, mode: "append" | "replace") {
     if (!accessToken) {
       return;
     }
 
-    const shouldApply = blocks.length === 0 || window.confirm("Apply this template and append its blocks to the timeline?");
+    const shouldApply =
+      blocks.length === 0 ||
+      mode === "append" ||
+      window.confirm("Replace the current timeline with this template? Existing blocks will be deleted.");
     if (!shouldApply) {
       return;
     }
@@ -204,7 +207,14 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     setError(null);
 
     try {
-      const offset = getNextStartMs(blocks);
+      if (mode === "replace") {
+        for (const block of blocks) {
+          await deleteBlock(experimentId, block.id, accessToken);
+          removeBlock(block.id);
+        }
+      }
+
+      const offset = mode === "append" ? getNextStartMs(blocks) : 0;
       let lastCreatedId: string | null = null;
       for (const templateBlock of template.blocks) {
         const block = await createBlock(

@@ -7,7 +7,7 @@ export function ParadigmLibraryPanel({
   onApplyTemplate
 }: {
   isSaving: boolean;
-  onApplyTemplate: (template: ParadigmTemplate) => Promise<void>;
+  onApplyTemplate: (template: ParadigmTemplate, mode: "append" | "replace") => Promise<void>;
 }) {
   return (
     <section className="panel stack">
@@ -19,13 +19,17 @@ export function ParadigmLibraryPanel({
               <h3>{template.name}</h3>
               <p>{template.description}</p>
             </div>
-            <button type="button" onClick={() => onApplyTemplate(template)} disabled={isSaving}>
-              Apply
-            </button>
+            <div className="template-actions">
+              <button type="button" onClick={() => onApplyTemplate(template, "append")} disabled={isSaving}>
+                Append
+              </button>
+              <button type="button" onClick={() => onApplyTemplate(template, "replace")} disabled={isSaving}>
+                Replace
+              </button>
+            </div>
           </article>
         ))}
       </div>
     </section>
   );
 }
-

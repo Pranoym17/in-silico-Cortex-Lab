@@ -198,7 +198,8 @@ pre {
 }
 
 .block-config-form input,
-.block-config-form textarea {
+.block-config-form textarea,
+.block-config-form select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -210,6 +211,12 @@ pre {
 .config-actions {
   display: flex;
   gap: 10px;
+}
+
+.stepper-row,
+.template-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .template-list,
@@ -265,6 +272,11 @@ pre {
   }
 
   .config-actions {
+    display: grid;
+  }
+
+  .stepper-row,
+  .template-actions {
     display: grid;
   }
 }
