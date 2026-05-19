@@ -52,6 +52,14 @@ $env:PYTHONPATH="backend"
 .venv/Scripts/python -m pytest backend/tests --basetemp=.tmp_pytest -p no:cacheprovider
 ```
 
+Run DB-backed integration tests after Postgres is running and migrations are applied:
+
+```bash
+$env:PYTHONPATH="backend"
+$env:CORTEX_RUN_DB_TESTS="1"
+.venv/Scripts/python -m pytest backend/tests --basetemp=.tmp_pytest -p no:cacheprovider
+```
+
 Run frontend checks:
 
 ```bash
