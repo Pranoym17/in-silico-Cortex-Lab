@@ -6,8 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import require_user
 from app.core.database import get_db
 from app.models.user import User
+from app.schemas.block import BlockCreate, BlockReorderRequest, BlockResponse, BlockUpdate
 from app.schemas.experiment import ExperimentCreate, ExperimentResponse, ExperimentUpdate
 from app.schemas.run import RunExperimentRequest, RunExperimentResponse
+from app.services.blocks import create_block, delete_block, list_blocks, reorder_blocks, update_block
 from app.services.experiments import (
     archive_experiment,
     create_experiment,
@@ -63,6 +65,57 @@ async def delete_experiment_route(
 ):
     await archive_experiment(session, user, experiment_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{experiment_id}/blocks", response_model=list[BlockResponse])
+async def list_blocks_route(
+    experiment_id: UUID,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+):
+    return await list_blocks(session, user, experiment_id)
+
+
+@router.post("/{experiment_id}/blocks", response_model=BlockResponse, status_code=status.HTTP_201_CREATED)
+async def create_block_route(
+    experiment_id: UUID,
+    body: BlockCreate,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+):
+    return await create_block(session, user, experiment_id, body)
+
+
+@router.patch("/{experiment_id}/blocks/{block_id}", response_model=BlockResponse)
+async def update_block_route(
+    experiment_id: UUID,
+    block_id: UUID,
+    body: BlockUpdate,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+):
+    return await update_block(session, user, experiment_id, block_id, body)
+
+
+@router.delete("/{experiment_id}/blocks/{block_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_block_route(
+    experiment_id: UUID,
+    block_id: UUID,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+):
+    await delete_block(session, user, experiment_id, block_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/{experiment_id}/blocks/reorder", response_model=list[BlockResponse])
+async def reorder_blocks_route(
+    experiment_id: UUID,
+    body: BlockReorderRequest,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+):
+    return await reorder_blocks(session, user, experiment_id, body)
 
 
 @router.post("/{experiment_id}/run", response_model=RunExperimentResponse, status_code=status.HTTP_202_ACCEPTED)

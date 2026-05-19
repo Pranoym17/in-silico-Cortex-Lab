@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
 
-from app.core.database import AsyncSessionLocal
+from app.core.database import AsyncSessionLocal, engine
 from app.main import app
 from app.models.block import Block
 from app.models.experiment import Experiment, ExperimentStatus
@@ -39,8 +39,11 @@ async def clear_database(session) -> None:
 async def db_session():
     async with AsyncSessionLocal() as session:
         await clear_database(session)
-        yield session
-        await clear_database(session)
+        try:
+            yield session
+        finally:
+            await clear_database(session)
+            await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -119,4 +122,3 @@ async def test_database_health_uses_live_database():
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "database": "ok"}
-

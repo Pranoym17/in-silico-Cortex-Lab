@@ -29,13 +29,15 @@ npm install
 cd ..
 ```
 
-Start Postgres and Redis before running migrations:
+Provide a PostgreSQL database before running migrations. Docker is optional; a hosted Postgres database or a normal Windows PostgreSQL install works too.
 
-```bash
-docker compose up postgres redis
+Set `DATABASE_URL` in `.env`:
+
+```env
+DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:5432/DB_NAME
 ```
 
-In a second terminal, apply migrations:
+Then apply migrations:
 
 ```bash
 cd backend
@@ -68,10 +70,10 @@ npm test
 npm run build
 ```
 
-Start local services:
+Optional Docker flow, if Docker Desktop is working:
 
 ```bash
-docker compose up
+docker compose up postgres redis
 ```
 
 Start the frontend dev server:
