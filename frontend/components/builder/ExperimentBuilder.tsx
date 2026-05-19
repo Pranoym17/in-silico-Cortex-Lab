@@ -13,6 +13,7 @@ import {
   getExperiment,
   listBlocks,
   reorderBlocks,
+  runExperiment,
   updateBlock
 } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
@@ -35,6 +36,7 @@ import {
   uploadFileToIntent,
   validateUploadFile
 } from "@/lib/mediaUpload";
+import { buildRunExperimentInput } from "@/lib/runSpec";
 
 function getNextStartMs(blocks: { start_ms: number; duration_ms: number }[]) {
   return blocks.reduce((max, block) => Math.max(max, block.start_ms + block.duration_ms), 0);
@@ -95,6 +97,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [queuedJob, setQueuedJob] = useState<{ jobId: string; streamUrl: string } | null>(null);
 
   useEffect(() => {
     if (!accessToken) {
@@ -138,6 +141,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
 
     setIsMutating(true);
     setError(null);
+    setQueuedJob(null);
 
     try {
       const block = await createBlock(experimentId, makeDefaultBlock(type, getNextStartMs(blocks)), accessToken);
@@ -158,6 +162,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
 
     setIsMutating(true);
     setError(null);
+    setQueuedJob(null);
 
     try {
       await deleteBlock(experimentId, blockId, accessToken);
@@ -177,6 +182,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
 
     setIsMutating(true);
     setError(null);
+    setQueuedJob(null);
 
     try {
       const block = await updateBlock(experimentId, blockId, input, accessToken);
@@ -197,6 +203,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
 
     setIsMutating(true);
     setError(null);
+    setQueuedJob(null);
 
     try {
       const matchingBlocks = blocks.filter((block) => (block.condition?.trim() || "unlabeled") === from);
@@ -227,6 +234,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
 
     setIsMutating(true);
     setError(null);
+    setQueuedJob(null);
 
     try {
       if (mode === "replace") {
@@ -268,6 +276,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
 
     setIsMutating(true);
     setError(null);
+    setQueuedJob(null);
 
     try {
       const savedBlocks = await reorderBlocks(experimentId, toReorderInput(nextBlocks), accessToken);
@@ -295,6 +304,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
 
     setIsMutating(true);
     setError(null);
+    setQueuedJob(null);
 
     try {
       validateUploadFile(block.type, file);
@@ -321,8 +331,34 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     }
   }
 
+  async function handleRunExperiment() {
+    if (!accessToken) {
+      return;
+    }
+
+    const currentErrors = useExperimentStore.getState().validate();
+    if (currentErrors.length > 0 || blocks.length === 0) {
+      setError("Resolve builder validation errors before running.");
+      return;
+    }
+
+    setIsMutating(true);
+    setError(null);
+    setQueuedJob(null);
+
+    try {
+      const response = await runExperiment(experimentId, buildRunExperimentInput(blocks), accessToken);
+      setQueuedJob({ jobId: response.job_id, streamUrl: response.stream_url });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to queue experiment run");
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId);
   const saveStatus = isMutating ? "Saving..." : lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : "Ready";
+  const canRun = Boolean(accessToken) && validationErrors.length === 0 && blocks.length > 0 && !isMutating;
 
   return (
     <main className="shell">
@@ -351,14 +387,21 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
               {experiment ? <p>Status: {experiment.status}</p> : null}
               <p>{saveStatus}</p>
             </div>
-            <button type="button" disabled={validationErrors.length > 0 || blocks.length === 0}>
-              Run
+            <button type="button" disabled={!canRun} onClick={handleRunExperiment}>
+              {isMutating ? "Working..." : "Run"}
             </button>
           </div>
 
           {!accessToken ? <p>Return to the dashboard and connect a session token to load saved metadata.</p> : null}
           {isLoading ? <p>Loading builder...</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
+          {queuedJob ? (
+            <div className="run-result">
+              <strong>Run queued</strong>
+              <p>Job {queuedJob.jobId} is ready for the streaming viewer handoff.</p>
+              <a href={`/viewer/${queuedJob.jobId}`}>Open viewer</a>
+            </div>
+          ) : null}
 
           <BuilderTimeline blocks={blocks} selectedBlockId={selectedBlockId} onSelectBlock={selectBlock} />
 

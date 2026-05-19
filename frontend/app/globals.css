@@ -204,6 +204,20 @@ button:disabled {
   justify-content: flex-end;
 }
 
+.run-result {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #3f7f5f;
+  border-radius: 8px;
+  padding: 12px;
+  background: #132018;
+}
+
+.run-result p {
+  margin: 0;
+  color: var(--muted);
+}
+
 pre {
   overflow: auto;
   max-width: 100%;

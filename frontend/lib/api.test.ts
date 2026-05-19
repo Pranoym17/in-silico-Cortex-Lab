@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, apiFetch, apiJson, createBlock, createExperiment, createUploadIntent, reorderBlocks } from "./api";
+import {
+  ApiError,
+  apiFetch,
+  apiJson,
+  createBlock,
+  createExperiment,
+  createUploadIntent,
+  reorderBlocks,
+  runExperiment
+} from "./api";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -107,5 +116,19 @@ describe("upload helpers", () => {
         size_bytes: 512000
       })
     );
+  });
+});
+
+describe("runExperiment", () => {
+  it("posts the run spec to the experiment run endpoint", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ job_id: "job_1", status: "queued" }), { status: 202 })
+    );
+
+    await runExperiment("exp_1", { blocks: [], settings: {} }, "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/experiments/exp_1/run");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(JSON.stringify({ blocks: [], settings: {} }));
   });
 });

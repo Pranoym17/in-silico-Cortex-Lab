@@ -102,6 +102,14 @@ export type UploadIntent = {
   content_hash_algorithm: "sha256";
 };
 
+export type RunExperimentResponse = {
+  job_id: string;
+  experiment_id: string;
+  status: "queued";
+  stream_url: string;
+  user_id?: string | null;
+};
+
 export async function apiFetch(path: string, token?: string | null, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
 
@@ -201,6 +209,13 @@ export function reorderBlocks(experimentId: string, blocks: ReorderBlockInput[],
 
 export function createUploadIntent(input: CreateUploadIntentInput, token?: string | null) {
   return apiJson<UploadIntent>("/api/uploads/presign", token, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function runExperiment(experimentId: string, input: unknown, token?: string | null) {
+  return apiJson<RunExperimentResponse>(`/api/experiments/${experimentId}/run`, token, {
     method: "POST",
     body: JSON.stringify(input)
   });
