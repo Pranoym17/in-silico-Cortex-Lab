@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     aws_region: str = "us-east-1"
     s3_bucket_name: str = "cortexlab-local"
+    s3_upload_expires_seconds: int = 900
     sqs_queue_url: str = "http://localhost:4566/000000000000/cortexlab-jobs"
     supabase_jwt_secret: str = "replace-me"
     frontend_origin: str = "http://localhost:3000"

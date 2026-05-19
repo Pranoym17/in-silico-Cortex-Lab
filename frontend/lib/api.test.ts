@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, apiFetch, apiJson, createBlock, createExperiment, reorderBlocks } from "./api";
+import { ApiError, apiFetch, apiJson, createBlock, createExperiment, createUploadIntent, reorderBlocks } from "./api";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -73,6 +73,39 @@ describe("block helpers", () => {
     expect(fetchMock.mock.calls[0][1]?.method).toBe("PUT");
     expect(fetchMock.mock.calls[0][1]?.body).toBe(
       JSON.stringify({ blocks: [{ id: "block_1", start_ms: 1000, duration_ms: 2000 }] })
+    );
+  });
+});
+
+describe("upload helpers", () => {
+  it("requests a presigned upload intent", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ upload_url: "https://s3.example/upload" }), { status: 201 })
+    );
+
+    await createUploadIntent(
+      {
+        experiment_id: "exp_1",
+        block_id: "block_1",
+        kind: "image",
+        filename: "face.png",
+        mime_type: "image/png",
+        size_bytes: 512000
+      },
+      "token-123"
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/uploads/presign");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(
+      JSON.stringify({
+        experiment_id: "exp_1",
+        block_id: "block_1",
+        kind: "image",
+        filename: "face.png",
+        mime_type: "image/png",
+        size_bytes: 512000
+      })
     );
   });
 });

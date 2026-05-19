@@ -1,6 +1,7 @@
 "use client";
 
 import { StimulusBlock } from "@/lib/api";
+import { getTimelineDurationMs } from "@/lib/timelineControls";
 
 const PX_PER_MS = 0.08;
 const MIN_TIMELINE_WIDTH = 720;
@@ -18,7 +19,7 @@ export function BuilderTimeline({
   selectedBlockId: string | null;
   onSelectBlock: (blockId: string) => void;
 }) {
-  const durationMs = blocks.reduce((max, block) => Math.max(max, block.start_ms + block.duration_ms), 0);
+  const durationMs = getTimelineDurationMs(blocks);
   const width = Math.max(MIN_TIMELINE_WIDTH, durationMs * PX_PER_MS + 120);
 
   return (
@@ -49,4 +50,3 @@ export function BuilderTimeline({
     </div>
   );
 }
-

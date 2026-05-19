@@ -36,13 +36,22 @@ describe("experimentStore", () => {
 
   it("detects overlapping blocks", () => {
     useExperimentStore.getState().setBlocks([
-      makeBlock({ id: "block_1", start_ms: 0, duration_ms: 2000 }),
-      makeBlock({ id: "block_2", start_ms: 1000, duration_ms: 2000 })
+      makeBlock({ id: "block_1", start_ms: 0, duration_ms: 2000, content_hash: "sha256:block-1" }),
+      makeBlock({ id: "block_2", start_ms: 1000, duration_ms: 2000, content_hash: "sha256:block-2" })
     ]);
 
     expect(useExperimentStore.getState().validationErrors).toContainEqual({
       blockId: "block_2",
       message: "Blocks cannot overlap."
+    });
+  });
+
+  it("flags blocks that are missing run-ready metadata", () => {
+    useExperimentStore.getState().setBlocks([makeBlock({ content_hash: null })]);
+
+    expect(useExperimentStore.getState().validationErrors).toContainEqual({
+      blockId: "block_1",
+      message: "Content hash is required before running."
     });
   });
 });

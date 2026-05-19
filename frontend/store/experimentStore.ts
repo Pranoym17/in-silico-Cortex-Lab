@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { StimulusBlock } from "@/lib/api";
+import { getStimulusReadinessIssues } from "../lib/stimulusMetadata";
 
 export type BuilderValidationError = {
   blockId?: string;
@@ -45,6 +46,9 @@ function validateBlocks(blocks: StimulusBlock[]) {
     if (block.type === "text" && typeof block.payload.text === "string" && block.payload.text.split(/\s+/).length > 1024) {
       errors.push({ blockId: block.id, message: "Text blocks cannot exceed 1024 words." });
     }
+    for (const issue of getStimulusReadinessIssues(block)) {
+      errors.push({ blockId: block.id, message: issue });
+    }
     previousEnd = Math.max(previousEnd, blockEnd);
   }
 
@@ -87,4 +91,3 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     return validationErrors;
   }
 }));
-

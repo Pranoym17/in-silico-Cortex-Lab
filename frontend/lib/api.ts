@@ -83,6 +83,25 @@ export type ReorderBlockInput = {
   duration_ms: number;
 };
 
+export type UploadKind = "image" | "audio";
+
+export type CreateUploadIntentInput = {
+  experiment_id: string;
+  block_id?: string | null;
+  kind: UploadKind;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+};
+
+export type UploadIntent = {
+  upload_url: string;
+  object_key: string;
+  headers: Record<string, string>;
+  expires_in_seconds: number;
+  content_hash_algorithm: "sha256";
+};
+
 export async function apiFetch(path: string, token?: string | null, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
 
@@ -177,5 +196,12 @@ export function reorderBlocks(experimentId: string, blocks: ReorderBlockInput[],
   return apiJson<StimulusBlock[]>(`/api/experiments/${experimentId}/blocks/reorder`, token, {
     method: "PUT",
     body: JSON.stringify({ blocks })
+  });
+}
+
+export function createUploadIntent(input: CreateUploadIntentInput, token?: string | null) {
+  return apiJson<UploadIntent>("/api/uploads/presign", token, {
+    method: "POST",
+    body: JSON.stringify(input)
   });
 }

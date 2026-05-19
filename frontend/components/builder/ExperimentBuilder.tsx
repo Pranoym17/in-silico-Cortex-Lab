@@ -10,6 +10,7 @@ import {
   deleteBlock,
   getExperiment,
   listBlocks,
+  reorderBlocks,
   updateBlock
 } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
@@ -19,6 +20,13 @@ import { BuilderTimeline } from "./BuilderTimeline";
 import { ConditionsPanel } from "./ConditionsPanel";
 import { ParadigmLibraryPanel } from "./ParadigmLibraryPanel";
 import { ParadigmTemplate } from "@/lib/paradigmTemplates";
+import {
+  TIMELINE_DURATION_STEP_MS,
+  TIMELINE_NUDGE_MS,
+  resizeBlockDuration,
+  shiftBlockTiming,
+  toReorderInput
+} from "@/lib/timelineControls";
 
 function getNextStartMs(blocks: { start_ms: number; duration_ms: number }[]) {
   return blocks.reduce((max, block) => Math.max(max, block.start_ms + block.duration_ms), 0);
@@ -78,6 +86,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) {
@@ -95,6 +104,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
         if (isActive) {
           setExperiment(item);
           setBlocks(loadedBlocks);
+          setLastSavedAt(item.updated_at);
         }
       })
       .catch((caught: unknown) => {
@@ -125,6 +135,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
       const block = await createBlock(experimentId, makeDefaultBlock(type, getNextStartMs(blocks)), accessToken);
       upsertBlock(block);
       selectBlock(block.id);
+      setLastSavedAt(block.updated_at);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to add block");
     } finally {
@@ -143,6 +154,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     try {
       await deleteBlock(experimentId, blockId, accessToken);
       removeBlock(blockId);
+      setLastSavedAt(new Date().toISOString());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to delete block");
     } finally {
@@ -162,6 +174,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
       const block = await updateBlock(experimentId, blockId, input, accessToken);
       upsertBlock(block);
       selectBlock(block.id);
+      setLastSavedAt(block.updated_at);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to update block");
     } finally {
@@ -182,6 +195,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
       for (const block of matchingBlocks) {
         const updatedBlock = await updateBlock(experimentId, block.id, { condition: to }, accessToken);
         upsertBlock(updatedBlock);
+        setLastSavedAt(updatedBlock.updated_at);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to rename condition");
@@ -227,6 +241,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
         );
         upsertBlock(block);
         lastCreatedId = block.id;
+        setLastSavedAt(block.updated_at);
       }
       if (lastCreatedId) {
         selectBlock(lastCreatedId);
@@ -238,7 +253,35 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     }
   }
 
+  async function persistTimeline(nextBlocks: typeof blocks, failureMessage: string) {
+    if (!accessToken) {
+      return;
+    }
+
+    setIsMutating(true);
+    setError(null);
+
+    try {
+      const savedBlocks = await reorderBlocks(experimentId, toReorderInput(nextBlocks), accessToken);
+      setBlocks(savedBlocks);
+      setLastSavedAt(new Date().toISOString());
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : failureMessage);
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleShiftBlock(blockId: string, deltaMs: number) {
+    await persistTimeline(shiftBlockTiming(blocks, blockId, deltaMs), "Failed to move block");
+  }
+
+  async function handleResizeBlock(blockId: string, deltaMs: number) {
+    await persistTimeline(resizeBlockDuration(blocks, blockId, deltaMs), "Failed to resize block");
+  }
+
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId);
+  const saveStatus = isMutating ? "Saving..." : lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : "Ready";
 
   return (
     <main className="shell">
@@ -265,6 +308,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
               <h2>Timeline data</h2>
               <p>Experiment: {experimentId}</p>
               {experiment ? <p>Status: {experiment.status}</p> : null}
+              <p>{saveStatus}</p>
             </div>
             <button type="button" disabled={validationErrors.length > 0 || blocks.length === 0}>
               Run
@@ -276,6 +320,47 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
           {error ? <p className="error-text">{error}</p> : null}
 
           <BuilderTimeline blocks={blocks} selectedBlockId={selectedBlockId} onSelectBlock={selectBlock} />
+
+          <div className="timeline-controls">
+            <div>
+              <h3>Selected timing</h3>
+              <p>
+                {selectedBlock
+                  ? `${selectedBlock.type} at ${selectedBlock.start_ms}ms for ${selectedBlock.duration_ms}ms`
+                  : "Select a block to edit timeline timing."}
+              </p>
+            </div>
+            <div className="timeline-actions">
+              <button
+                type="button"
+                disabled={!selectedBlock || isMutating || !accessToken}
+                onClick={() => selectedBlock && handleShiftBlock(selectedBlock.id, -TIMELINE_NUDGE_MS)}
+              >
+                Earlier
+              </button>
+              <button
+                type="button"
+                disabled={!selectedBlock || isMutating || !accessToken}
+                onClick={() => selectedBlock && handleShiftBlock(selectedBlock.id, TIMELINE_NUDGE_MS)}
+              >
+                Later
+              </button>
+              <button
+                type="button"
+                disabled={!selectedBlock || isMutating || !accessToken}
+                onClick={() => selectedBlock && handleResizeBlock(selectedBlock.id, -TIMELINE_DURATION_STEP_MS)}
+              >
+                Shorter
+              </button>
+              <button
+                type="button"
+                disabled={!selectedBlock || isMutating || !accessToken}
+                onClick={() => selectedBlock && handleResizeBlock(selectedBlock.id, TIMELINE_DURATION_STEP_MS)}
+              >
+                Longer
+              </button>
+            </div>
+          </div>
 
           {validationErrors.length > 0 ? (
             <div className="validation-list">

@@ -177,6 +177,33 @@ button:disabled {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
+.timeline-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #14171d;
+}
+
+.timeline-controls h3,
+.timeline-controls p {
+  margin: 0;
+}
+
+.timeline-controls p {
+  color: var(--muted);
+}
+
+.timeline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 pre {
   overflow: auto;
   max-width: 100%;
@@ -276,7 +303,9 @@ pre {
   }
 
   .stepper-row,
-  .template-actions {
+  .template-actions,
+  .timeline-controls,
+  .timeline-actions {
     display: grid;
   }
 }
