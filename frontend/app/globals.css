@@ -212,6 +212,53 @@ pre {
   gap: 10px;
 }
 
+.template-list,
+.condition-list {
+  display: grid;
+  gap: 10px;
+}
+
+.template-row,
+.condition-row,
+.condition-form {
+  display: grid;
+  gap: 10px;
+}
+
+.template-row {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.template-row h3,
+.template-row p {
+  margin: 0;
+}
+
+.template-row p {
+  color: var(--muted);
+}
+
+.condition-row {
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.condition-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+}
+
+.condition-form input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101114;
+  color: var(--foreground);
+  padding: 10px 12px;
+}
+
 @media (max-width: 900px) {
   .builder-grid {
     grid-template-columns: 1fr;

@@ -16,6 +16,9 @@ import { useAuthStore } from "@/store/authStore";
 import { useExperimentStore } from "@/store/experimentStore";
 import { BlockConfigPanel } from "./BlockConfigPanel";
 import { BuilderTimeline } from "./BuilderTimeline";
+import { ConditionsPanel } from "./ConditionsPanel";
+import { ParadigmLibraryPanel } from "./ParadigmLibraryPanel";
+import { ParadigmTemplate } from "@/lib/paradigmTemplates";
 
 function getNextStartMs(blocks: { start_ms: number; duration_ms: number }[]) {
   return blocks.reduce((max, block) => Math.max(max, block.start_ms + block.duration_ms), 0);
@@ -166,6 +169,65 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     }
   }
 
+  async function handleRenameCondition(from: string, to: string) {
+    if (!accessToken) {
+      return;
+    }
+
+    setIsMutating(true);
+    setError(null);
+
+    try {
+      const matchingBlocks = blocks.filter((block) => (block.condition?.trim() || "unlabeled") === from);
+      for (const block of matchingBlocks) {
+        const updatedBlock = await updateBlock(experimentId, block.id, { condition: to }, accessToken);
+        upsertBlock(updatedBlock);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to rename condition");
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleApplyTemplate(template: ParadigmTemplate) {
+    if (!accessToken) {
+      return;
+    }
+
+    const shouldApply = blocks.length === 0 || window.confirm("Apply this template and append its blocks to the timeline?");
+    if (!shouldApply) {
+      return;
+    }
+
+    setIsMutating(true);
+    setError(null);
+
+    try {
+      const offset = getNextStartMs(blocks);
+      let lastCreatedId: string | null = null;
+      for (const templateBlock of template.blocks) {
+        const block = await createBlock(
+          experimentId,
+          {
+            ...templateBlock,
+            start_ms: templateBlock.start_ms + offset
+          },
+          accessToken
+        );
+        upsertBlock(block);
+        lastCreatedId = block.id;
+      }
+      if (lastCreatedId) {
+        selectBlock(lastCreatedId);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to apply template");
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId);
 
   return (
@@ -184,6 +246,8 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
             Add audio
           </button>
         </section>
+
+        <ParadigmLibraryPanel isSaving={isMutating || !accessToken} onApplyTemplate={handleApplyTemplate} />
 
         <section className="panel stack">
           <div className="toolbar">
@@ -220,6 +284,8 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
           onDelete={handleDeleteBlock}
           onSave={handleUpdateBlock}
         />
+
+        <ConditionsPanel blocks={blocks} isSaving={isMutating || !accessToken} onRenameCondition={handleRenameCondition} />
       </div>
     </main>
   );
