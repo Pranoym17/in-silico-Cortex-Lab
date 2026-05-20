@@ -134,6 +134,17 @@ button:disabled {
   gap: 8px;
 }
 
+.validation-list-focused {
+  border: 1px solid #7f5b3f;
+  border-radius: 8px;
+  padding: 12px;
+  background: #221913;
+}
+
+.validation-list-focused p {
+  margin: 0;
+}
+
 .timeline-shell {
   overflow-x: auto;
   border: 1px solid var(--line);

@@ -83,6 +83,10 @@ function makeDefaultBlock(type: StimulusBlockType, startMs: number): CreateBlock
   };
 }
 
+function clonePayload(payload: Record<string, unknown>) {
+  return JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
+}
+
 export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const blocks = useExperimentStore((state) => state.blocks);
   const selectedBlockId = useExperimentStore((state) => state.selectedBlockId);
@@ -170,6 +174,38 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
       setLastSavedAt(new Date().toISOString());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to delete block");
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleDuplicateBlock(block: StimulusBlock) {
+    if (!accessToken) {
+      return;
+    }
+
+    setIsMutating(true);
+    setError(null);
+    setQueuedJob(null);
+
+    try {
+      const duplicate = await createBlock(
+        experimentId,
+        {
+          type: block.type,
+          condition: block.condition,
+          start_ms: getNextStartMs(blocks),
+          duration_ms: block.duration_ms,
+          content_hash: block.content_hash,
+          payload: clonePayload(block.payload)
+        },
+        accessToken
+      );
+      upsertBlock(duplicate);
+      selectBlock(duplicate.id);
+      setLastSavedAt(duplicate.updated_at);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to duplicate block");
     } finally {
       setIsMutating(false);
     }
@@ -359,6 +395,11 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId);
   const saveStatus = isMutating ? "Saving..." : lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : "Ready";
   const canRun = Boolean(accessToken) && validationErrors.length === 0 && blocks.length > 0 && !isMutating;
+  const selectedValidationErrors = selectedBlock
+    ? validationErrors.filter((item) => item.blockId === selectedBlock.id)
+    : [];
+  const globalValidationErrors = validationErrors.filter((item) => !item.blockId);
+  const otherValidationErrors = validationErrors.filter((item) => item.blockId && item.blockId !== selectedBlock?.id);
 
   return (
     <main className="shell">
@@ -443,12 +484,30 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
               >
                 Longer
               </button>
+              <button
+                type="button"
+                disabled={!selectedBlock || isMutating || !accessToken}
+                onClick={() => selectedBlock && handleDuplicateBlock(selectedBlock)}
+              >
+                Duplicate
+              </button>
             </div>
           </div>
 
-          {validationErrors.length > 0 ? (
+          {selectedValidationErrors.length > 0 ? (
+            <div className="validation-list validation-list-focused">
+              <strong>Selected block needs attention</strong>
+              {selectedValidationErrors.map((item, index) => (
+                <p className="error-text" key={`${item.blockId}-${index}`}>
+                  {item.message}
+                </p>
+              ))}
+            </div>
+          ) : null}
+
+          {globalValidationErrors.length > 0 || otherValidationErrors.length > 0 ? (
             <div className="validation-list">
-              {validationErrors.map((item, index) => (
+              {[...globalValidationErrors, ...otherValidationErrors].map((item, index) => (
                 <p className="error-text" key={`${item.blockId ?? "global"}-${index}`}>
                   {item.message}
                 </p>

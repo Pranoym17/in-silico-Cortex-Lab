@@ -55,6 +55,10 @@ function validateBlocks(blocks: StimulusBlock[]) {
   return errors;
 }
 
+function sortBlocks(blocks: StimulusBlock[]) {
+  return [...blocks].sort((a, b) => a.start_ms - b.start_ms || a.id.localeCompare(b.id));
+}
+
 export const useExperimentStore = create<ExperimentState>((set, get) => ({
   blocks: [],
   selectedBlockId: null,
@@ -62,7 +66,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
   validationErrors: [],
   setBlocks: (blocks) =>
     set({
-      blocks,
+      blocks: sortBlocks(blocks),
       isDirty: false,
       selectedBlockId: blocks.some((block) => block.id === get().selectedBlockId) ? get().selectedBlockId : null,
       validationErrors: validateBlocks(blocks)
@@ -70,7 +74,9 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
   upsertBlock: (block) =>
     set((state) => {
       const exists = state.blocks.some((item) => item.id === block.id);
-      const blocks = exists ? state.blocks.map((item) => (item.id === block.id ? block : item)) : [...state.blocks, block];
+      const blocks = sortBlocks(
+        exists ? state.blocks.map((item) => (item.id === block.id ? block : item)) : [...state.blocks, block]
+      );
       return { blocks, isDirty: true, validationErrors: validateBlocks(blocks) };
     }),
   removeBlock: (blockId) =>

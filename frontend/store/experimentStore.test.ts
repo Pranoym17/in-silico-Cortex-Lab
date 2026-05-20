@@ -34,6 +34,15 @@ describe("experimentStore", () => {
     expect(useExperimentStore.getState().isDirty).toBe(true);
   });
 
+  it("keeps blocks sorted by start time", () => {
+    useExperimentStore.getState().setBlocks([
+      makeBlock({ id: "block_2", start_ms: 2000 }),
+      makeBlock({ id: "block_1", start_ms: 0 })
+    ]);
+
+    expect(useExperimentStore.getState().blocks.map((block) => block.id)).toEqual(["block_1", "block_2"]);
+  });
+
   it("detects overlapping blocks", () => {
     useExperimentStore.getState().setBlocks([
       makeBlock({ id: "block_1", start_ms: 0, duration_ms: 2000, content_hash: "sha256:block-1" }),
