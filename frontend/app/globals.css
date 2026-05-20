@@ -145,6 +145,39 @@ button:disabled {
   margin: 0;
 }
 
+.builder-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.builder-summary div,
+.empty-state {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #14171d;
+}
+
+.builder-summary div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.builder-summary strong {
+  font-size: 18px;
+}
+
+.builder-summary span,
+.empty-state p {
+  color: var(--muted);
+}
+
+.empty-state p {
+  margin: 6px 0 0;
+}
+
 .timeline-shell {
   overflow-x: auto;
   border: 1px solid var(--line);
@@ -329,6 +362,7 @@ pre {
 
   .stepper-row,
   .template-actions,
+  .builder-summary,
   .timeline-controls,
   .timeline-actions {
     display: grid;

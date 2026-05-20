@@ -37,6 +37,7 @@ import {
   validateUploadFile
 } from "@/lib/mediaUpload";
 import { buildRunExperimentInput } from "@/lib/runSpec";
+import { formatDuration, getBuilderSummary } from "@/lib/builderSummary";
 
 function getNextStartMs(blocks: { start_ms: number; duration_ms: number }[]) {
   return blocks.reduce((max, block) => Math.max(max, block.start_ms + block.duration_ms), 0);
@@ -395,6 +396,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId);
   const saveStatus = isMutating ? "Saving..." : lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : "Ready";
   const canRun = Boolean(accessToken) && validationErrors.length === 0 && blocks.length > 0 && !isMutating;
+  const summary = getBuilderSummary(blocks);
   const selectedValidationErrors = selectedBlock
     ? validationErrors.filter((item) => item.blockId === selectedBlock.id)
     : [];
@@ -441,6 +443,38 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
               <strong>Run queued</strong>
               <p>Job {queuedJob.jobId} is ready for the streaming viewer handoff.</p>
               <a href={`/viewer/${queuedJob.jobId}`}>Open viewer</a>
+            </div>
+          ) : null}
+
+          <div className="builder-summary">
+            <div>
+              <strong>{summary.totalBlocks}</strong>
+              <span>blocks</span>
+            </div>
+            <div>
+              <strong>{formatDuration(summary.durationMs)}</strong>
+              <span>duration</span>
+            </div>
+            <div>
+              <strong>{summary.readyBlocks}</strong>
+              <span>ready</span>
+            </div>
+            <div>
+              <strong>{summary.blockedBlocks}</strong>
+              <span>blocked</span>
+            </div>
+            <div>
+              <strong>
+                {summary.countsByType.image}/{summary.countsByType.text}/{summary.countsByType.audio}
+              </strong>
+              <span>image/text/audio</span>
+            </div>
+          </div>
+
+          {blocks.length === 0 && !isLoading ? (
+            <div className="empty-state">
+              <strong>No stimulus blocks yet</strong>
+              <p>Add a block from the palette or apply a paradigm template to start building the experiment.</p>
             </div>
           ) : null}
 
