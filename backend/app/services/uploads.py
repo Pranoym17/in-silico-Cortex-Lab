@@ -13,6 +13,20 @@ def _safe_filename(filename: str) -> str:
     return name or "stimulus"
 
 
+def _s3_client():
+    settings = get_settings()
+    client_kwargs = {
+        "region_name": settings.aws_region,
+        "endpoint_url": f"https://s3.{settings.aws_region}.amazonaws.com",
+    }
+
+    if settings.aws_access_key_id and settings.aws_secret_access_key:
+        client_kwargs["aws_access_key_id"] = settings.aws_access_key_id
+        client_kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
+
+    return boto3.client("s3", **client_kwargs)
+
+
 def create_upload_intent(owner: User, data: UploadIntentRequest) -> UploadIntentResponse:
     settings = get_settings()
     filename = _safe_filename(data.filename)
@@ -20,7 +34,7 @@ def create_upload_intent(owner: User, data: UploadIntentRequest) -> UploadIntent
     object_key = f"uploads/{owner.id}/experiments/{data.experiment_id}/{block_part}/{filename}"
     headers = {"Content-Type": data.mime_type}
 
-    s3_client = boto3.client("s3", region_name=settings.aws_region)
+    s3_client = _s3_client()
     upload_url = s3_client.generate_presigned_url(
         ClientMethod="put_object",
         Params={
