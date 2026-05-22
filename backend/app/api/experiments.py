@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.schemas.block import BlockCreate, BlockReorderRequest, BlockResponse, BlockUpdate
 from app.schemas.experiment import ExperimentCreate, ExperimentResponse, ExperimentUpdate
+from app.schemas.job import JobResponse
 from app.schemas.run import RunExperimentRequest, RunExperimentResponse
 from app.services.blocks import create_block, delete_block, list_blocks, reorder_blocks, update_block
 from app.services.experiments import (
@@ -17,7 +18,7 @@ from app.services.experiments import (
     list_experiments,
     update_experiment,
 )
-from app.services.jobs import create_job_from_experiment
+from app.services.jobs import create_job_from_experiment, list_jobs_for_experiment
 
 router = APIRouter()
 
@@ -134,3 +135,12 @@ async def run_experiment(
         stream_url=f"/api/jobs/{job.id}/stream",
         user_id=str(user.id),
     )
+
+
+@router.get("/{experiment_id}/jobs", response_model=list[JobResponse])
+async def list_experiment_jobs_route(
+    experiment_id: UUID,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+):
+    return await list_jobs_for_experiment(session, user, experiment_id)
