@@ -10,6 +10,7 @@ from jose import jwt
 from app.core.config import get_settings
 from app.main import app
 from app.models.experiment import ExperimentStatus
+from app.models.job import JobStatus
 
 
 def make_token() -> str:
@@ -173,3 +174,44 @@ async def test_delete_experiment_archives(auth_user, monkeypatch):
     assert response.status_code == 204
     assert archived_ids == [experiment_id]
 
+
+@pytest.mark.asyncio
+async def test_run_experiment_creates_persisted_job(auth_user, monkeypatch):
+    experiment_id = uuid4()
+    job_id = uuid4()
+
+    async def fake_create_job_from_experiment(session, owner, requested_experiment_id, settings):
+        assert owner.id == auth_user.id
+        assert requested_experiment_id == experiment_id
+        assert settings.surface == "fsaverage5"
+        return SimpleNamespace(id=job_id, experiment_id=experiment_id, status=JobStatus.queued)
+
+    monkeypatch.setattr("app.api.experiments.create_job_from_experiment", fake_create_job_from_experiment)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/experiments/{experiment_id}/run",
+            headers={"Authorization": f"Bearer {make_token()}"},
+            json={
+                "blocks": [
+                    {
+                        "id": str(uuid4()),
+                        "type": "text",
+                        "condition": "faces",
+                        "start_ms": 0,
+                        "duration_ms": 1000,
+                        "content_hash": "sha256:abc123",
+                        "text": "face",
+                    }
+                ]
+            },
+        )
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "job_id": str(job_id),
+        "experiment_id": str(experiment_id),
+        "status": "queued",
+        "stream_url": f"/api/jobs/{job_id}/stream",
+        "user_id": str(auth_user.id),
+    }

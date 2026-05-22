@@ -1,0 +1,93 @@
+from typing import Any
+from uuid import UUID
+
+from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.block import Block
+from app.models.experiment import ExperimentStatus
+from app.models.job import Job, JobStatus
+from app.models.user import User
+from app.schemas.run import RunExperimentRequest, RunSettings
+from app.services.blocks import list_blocks
+from app.services.experiments import get_owned_experiment
+
+
+def _required_payload_string(block: Block, key: str, label: str) -> str:
+    value = block.payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=label)
+    return value
+
+
+def _base_run_block(block: Block) -> dict[str, Any]:
+    if not block.content_hash:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="all blocks require content_hash")
+
+    return {
+        "id": str(block.id),
+        "type": block.type.value,
+        "condition": block.condition,
+        "start_ms": block.start_ms,
+        "duration_ms": block.duration_ms,
+        "content_hash": block.content_hash,
+    }
+
+
+def block_to_run_spec(block: Block) -> dict[str, Any]:
+    base = _base_run_block(block)
+
+    if block.type.value == "image":
+        display = block.payload.get("display") if isinstance(block.payload.get("display"), dict) else {}
+        return {
+            **base,
+            "s3_key": _required_payload_string(block, "s3_key", "image blocks require s3_key"),
+            "mime_type": _required_payload_string(block, "mime_type", "image blocks require mime_type"),
+            "display": {"mode": display.get("mode", "center")},
+        }
+
+    if block.type.value == "audio":
+        return {
+            **base,
+            "s3_key": _required_payload_string(block, "s3_key", "audio blocks require s3_key"),
+            "mime_type": _required_payload_string(block, "mime_type", "audio blocks require mime_type"),
+            "channels": block.payload.get("channels", 1),
+            "sample_rate_hz": block.payload.get("sample_rate_hz", 16000),
+        }
+
+    return {
+        **base,
+        "text": _required_payload_string(block, "text", "text blocks require text"),
+        "voice": block.payload.get("voice", "kokoro_default"),
+    }
+
+
+async def create_job_from_experiment(
+    session: AsyncSession,
+    owner: User,
+    experiment_id: UUID,
+    settings: RunSettings | None = None,
+) -> Job:
+    experiment = await get_owned_experiment(session, owner, experiment_id)
+    if experiment.status == ExperimentStatus.archived:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Archived experiments cannot be run")
+
+    blocks = await list_blocks(session, owner, experiment_id)
+    if not blocks:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="experiment has no blocks")
+
+    request = RunExperimentRequest(
+        blocks=[block_to_run_spec(block) for block in blocks],
+        settings=settings or RunSettings(),
+    )
+    run_spec = request.model_dump(mode="json")
+    job = Job(
+        experiment_id=experiment_id,
+        owner_id=owner.id,
+        status=JobStatus.queued,
+        run_spec=run_spec,
+    )
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+    return job

@@ -1,8 +1,10 @@
 import enum
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +34,7 @@ class Job(TimestampMixin, Base):
     )
     owner_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=False)
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.queued, nullable=False)
+    run_spec: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(255))
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -40,4 +43,3 @@ class Job(TimestampMixin, Base):
     experiment = relationship("Experiment", back_populates="jobs")
     owner = relationship("User", back_populates="jobs")
     results = relationship("Result", back_populates="job", cascade="all, delete-orphan")
-

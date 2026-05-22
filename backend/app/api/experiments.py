@@ -17,6 +17,7 @@ from app.services.experiments import (
     list_experiments,
     update_experiment,
 )
+from app.services.jobs import create_job_from_experiment
 
 router = APIRouter()
 
@@ -120,16 +121,16 @@ async def reorder_blocks_route(
 
 @router.post("/{experiment_id}/run", response_model=RunExperimentResponse, status_code=status.HTTP_202_ACCEPTED)
 async def run_experiment(
-    experiment_id: str,
+    experiment_id: UUID,
     body: RunExperimentRequest,
     user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
 ) -> RunExperimentResponse:
-    job_id = f"job_local_{experiment_id}"
-    # Persistence and Celery enqueueing will be wired after the database layer lands.
+    job = await create_job_from_experiment(session, user, experiment_id, body.settings)
     return RunExperimentResponse(
-        job_id=job_id,
-        experiment_id=experiment_id,
-        status="queued",
-        stream_url=f"/api/jobs/{job_id}/stream",
+        job_id=str(job.id),
+        experiment_id=str(job.experiment_id),
+        status=job.status.value,
+        stream_url=f"/api/jobs/{job.id}/stream",
         user_id=str(user.id),
     )
