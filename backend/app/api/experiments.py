@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_user
@@ -18,6 +18,7 @@ from app.services.experiments import (
     list_experiments,
     update_experiment,
 )
+from app.services.job_dispatch import dispatch_inference_job
 from app.services.jobs import create_job_from_experiment, list_jobs_for_experiment
 
 router = APIRouter()
@@ -124,10 +125,12 @@ async def reorder_blocks_route(
 async def run_experiment(
     experiment_id: UUID,
     body: RunExperimentRequest,
+    background_tasks: BackgroundTasks,
     user: User = Depends(require_user),
     session: AsyncSession = Depends(get_db),
 ) -> RunExperimentResponse:
     job = await create_job_from_experiment(session, user, experiment_id, body.settings)
+    dispatch_inference_job(background_tasks, job.id)
     return RunExperimentResponse(
         job_id=str(job.id),
         experiment_id=str(job.experiment_id),

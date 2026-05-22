@@ -179,6 +179,7 @@ async def test_delete_experiment_archives(auth_user, monkeypatch):
 async def test_run_experiment_creates_persisted_job(auth_user, monkeypatch):
     experiment_id = uuid4()
     job_id = uuid4()
+    dispatched_ids = []
 
     async def fake_create_job_from_experiment(session, owner, requested_experiment_id, settings):
         assert owner.id == auth_user.id
@@ -187,6 +188,10 @@ async def test_run_experiment_creates_persisted_job(auth_user, monkeypatch):
         return SimpleNamespace(id=job_id, experiment_id=experiment_id, status=JobStatus.queued)
 
     monkeypatch.setattr("app.api.experiments.create_job_from_experiment", fake_create_job_from_experiment)
+    monkeypatch.setattr(
+        "app.api.experiments.dispatch_inference_job",
+        lambda background_tasks, dispatched_job_id: dispatched_ids.append(dispatched_job_id),
+    )
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
@@ -215,3 +220,4 @@ async def test_run_experiment_creates_persisted_job(auth_user, monkeypatch):
         "stream_url": f"/api/jobs/{job_id}/stream",
         "user_id": str(auth_user.id),
     }
+    assert dispatched_ids == [job_id]

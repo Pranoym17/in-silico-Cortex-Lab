@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str = "replace-me"
     supabase_url: str | None = None
     frontend_origin: str = "http://localhost:3000"
+    job_execution_mode: Literal["background", "celery", "manual"] = "background"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
