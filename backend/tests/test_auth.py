@@ -1,14 +1,21 @@
+import base64
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
 
 from app.core.config import get_settings
 from app.main import app
 from app.services.auth import AuthError, verify_supabase_jwt
+
+
+def base64url_uint(value: int) -> str:
+    return base64.urlsafe_b64encode(value.to_bytes(32, "big")).rstrip(b"=").decode()
 
 
 def make_token(**overrides):
@@ -47,6 +54,44 @@ def test_verify_supabase_jwt_accepts_valid_token():
 
     assert claims["sub"] == "supabase-user-123"
     assert claims["email"] == "researcher@example.com"
+
+
+def test_verify_supabase_jwt_accepts_asymmetric_supabase_token(monkeypatch):
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    private_pem = private_key.private_bytes(
+        Encoding.PEM,
+        PrivateFormat.PKCS8,
+        NoEncryption(),
+    )
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {
+            "sub": "supabase-user-123",
+            "email": "researcher@example.com",
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(minutes=10)).timestamp()),
+        },
+        private_pem,
+        algorithm="ES256",
+        headers={"kid": "test-key"},
+    )
+    public_jwk = jwt.get_unverified_header(token)
+    public_numbers = private_key.public_key().public_numbers()
+    public_jwk.update(
+        {
+            "kty": "EC",
+            "crv": "P-256",
+            "use": "sig",
+            "x": base64url_uint(public_numbers.x),
+            "y": base64url_uint(public_numbers.y),
+        }
+    )
+
+    monkeypatch.setattr("app.services.auth._fetch_supabase_jwks", lambda: {"keys": [public_jwk]})
+
+    claims = verify_supabase_jwt(token)
+
+    assert claims["sub"] == "supabase-user-123"
 
 
 def test_verify_supabase_jwt_rejects_missing_subject():
@@ -88,4 +133,3 @@ async def test_me_returns_synced_user(monkeypatch):
     assert response.status_code == 200
     assert response.json()["supabase_user_id"] == "supabase-user-123"
     assert response.json()["email"] == "researcher@example.com"
-

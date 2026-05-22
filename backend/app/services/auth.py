@@ -1,4 +1,6 @@
+import json
 from typing import Any
+from urllib.request import urlopen
 
 from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -15,14 +17,58 @@ class AuthError(Exception):
         self.message = message
 
 
+def _get_jwks_url() -> str:
+    settings = get_settings()
+    if not settings.supabase_url:
+        raise AuthError("Supabase URL is required for asymmetric JWT verification")
+
+    return f"{settings.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+
+
+def _fetch_supabase_jwks() -> dict[str, Any]:
+    with urlopen(_get_jwks_url(), timeout=5) as response:
+        return json.loads(response.read())
+
+
+def _get_jwks_key(token: str) -> dict[str, Any]:
+    try:
+        header = jwt.get_unverified_header(token)
+    except JWTError as exc:
+        raise AuthError("Invalid authentication token") from exc
+    key_id = header.get("kid")
+    if not key_id:
+        raise AuthError("Authentication token is missing key ID")
+
+    jwks = _fetch_supabase_jwks()
+    for key in jwks.get("keys", []):
+        if key.get("kid") == key_id:
+            return key
+
+    raise AuthError("Authentication token key was not found")
+
+
 def verify_supabase_jwt(token: str) -> dict[str, Any]:
     settings = get_settings()
+    try:
+        header = jwt.get_unverified_header(token)
+    except JWTError as exc:
+        raise AuthError("Invalid authentication token") from exc
+    algorithm = header.get("alg")
+
+    if algorithm == "HS256":
+        key: str | dict[str, Any] = settings.supabase_jwt_secret
+        algorithms = ["HS256"]
+    elif algorithm in {"ES256", "RS256"}:
+        key = _get_jwks_key(token)
+        algorithms = [algorithm]
+    else:
+        raise AuthError("Unsupported authentication token algorithm")
 
     try:
         claims = jwt.decode(
             token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
+            key,
+            algorithms=algorithms,
             options={"verify_aud": False},
         )
     except JWTError as exc:
