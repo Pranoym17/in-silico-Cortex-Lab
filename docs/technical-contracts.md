@@ -198,7 +198,9 @@ The activation payload is msgpack encoded, then base64 encoded. Msgpack payload 
 {
   "job_id": "job_01HZXABCD123",
   "block_id": "block_01HZX9E9K2M6N",
+  "chunk_index": 0,
   "timestep_start": 0,
+  "timestep_count": 1,
   "sample_rate_hz": 2,
   "vertex_count": 20000,
   "dtype": "float32",
@@ -462,4 +464,3 @@ CI:
 - GitHub Actions runs backend `pytest`.
 - GitHub Actions runs frontend `vitest`.
 - CI should fail on type errors, lint errors, and contract fixture mismatches.
-
