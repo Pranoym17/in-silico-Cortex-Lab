@@ -348,6 +348,27 @@ frontend/public/brain/mesh-manifest.json
 
 Left and right hemispheres are separate GLTF files to support hemisphere toggling and lower initial memory pressure.
 
+Conversion command:
+
+```bash
+python scripts/convert_mesh.py \
+  --subjects-dir /path/to/freesurfer/subjects \
+  --subject fsaverage5 \
+  --surface pial \
+  --out frontend/public/brain
+```
+
+The converter expects these FreeSurfer files:
+
+```text
+fsaverage5/surf/lh.pial
+fsaverage5/surf/rh.pial
+fsaverage5/label/lh.aparc.annot
+fsaverage5/label/rh.aparc.annot
+```
+
+The script uses `nibabel` to read FreeSurfer geometry/annotations and `trimesh` to export GLTF.
+
 Required GLTF vertex attributes:
 
 - `POSITION`: float32 xyz.
@@ -383,6 +404,18 @@ Manifest shape:
   "gltf": {
     "left": "/brain/fsaverage5_left.gltf",
     "right": "/brain/fsaverage5_right.gltf"
+  },
+  "hemispheres": {
+    "left": {
+      "file": "/brain/fsaverage5_left.gltf",
+      "vertex_count": 10242,
+      "activation_offset": 0
+    },
+    "right": {
+      "file": "/brain/fsaverage5_right.gltf",
+      "vertex_count": 10242,
+      "activation_offset": 10242
+    }
   }
 }
 ```
