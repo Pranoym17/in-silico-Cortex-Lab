@@ -1,10 +1,13 @@
+import base64
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
+import msgpack
 import pytest
 
 from app.models.job import JobStatus
+from app.services.job_processing import FAKE_VERTEX_COUNT
 from app.services.job_processing import JobProcessingError, process_fake_inference_job
 from app.tasks.inference_task import _run_inference
 
@@ -69,12 +72,21 @@ class FakeSession:
         self.refreshed.append(job)
 
 
+class FakeBroker:
+    def __init__(self):
+        self.events = []
+
+    async def publish(self, job_id, event, data):
+        self.events.append((job_id, event, data))
+
+
 @pytest.mark.asyncio
 async def test_process_fake_inference_job_completes_valid_job():
     job = make_job()
     session = FakeSession(job)
+    broker = FakeBroker()
 
-    processed = await process_fake_inference_job(session, job.id)
+    processed = await process_fake_inference_job(session, job.id, broker)
 
     assert processed is job
     assert job.status == JobStatus.complete
@@ -84,16 +96,51 @@ async def test_process_fake_inference_job_completes_valid_job():
     assert isinstance(job.completed_at, datetime)
     assert job.started_at.tzinfo == UTC
     assert job.completed_at.tzinfo == UTC
-    assert session.commits == 2
-    assert session.refreshed == [job, job]
+    assert session.commits == 3
+    assert session.refreshed == [job, job, job]
+    assert [event for _, event, _ in broker.events] == [
+        "queued",
+        "warming",
+        "progress",
+        "chunk",
+        "progress",
+        "complete",
+    ]
+    assert broker.events[0][2] == {"job_id": str(job.id), "status": "queued"}
+    assert broker.events[2][2] == {
+        "job_id": str(job.id),
+        "completed_blocks": 0,
+        "total_blocks": 1,
+        "completed_timesteps": 0,
+    }
+    assert broker.events[4][2] == {
+        "job_id": str(job.id),
+        "completed_blocks": 1,
+        "total_blocks": 1,
+        "completed_timesteps": 1,
+    }
+    assert broker.events[5][2] == {
+        "job_id": str(job.id),
+        "status": "complete",
+        "result_s3_key": None,
+        "timesteps": 1,
+        "vertex_count": FAKE_VERTEX_COUNT,
+    }
+
+    chunk_payload = msgpack.unpackb(base64.b64decode(broker.events[3][2]["payload"]), raw=False)
+    assert broker.events[3][2]["encoding"] == "base64-msgpack"
+    assert chunk_payload["job_id"] == str(job.id)
+    assert chunk_payload["block_id"] == job.run_spec["blocks"][0]["id"]
+    assert chunk_payload["vertex_count"] == FAKE_VERTEX_COUNT
 
 
 @pytest.mark.asyncio
 async def test_process_fake_inference_job_marks_invalid_snapshot_failed():
     job = make_job(run_spec={"blocks": [], "settings": {}})
     session = FakeSession(job)
+    broker = FakeBroker()
 
-    processed = await process_fake_inference_job(session, job.id)
+    processed = await process_fake_inference_job(session, job.id, broker)
 
     assert processed is job
     assert job.status == JobStatus.failed
@@ -102,29 +149,41 @@ async def test_process_fake_inference_job_marks_invalid_snapshot_failed():
     assert isinstance(job.completed_at, datetime)
     assert session.commits == 1
     assert session.refreshed == [job]
+    assert [event for _, event, _ in broker.events] == ["queued", "error"]
+    assert broker.events[1][2] == {
+        "job_id": str(job.id),
+        "code": "validation_failed",
+        "message": "Run specification failed validation.",
+        "retryable": False,
+        "last_timestep": None,
+    }
 
 
 @pytest.mark.asyncio
 async def test_process_fake_inference_job_is_idempotent_for_terminal_status():
     job = make_job(status=JobStatus.complete, completed_at=datetime.now(UTC))
     session = FakeSession(job)
+    broker = FakeBroker()
 
-    processed = await process_fake_inference_job(session, job.id)
+    processed = await process_fake_inference_job(session, job.id, broker)
 
     assert processed is job
     assert job.status == JobStatus.complete
     assert session.commits == 0
     assert session.refreshed == []
+    assert broker.events == []
 
 
 @pytest.mark.asyncio
 async def test_process_fake_inference_job_rejects_missing_job():
     session = FakeSession(None)
+    broker = FakeBroker()
 
     with pytest.raises(JobProcessingError) as exc:
-        await process_fake_inference_job(session, uuid4())
+        await process_fake_inference_job(session, uuid4(), broker)
 
     assert "was not found" in str(exc.value)
+    assert broker.events == []
 
 
 @pytest.mark.asyncio
