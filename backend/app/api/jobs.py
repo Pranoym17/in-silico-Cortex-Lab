@@ -43,6 +43,8 @@ async def stream_job(
                 if stream_event.data.get("completed_timesteps", 0) < from_timestep:
                     continue
             yield encode_sse(stream_event.event, stream_event.data, event_id=stream_event.id)
+            if stream_event.event in {"complete", "error"}:
+                break
 
     return StreamingResponse(events(), media_type="text/event-stream")
 

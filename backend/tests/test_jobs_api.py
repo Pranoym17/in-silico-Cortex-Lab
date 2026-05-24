@@ -178,6 +178,48 @@ async def test_stream_job_honors_last_event_id(auth_user, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stream_job_closes_after_terminal_event(auth_user, monkeypatch):
+    job = make_job(auth_user.id)
+
+    async def fake_get_owned_job(session, owner, requested_job_id):
+        assert owner.id == auth_user.id
+        assert requested_job_id == job.id
+        return job
+
+    class FakeBroker:
+        async def subscribe(self, job_id, after_event_id=None):
+            assert job_id == job.id
+            yield JobStreamEvent(id=1, event="progress", data={"job_id": str(job.id), "completed_timesteps": 1})
+            yield JobStreamEvent(
+                id=2,
+                event="complete",
+                data={
+                    "job_id": str(job.id),
+                    "status": "complete",
+                    "result_s3_key": None,
+                    "timesteps": 1,
+                    "vertex_count": 16,
+                },
+            )
+            yield JobStreamEvent(id=3, event="progress", data={"job_id": str(job.id), "completed_timesteps": 2})
+
+    monkeypatch.setattr("app.api.jobs.get_owned_job", fake_get_owned_job)
+    app.dependency_overrides[get_job_event_broker] = lambda: FakeBroker()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get(
+                f"/api/jobs/{job.id}/stream",
+                headers={"Authorization": f"Bearer {make_token()}"},
+            )
+    finally:
+        app.dependency_overrides.pop(get_job_event_broker, None)
+
+    assert response.status_code == 200
+    assert "event: complete" in response.text
+    assert "id: 3" not in response.text
+
+
+@pytest.mark.asyncio
 async def test_list_experiment_jobs(auth_user, monkeypatch):
     experiment_id = uuid4()
     job = make_job(auth_user.id, experiment_id=experiment_id)

@@ -9,6 +9,7 @@ import pytest
 from app.models.job import JobStatus
 from app.services.job_processing import FAKE_VERTEX_COUNT
 from app.services.job_processing import JobProcessingError, process_fake_inference_job
+from app.services.sse_broker import JobEventBroker
 from app.tasks.inference_task import _run_inference
 
 
@@ -132,6 +133,28 @@ async def test_process_fake_inference_job_completes_valid_job():
     assert chunk_payload["job_id"] == str(job.id)
     assert chunk_payload["block_id"] == job.run_spec["blocks"][0]["id"]
     assert chunk_payload["vertex_count"] == FAKE_VERTEX_COUNT
+
+
+@pytest.mark.asyncio
+async def test_process_fake_inference_job_publishes_replayable_broker_events():
+    job = make_job()
+    session = FakeSession(job)
+    broker = JobEventBroker()
+
+    await process_fake_inference_job(session, job.id, broker)
+
+    replayed = await broker.replay(job.id)
+
+    assert [event.event for event in replayed] == [
+        "queued",
+        "warming",
+        "progress",
+        "chunk",
+        "progress",
+        "complete",
+    ]
+    assert [event.id for event in replayed] == [1, 2, 3, 4, 5, 6]
+    assert replayed[-1].data["status"] == "complete"
 
 
 @pytest.mark.asyncio
