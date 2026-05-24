@@ -9,6 +9,7 @@ from jose import jwt
 from app.core.config import get_settings
 from app.main import app
 from app.models.job import JobStatus
+from app.services.sse_broker import JobStreamEvent, get_job_event_broker
 
 
 def make_token() -> str:
@@ -119,17 +120,61 @@ async def test_stream_job_uses_persisted_job_status(auth_user, monkeypatch):
         assert requested_job_id == job.id
         return job
 
-    monkeypatch.setattr("app.api.jobs.get_owned_job", fake_get_owned_job)
+    class FakeBroker:
+        async def subscribe(self, job_id, after_event_id=None):
+            assert job_id == job.id
+            assert after_event_id is None
+            yield JobStreamEvent(
+                id=7,
+                event="queued",
+                data={"job_id": str(job.id), "status": "queued"},
+            )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get(
-            f"/api/jobs/{job.id}/stream",
-            headers={"Authorization": f"Bearer {make_token()}"},
-        )
+    monkeypatch.setattr("app.api.jobs.get_owned_job", fake_get_owned_job)
+    app.dependency_overrides[get_job_event_broker] = lambda: FakeBroker()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get(
+                f"/api/jobs/{job.id}/stream",
+                headers={"Authorization": f"Bearer {make_token()}"},
+            )
+    finally:
+        app.dependency_overrides.pop(get_job_event_broker, None)
 
     assert response.status_code == 200
+    assert "event: queued\nid: 7\n" in response.text
     assert f'"job_id":"{job.id}"' in response.text
     assert '"status":"queued"' in response.text
+
+
+@pytest.mark.asyncio
+async def test_stream_job_honors_last_event_id(auth_user, monkeypatch):
+    job = make_job(auth_user.id)
+
+    async def fake_get_owned_job(session, owner, requested_job_id):
+        assert owner.id == auth_user.id
+        assert requested_job_id == job.id
+        return job
+
+    class FakeBroker:
+        async def subscribe(self, job_id, after_event_id=None):
+            assert job_id == job.id
+            assert after_event_id == 4
+            yield JobStreamEvent(id=5, event="progress", data={"job_id": str(job.id), "completed_timesteps": 2})
+
+    monkeypatch.setattr("app.api.jobs.get_owned_job", fake_get_owned_job)
+    app.dependency_overrides[get_job_event_broker] = lambda: FakeBroker()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get(
+                f"/api/jobs/{job.id}/stream",
+                headers={"Authorization": f"Bearer {make_token()}", "Last-Event-ID": "4"},
+            )
+    finally:
+        app.dependency_overrides.pop(get_job_event_broker, None)
+
+    assert response.status_code == 200
+    assert "id: 5" in response.text
 
 
 @pytest.mark.asyncio

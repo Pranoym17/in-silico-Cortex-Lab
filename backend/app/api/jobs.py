@@ -1,7 +1,6 @@
-import asyncio
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +9,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.schemas.job import JobResponse
 from app.services.jobs import get_owned_job
+from app.services.sse_broker import JobEventBroker, get_job_event_broker
 from app.services.sse import encode_sse
 
 router = APIRouter()
@@ -28,29 +28,31 @@ async def get_job_route(
 async def stream_job(
     job_id: UUID,
     from_timestep: int = 0,
+    from_event_id: int | None = None,
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     user: User = Depends(require_user),
     session: AsyncSession = Depends(get_db),
+    broker: JobEventBroker = Depends(get_job_event_broker),
 ) -> StreamingResponse:
-    job = await get_owned_job(session, user, job_id)
+    await get_owned_job(session, user, job_id)
+    after_event_id = _resolve_after_event_id(from_event_id, last_event_id)
 
     async def events():
-        yield encode_sse("queued", {"job_id": str(job.id), "status": job.status.value}, event_id=1)
-        await asyncio.sleep(0.05)
-        yield encode_sse(
-            "warming",
-            {"job_id": str(job.id), "reason": "modal_cold_start", "estimated_seconds": 90},
-            event_id=2,
-        )
-        await asyncio.sleep(0.05)
-        yield encode_sse(
-            "progress",
-            {
-                "job_id": str(job.id),
-                "completed_blocks": 0,
-                "total_blocks": 0,
-                "completed_timesteps": from_timestep,
-            },
-            event_id=3,
-        )
+        async for stream_event in broker.subscribe(job_id, after_event_id=after_event_id):
+            if stream_event.event == "progress" and from_timestep:
+                if stream_event.data.get("completed_timesteps", 0) < from_timestep:
+                    continue
+            yield encode_sse(stream_event.event, stream_event.data, event_id=stream_event.id)
 
     return StreamingResponse(events(), media_type="text/event-stream")
+
+
+def _resolve_after_event_id(from_event_id: int | None, last_event_id: str | None) -> int | None:
+    if from_event_id is not None:
+        return from_event_id
+    if last_event_id is None or not last_event_id.strip():
+        return None
+    try:
+        return int(last_event_id)
+    except ValueError:
+        return None
