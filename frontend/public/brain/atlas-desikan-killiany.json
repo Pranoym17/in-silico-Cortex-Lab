@@ -1,0 +1,18 @@
+{
+  "0": "Left-Banks-STS",
+  "1": "Left-Caudal-ACC",
+  "10": "Right-Insula",
+  "11": "Right-Lateral-Occipital",
+  "12": "Right-Fusiform",
+  "13": "Right-Superior-Temporal",
+  "14": "Right-Precuneus",
+  "15": "Right-Unknown",
+  "2": "Left-Insula",
+  "3": "Left-Lateral-Occipital",
+  "4": "Left-Fusiform",
+  "5": "Left-Superior-Temporal",
+  "6": "Left-Precuneus",
+  "7": "Left-Unknown",
+  "8": "Right-Banks-STS",
+  "9": "Right-Caudal-ACC"
+}
