@@ -6,6 +6,7 @@ import { BrainMeshManifest, loadBrainManifest } from "@/lib/brainAssets";
 import {
   ActivationDomain,
   getActivationDomain,
+  getActivationStats,
   getChunkForTimestep,
   getFrameIndexForTimestep,
   getLatestActivationChunk,
@@ -54,6 +55,11 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     () => getActivationDomain(selectedChunk ?? latestChunk, selectedFrameIndex, useManualDomain ? manualDomain : null),
     [latestChunk, manualDomain, selectedChunk, selectedFrameIndex, useManualDomain]
   );
+  const selectedStats = useMemo(
+    () => getActivationStats(selectedChunk ?? latestChunk, selectedFrameIndex),
+    [latestChunk, selectedChunk, selectedFrameIndex]
+  );
+  const manualDomainInvalid = useManualDomain && manualDomain === null;
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -257,6 +263,36 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               <div />
               <span>{formatDomainValue(activeDomain[1])}</span>
             </div>
+            {manualDomainInvalid ? <p className="error-text">Manual scale must have a numeric min below max.</p> : null}
+          </div>
+          <div className="viewer-section">
+            <h3>Frame</h3>
+            <div className="viewer-stat-grid">
+              <div>
+                <span>Min</span>
+                <strong>{formatStatValue(selectedStats.min)}</strong>
+              </div>
+              <div>
+                <span>Max</span>
+                <strong>{formatStatValue(selectedStats.max)}</strong>
+              </div>
+              <div>
+                <span>Mean</span>
+                <strong>{formatStatValue(selectedStats.mean)}</strong>
+              </div>
+              <div>
+                <span>Abs max</span>
+                <strong>{formatStatValue(selectedStats.absoluteMax)}</strong>
+              </div>
+              <div>
+                <span>Vertices</span>
+                <strong>{selectedStats.vertexCount}</strong>
+              </div>
+              <div>
+                <span>Sample Hz</span>
+                <strong>{selectedChunk?.sample_rate_hz ?? latestChunk?.sample_rate_hz ?? "none"}</strong>
+              </div>
+            </div>
           </div>
           <div className="viewer-stat-grid">
             <div>
@@ -291,6 +327,14 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               <span>Last event</span>
               <strong>{lastEventId ?? "none"}</strong>
             </div>
+            <div>
+              <span>Chunk</span>
+              <strong>{selectedChunk?.chunk_index ?? "none"}</strong>
+            </div>
+            <div>
+              <span>Block</span>
+              <strong>{selectedChunk?.block_id ?? "none"}</strong>
+            </div>
           </div>
           {!accessToken ? <p>Open the dashboard and sign in to stream this job.</p> : null}
           {assetError ? <p className="error-text">{assetError}</p> : null}
@@ -315,4 +359,14 @@ function parseManualDomain(minValue: string, maxValue: string): ActivationDomain
 
 function formatDomainValue(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function formatStatValue(value: number) {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+  if (Math.abs(value) >= 100) {
+    return value.toFixed(1);
+  }
+  return value.toFixed(3);
 }

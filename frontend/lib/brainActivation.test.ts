@@ -6,6 +6,7 @@ import {
   buildVertexColorBuffer,
   getActivationFrame,
   getActivationDomain,
+  getActivationStats,
   getFrameIndexForTimestep,
   getHemisphereActivationFrame,
   getLatestActivationChunk,
@@ -97,6 +98,18 @@ describe("brainActivation", () => {
 
     expect(getActivationDomain(current, 0, [-5, 5])).toEqual([-5, 5]);
     expect(getActivationDomain(current, 0, [5, 5])).toEqual([0, 5]);
+  });
+
+  it("summarizes activation frames", () => {
+    const current = chunk([-2, -1, 0, 1, 2, 3]);
+
+    expect(getActivationStats(current)).toEqual({
+      min: -2,
+      max: 3,
+      mean: 0.5,
+      absoluteMax: 3,
+      vertexCount: 6
+    });
   });
 
   it("returns neutral-sized colors when a chunk does not match the manifest", () => {

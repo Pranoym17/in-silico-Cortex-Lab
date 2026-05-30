@@ -4,6 +4,14 @@ import { DecodedActivationChunk } from "./sse";
 
 export type ActivationDomain = readonly [number, number];
 
+export type ActivationStats = {
+  min: number;
+  max: number;
+  mean: number;
+  absoluteMax: number;
+  vertexCount: number;
+};
+
 export function getLatestActivationChunk(chunks: readonly DecodedActivationChunk[]): DecodedActivationChunk | null {
   return chunks.length > 0 ? chunks[chunks.length - 1] : null;
 }
@@ -48,6 +56,62 @@ export function getActivationDomain(
     return overrideDomain;
   }
   return chunk ? inferActivationDomain(getActivationFrame(chunk, frameIndex)) : [-1, 1];
+}
+
+export function getActivationStats(chunk: DecodedActivationChunk | null, frameIndex = 0): ActivationStats {
+  if (!chunk) {
+    return {
+      min: 0,
+      max: 0,
+      mean: 0,
+      absoluteMax: 0,
+      vertexCount: 0
+    };
+  }
+
+  const frame = getActivationFrame(chunk, frameIndex);
+  if (frame.length === 0) {
+    return {
+      min: 0,
+      max: 0,
+      mean: 0,
+      absoluteMax: 0,
+      vertexCount: 0
+    };
+  }
+
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let sum = 0;
+  let absoluteMax = 0;
+
+  for (const value of frame) {
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+    sum += value;
+    absoluteMax = Math.max(absoluteMax, Math.abs(value));
+  }
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return {
+      min: 0,
+      max: 0,
+      mean: 0,
+      absoluteMax: 0,
+      vertexCount: frame.length
+    };
+  }
+
+  return {
+    min,
+    max,
+    mean: sum / frame.length,
+    absoluteMax,
+    vertexCount: frame.length
+  };
 }
 
 export function getHemisphereActivationFrame(
