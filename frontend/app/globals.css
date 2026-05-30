@@ -262,6 +262,71 @@ button:disabled {
   color: var(--muted);
 }
 
+.viewer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: 16px;
+  align-items: stretch;
+  margin-top: 16px;
+}
+
+.viewer-canvas-panel {
+  min-height: calc(100vh - 128px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #101114;
+}
+
+.brain-scene {
+  position: relative;
+  min-height: calc(100vh - 130px);
+}
+
+.brain-loading {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.viewer-sidebar {
+  align-self: start;
+}
+
+.viewer-sidebar h2,
+.viewer-sidebar p {
+  margin: 0;
+}
+
+.viewer-sidebar p {
+  color: var(--muted);
+}
+
+.viewer-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.viewer-stat-grid div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #14171d;
+}
+
+.viewer-stat-grid span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.viewer-stat-grid strong {
+  overflow-wrap: anywhere;
+}
+
 pre {
   overflow: auto;
   max-width: 100%;
@@ -363,8 +428,18 @@ pre {
   .stepper-row,
   .template-actions,
   .builder-summary,
+  .viewer-grid,
   .timeline-controls,
   .timeline-actions {
     display: grid;
+  }
+
+  .viewer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .viewer-canvas-panel,
+  .brain-scene {
+    min-height: 460px;
   }
 }

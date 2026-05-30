@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BrainScene } from "./BrainScene";
+import { BrainMeshManifest, loadBrainManifest } from "@/lib/brainAssets";
+import { getLatestActivationChunk } from "@/lib/brainActivation";
 import { streamJobEvents } from "@/lib/sse";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
@@ -22,6 +25,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("idle");
   const [streamError, setStreamError] = useState<string | null>(null);
   const [connectAttempt, setConnectAttempt] = useState(0);
+  const [manifest, setManifest] = useState<BrainMeshManifest | null>(null);
+  const [assetError, setAssetError] = useState<string | null>(null);
+  const latestChunk = getLatestActivationChunk(chunks);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -47,6 +53,27 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
       data.subscription.unsubscribe();
     };
   }, [setSession]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadBrainManifest()
+      .then((loadedManifest) => {
+        if (!cancelled) {
+          setManifest(loadedManifest);
+          setAssetError(null);
+        }
+      })
+      .catch((caught) => {
+        if (!cancelled) {
+          setAssetError(caught instanceof Error ? caught.message : "Brain mesh assets failed to load");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     resetJob(jobId);
@@ -95,26 +122,66 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
 
   return (
     <main className="shell">
-      <h1>Viewer</h1>
-      <section className="panel stack">
-        <p>Job: {jobId}</p>
-        <p>Status: {status}</p>
-        <p>Connection: {connectionStatus}</p>
-        <p>Current timestep: {timestep}</p>
-        <p>
-          Blocks: {completedBlocks}/{totalBlocks}
-        </p>
-        <p>Chunks received: {chunks.length}</p>
-        {lastEventId ? <p>Last event: {lastEventId}</p> : null}
-        {!accessToken ? <p>Open the dashboard and sign in to stream this job.</p> : null}
-        {error ? <p className="error-text">{error}</p> : null}
-        {streamError ? <p className="error-text">{streamError}</p> : null}
-        {accessToken && connectionStatus === "disconnected" && status !== "complete" ? (
-          <button type="button" onClick={() => setConnectAttempt((value) => value + 1)}>
-            Reconnect
-          </button>
-        ) : null}
-      </section>
+      <div className="page-header">
+        <div>
+          <h1>Viewer</h1>
+          <p>Streamed cortical activation preview.</p>
+        </div>
+      </div>
+
+      <div className="viewer-grid">
+        <section className="viewer-canvas-panel">
+          {manifest ? (
+            <BrainScene manifest={manifest} chunk={latestChunk} />
+          ) : (
+            <div className="brain-scene brain-loading">Loading brain mesh</div>
+          )}
+        </section>
+
+        <aside className="panel stack viewer-sidebar">
+          <div>
+            <h2>Run</h2>
+            <p>Job: {jobId}</p>
+          </div>
+          <div className="viewer-stat-grid">
+            <div>
+              <span>Status</span>
+              <strong>{status}</strong>
+            </div>
+            <div>
+              <span>Connection</span>
+              <strong>{connectionStatus}</strong>
+            </div>
+            <div>
+              <span>Timestep</span>
+              <strong>{timestep}</strong>
+            </div>
+            <div>
+              <span>Blocks</span>
+              <strong>
+                {completedBlocks}/{totalBlocks}
+              </strong>
+            </div>
+            <div>
+              <span>Chunks</span>
+              <strong>{chunks.length}</strong>
+            </div>
+            <div>
+              <span>Last event</span>
+              <strong>{lastEventId ?? "none"}</strong>
+            </div>
+          </div>
+          {!accessToken ? <p>Open the dashboard and sign in to stream this job.</p> : null}
+          {assetError ? <p className="error-text">{assetError}</p> : null}
+          {error ? <p className="error-text">{error}</p> : null}
+          {streamError ? <p className="error-text">{streamError}</p> : null}
+          {accessToken && connectionStatus === "disconnected" && status !== "complete" ? (
+            <button type="button" onClick={() => setConnectAttempt((value) => value + 1)}>
+              Reconnect
+            </button>
+          ) : null}
+        </aside>
+      </div>
     </main>
   );
 }

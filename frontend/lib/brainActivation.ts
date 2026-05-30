@@ -1,0 +1,54 @@
+import { BrainMeshManifest, HemisphereKey } from "./brainAssets";
+import { activationToRgb, inferActivationDomain } from "./colormap";
+import { DecodedActivationChunk } from "./sse";
+
+export function getLatestActivationChunk(chunks: readonly DecodedActivationChunk[]): DecodedActivationChunk | null {
+  return chunks.length > 0 ? chunks[chunks.length - 1] : null;
+}
+
+export function getActivationFrame(chunk: DecodedActivationChunk, frameIndex = 0): Float32Array {
+  const safeFrameIndex = Math.max(0, Math.min(frameIndex, chunk.timestep_count - 1));
+  const start = safeFrameIndex * chunk.vertex_count;
+  const end = start + chunk.vertex_count;
+  return chunk.activations.slice(start, end);
+}
+
+export function getHemisphereActivationFrame(
+  chunk: DecodedActivationChunk | null,
+  manifest: BrainMeshManifest,
+  hemisphere: HemisphereKey,
+  frameIndex = 0
+): Float32Array {
+  const metadata = manifest.hemispheres[hemisphere];
+  if (!chunk || chunk.vertex_count < metadata.activation_offset + metadata.vertex_count) {
+    return new Float32Array(metadata.vertex_count);
+  }
+
+  const frame = getActivationFrame(chunk, frameIndex);
+  return frame.slice(metadata.activation_offset, metadata.activation_offset + metadata.vertex_count);
+}
+
+export function buildVertexColorBuffer(values: Float32Array, domain = inferActivationDomain(values)): Float32Array {
+  const colors = new Float32Array(values.length * 3);
+
+  for (let index = 0; index < values.length; index += 1) {
+    const [red, green, blue] = activationToRgb(values[index], domain);
+    const colorOffset = index * 3;
+    colors[colorOffset] = red;
+    colors[colorOffset + 1] = green;
+    colors[colorOffset + 2] = blue;
+  }
+
+  return colors;
+}
+
+export function buildHemisphereVertexColors(
+  chunk: DecodedActivationChunk | null,
+  manifest: BrainMeshManifest,
+  hemisphere: HemisphereKey,
+  frameIndex = 0
+): Float32Array {
+  const values = getHemisphereActivationFrame(chunk, manifest, hemisphere, frameIndex);
+  const fullFrame = chunk ? getActivationFrame(chunk, frameIndex) : values;
+  return buildVertexColorBuffer(values, inferActivationDomain(fullFrame));
+}
