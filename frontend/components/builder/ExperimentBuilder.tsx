@@ -22,6 +22,7 @@ import { BlockConfigPanel } from "./BlockConfigPanel";
 import { BuilderTimeline } from "./BuilderTimeline";
 import { ConditionsPanel } from "./ConditionsPanel";
 import { ParadigmLibraryPanel } from "./ParadigmLibraryPanel";
+import { AppShell, EmptyState, ErrorPanel, LoadingRows, StatusBadge } from "@/components/ui/AppShell";
 import { ParadigmTemplate } from "@/lib/paradigmTemplates";
 import {
   TIMELINE_DURATION_STEP_MS,
@@ -404,40 +405,56 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const otherValidationErrors = validationErrors.filter((item) => item.blockId && item.blockId !== selectedBlock?.id);
 
   return (
-    <main className="shell">
-      <h1>{experiment?.name ?? "Builder"}</h1>
-      <div className="builder-grid">
-        <section className="panel stack">
-          <h2>Palette</h2>
-          <button type="button" onClick={() => handleAddBlock("image")} disabled={!accessToken || isMutating}>
-            Add image
+    <AppShell
+      title={experiment?.name ?? "Builder"}
+      description="Build and validate the stimulus timeline before running inference."
+      width="full"
+      actions={
+        <div className="builder-header-actions">
+          <StatusBadge tone={validationErrors.length === 0 && blocks.length > 0 ? "good" : "warn"}>
+            {validationErrors.length === 0 && blocks.length > 0 ? "Valid" : `${validationErrors.length} issue${validationErrors.length === 1 ? "" : "s"}`}
+          </StatusBadge>
+          <span>{saveStatus}</span>
+          <button type="button" disabled={!canRun} onClick={handleRunExperiment}>
+            {isMutating ? "Working..." : "Run"}
           </button>
-          <button type="button" onClick={() => handleAddBlock("text")} disabled={!accessToken || isMutating}>
-            Add text
-          </button>
-          <button type="button" onClick={() => handleAddBlock("audio")} disabled={!accessToken || isMutating}>
-            Add audio
-          </button>
-        </section>
+        </div>
+      }
+    >
+      <div className="builder-workspace">
+        <aside className="builder-side stack">
+          <section className="panel stack">
+            <h2>Add block</h2>
+            <button type="button" onClick={() => handleAddBlock("image")} disabled={!accessToken || isMutating}>
+              Image
+            </button>
+            <button type="button" onClick={() => handleAddBlock("text")} disabled={!accessToken || isMutating}>
+              Text
+            </button>
+            <button type="button" onClick={() => handleAddBlock("audio")} disabled={!accessToken || isMutating}>
+              Audio
+            </button>
+          </section>
 
-        <ParadigmLibraryPanel isSaving={isMutating || !accessToken} onApplyTemplate={handleApplyTemplate} />
+          <ParadigmLibraryPanel isSaving={isMutating || !accessToken} onApplyTemplate={handleApplyTemplate} />
+          <ConditionsPanel blocks={blocks} isSaving={isMutating || !accessToken} onRenameCondition={handleRenameCondition} />
+        </aside>
 
-        <section className="panel stack">
+        <section className="panel stack builder-main-panel">
           <div className="toolbar">
             <div>
-              <h2>Timeline data</h2>
+              <h2>Timeline</h2>
               <p>Experiment: {experimentId}</p>
               {experiment ? <p>Status: {experiment.status}</p> : null}
-              <p>{saveStatus}</p>
             </div>
-            <button type="button" disabled={!canRun} onClick={handleRunExperiment}>
-              {isMutating ? "Working..." : "Run"}
-            </button>
+            <StatusBadge tone={blocks.length === 0 ? "neutral" : validationErrors.length === 0 ? "good" : "warn"}>
+              {blocks.length === 0 ? "Draft" : validationErrors.length === 0 ? "Ready" : "Needs work"}
+            </StatusBadge>
           </div>
 
           {!accessToken ? <p>Return to the dashboard and connect a session token to load saved metadata.</p> : null}
-          {isLoading ? <p>Loading builder...</p> : null}
-          {error ? <p className="error-text">{error}</p> : null}
+          {isLoading ? <LoadingRows rows={3} /> : null}
+          {error ? <ErrorPanel message={error} /> : null}
           {queuedJob ? (
             <div className="run-result">
               <strong>Run queued</strong>
@@ -472,10 +489,10 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
           </div>
 
           {blocks.length === 0 && !isLoading ? (
-            <div className="empty-state">
-              <strong>No stimulus blocks yet</strong>
-              <p>Add a block from the palette or apply a paradigm template to start building the experiment.</p>
-            </div>
+            <EmptyState
+              title="No stimulus blocks yet"
+              message="Add a block or apply a paradigm template to start building the experiment."
+            />
           ) : null}
 
           <BuilderTimeline blocks={blocks} selectedBlockId={selectedBlockId} onSelectBlock={selectBlock} />
@@ -550,16 +567,16 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
           ) : null}
         </section>
 
-        <BlockConfigPanel
-          block={selectedBlock}
-          isSaving={isMutating}
-          onDelete={handleDeleteBlock}
-          onSave={handleUpdateBlock}
-          onUpload={handleUploadBlockFile}
-        />
-
-        <ConditionsPanel blocks={blocks} isSaving={isMutating || !accessToken} onRenameCondition={handleRenameCondition} />
+        <aside className="builder-inspector">
+          <BlockConfigPanel
+            block={selectedBlock}
+            isSaving={isMutating}
+            onDelete={handleDeleteBlock}
+            onSave={handleUpdateBlock}
+            onUpload={handleUploadBlockFile}
+          />
+        </aside>
       </div>
-    </main>
+    </AppShell>
   );
 }

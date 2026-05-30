@@ -40,6 +40,18 @@ export function BlockConfigPanel({
   const [channels, setChannels] = useState(1);
   const [sampleRateHz, setSampleRateHz] = useState(16000);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
+  const [localPreviewKind, setLocalPreviewKind] = useState<"image" | "audio" | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl);
+      }
+    };
+  }, [localPreviewUrl]);
 
   useEffect(() => {
     if (!block) {
@@ -62,6 +74,10 @@ export function BlockConfigPanel({
       setChannels(1);
       setSampleRateHz(16000);
       setUploadError(null);
+      setUploadStatus("idle");
+      setSelectedFileName(null);
+      setLocalPreviewUrl(null);
+      setLocalPreviewKind(null);
       return;
     }
 
@@ -86,6 +102,10 @@ export function BlockConfigPanel({
     setChannels(typeof block.payload.channels === "number" ? block.payload.channels : 1);
     setSampleRateHz(typeof block.payload.sample_rate_hz === "number" ? block.payload.sample_rate_hz : 16000);
     setUploadError(null);
+    setUploadStatus("idle");
+    setSelectedFileName(null);
+    setLocalPreviewUrl(null);
+    setLocalPreviewKind(null);
   }, [block]);
 
   function buildPayloadFromFields(basePayload: Record<string, unknown>, block: StimulusBlock) {
@@ -150,10 +170,19 @@ export function BlockConfigPanel({
       return;
     }
 
+    if (localPreviewUrl) {
+      URL.revokeObjectURL(localPreviewUrl);
+    }
+    setLocalPreviewUrl(URL.createObjectURL(file));
+    setLocalPreviewKind(block.type === "image" || block.type === "audio" ? block.type : null);
+    setSelectedFileName(file.name);
+    setUploadStatus("uploading");
     setUploadError(null);
     try {
       await onUpload(block, file);
+      setUploadStatus("done");
     } catch (caught) {
+      setUploadStatus("error");
       setUploadError(caught instanceof Error ? caught.message : "Failed to upload stimulus file.");
     }
   }
@@ -169,8 +198,22 @@ export function BlockConfigPanel({
 
   return (
     <section className="panel stack">
-      <h2>Selected block</h2>
-      <p>Type: {block.type}</p>
+      <div className="toolbar">
+        <div>
+          <h2>Selected block</h2>
+          <p>
+            {block.type} · {block.condition ?? "unlabeled"}
+          </p>
+        </div>
+      </div>
+      {block.type === "image" && localPreviewUrl ? (
+        <img className="stimulus-preview" src={localPreviewUrl} alt={selectedFileName ?? "Selected image preview"} />
+      ) : null}
+      {block.type === "audio" && localPreviewUrl && localPreviewKind === "audio" ? (
+        <audio className="stimulus-audio-preview" controls src={localPreviewUrl}>
+          <track kind="captions" />
+        </audio>
+      ) : null}
       <form className="block-config-form" onSubmit={handleSubmit}>
         <label>
           Condition
@@ -233,7 +276,7 @@ export function BlockConfigPanel({
         {block.type === "image" ? (
           <>
             <label>
-              Upload image
+              Replace image
               <input
                 accept={IMAGE_MIME_TYPES.join(",")}
                 disabled={isSaving}
@@ -241,6 +284,7 @@ export function BlockConfigPanel({
                 type="file"
               />
             </label>
+            <UploadState status={uploadStatus} fileName={selectedFileName} />
             <label>
               Library ID
               <input onChange={(event) => setLibraryId(event.target.value)} value={libraryId} />
@@ -292,7 +336,7 @@ export function BlockConfigPanel({
         {block.type === "audio" ? (
           <>
             <label>
-              Upload audio
+              Replace audio
               <input
                 accept={AUDIO_MIME_TYPES.join(",")}
                 disabled={isSaving}
@@ -300,6 +344,7 @@ export function BlockConfigPanel({
                 type="file"
               />
             </label>
+            <UploadState status={uploadStatus} fileName={selectedFileName} />
             <label>
               Filename
               <input onChange={(event) => setFilename(event.target.value)} value={filename} />
@@ -346,6 +391,28 @@ export function BlockConfigPanel({
         </label>
         {payloadError ? <p className="error-text">{payloadError}</p> : null}
         {uploadError ? <p className="error-text">{uploadError}</p> : null}
+        {(block.type === "image" || block.type === "audio") && (s3Key || filename || contentHash) ? (
+          <div className="metadata-grid">
+            {filename ? (
+              <div>
+                <span>File</span>
+                <strong>{filename}</strong>
+              </div>
+            ) : null}
+            {s3Key ? (
+              <div>
+                <span>S3 key</span>
+                <strong>{s3Key}</strong>
+              </div>
+            ) : null}
+            {contentHash ? (
+              <div>
+                <span>Hash</span>
+                <strong>{contentHash}</strong>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="config-actions">
           <button type="submit" disabled={isSaving}>
             {isSaving ? "Saving..." : "Save changes"}
@@ -356,5 +423,19 @@ export function BlockConfigPanel({
         </div>
       </form>
     </section>
+  );
+}
+
+function UploadState({ status, fileName }: { status: "idle" | "uploading" | "done" | "error"; fileName: string | null }) {
+  if (status === "idle") {
+    return null;
+  }
+
+  return (
+    <div className={`upload-state upload-state-${status}`}>
+      <span>{fileName ?? "Selected file"}</span>
+      <strong>{status === "uploading" ? "Uploading" : status === "done" ? "Uploaded" : "Upload failed"}</strong>
+      {status === "uploading" ? <div className="upload-progress" /> : null}
+    </div>
   );
 }

@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { ApiError, Experiment, createExperiment, listExperiments } from "@/lib/api";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
+import { AppShell, EmptyState, ErrorPanel, LoadingRows, StatusBadge } from "@/components/ui/AppShell";
 
 function formatUpdatedAt(value: string) {
   return new Intl.DateTimeFormat("en", {
@@ -20,29 +21,36 @@ export function DashboardClient() {
   const email = useAuthStore((state) => state.email);
   const setAccessToken = useAuthStore((state) => state.setAccessToken);
   const setSession = useAuthStore((state) => state.setSession);
+  const supabaseConfigured = isSupabaseConfigured();
   const [tokenDraft, setTokenDraft] = useState("");
   const [emailDraft, setEmailDraft] = useState("");
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [name, setName] = useState("Untitled experiment");
+  const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRestoringSession, setIsRestoringSession] = useState(supabaseConfigured);
   const [isCreating, setIsCreating] = useState(false);
   const [isSendingLink, setIsSendingLink] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const supabaseConfigured = isSupabaseConfigured();
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
+      setIsRestoringSession(false);
       return;
     }
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession({
-        accessToken: data.session?.access_token ?? null,
-        email: data.session?.user.email ?? null
-      });
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setSession({
+          accessToken: data.session?.access_token ?? null,
+          email: data.session?.user.email ?? null
+        });
+      })
+      .finally(() => setIsRestoringSession(false));
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession({
@@ -86,7 +94,7 @@ export function DashboardClient() {
     return () => {
       isActive = false;
     };
-  }, [accessToken]);
+  }, [accessToken, reloadKey]);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -154,26 +162,36 @@ export function DashboardClient() {
     }
   }
 
-  async function handleSignOut() {
-    const supabase = getSupabaseBrowserClient();
-    if (supabase) {
-      await supabase.auth.signOut();
-    }
-    setAccessToken(null);
-  }
+  const filteredExperiments = experiments
+    .filter((experiment) => experiment.name.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 
   return (
-    <main className="shell">
-      <div className="page-header">
-        <div>
-          <h1>Experiments</h1>
-          <p>Checkpoint 1 dashboard for authenticated experiment metadata.</p>
-        </div>
-      </div>
-
-      {!accessToken ? (
+    <AppShell
+      title="Experiments"
+      description="Create experiments, open drafts, and continue into the builder."
+      actions={
+        accessToken ? (
+          <form className="compact-create-form" onSubmit={handleCreate}>
+            <input value={name} onChange={(event) => setName(event.target.value)} aria-label="Experiment name" />
+            <button type="submit" disabled={isCreating || !name.trim()}>
+              {isCreating ? "Creating..." : "Create"}
+            </button>
+          </form>
+        ) : null
+      }
+    >
+      {isRestoringSession ? (
         <section className="panel stack">
-          <h2>Connect a session</h2>
+          <h2>Restoring session</h2>
+          <LoadingRows rows={2} />
+        </section>
+      ) : !accessToken ? (
+        <section className="panel auth-panel">
+          <div className="auth-copy">
+            <h2>Sign in</h2>
+            <p>Use your Supabase session to load saved experiments and create new timelines.</p>
+          </div>
           {supabaseConfigured ? (
             <>
               <form className="token-form" onSubmit={handleMagicLink}>
@@ -217,46 +235,50 @@ export function DashboardClient() {
         </section>
       ) : (
         <section className="panel stack">
-          <div className="toolbar">
+          <div className="toolbar dashboard-toolbar">
             <div>
-              <h2>Your experiments</h2>
-              {email ? <p>{email}</p> : null}
+              <h2>Experiment library</h2>
+              <p>{email ? `Signed in as ${email}` : "Authenticated session"}</p>
             </div>
-            <button type="button" onClick={handleSignOut}>
-              Sign out
-            </button>
+            <input
+              aria-label="Search experiments"
+              className="search-input"
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search experiments"
+              value={search}
+            />
           </div>
 
-          <form className="create-form" onSubmit={handleCreate}>
-            <input value={name} onChange={(event) => setName(event.target.value)} aria-label="Experiment name" />
-            <button type="submit" disabled={isCreating || !name.trim()}>
-              {isCreating ? "Creating..." : "Create"}
-            </button>
-          </form>
-
-          {error ? <p className="error-text">{error}</p> : null}
-          {isLoading ? <p>Loading experiments...</p> : null}
+          {error ? <ErrorPanel message={error} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
+          {isLoading ? <LoadingRows rows={4} /> : null}
 
           {!isLoading && experiments.length === 0 ? (
-            <p>No experiments yet. Create one to open the builder metadata view.</p>
+            <EmptyState
+              title="No experiments yet"
+              message="Create a draft experiment to start building a stimulus timeline."
+            />
+          ) : null}
+
+          {!isLoading && experiments.length > 0 && filteredExperiments.length === 0 ? (
+            <EmptyState title="No matching experiments" message="Clear the search field to see every experiment." />
           ) : null}
 
           <div className="experiment-list">
-            {experiments.map((experiment) => (
+            {filteredExperiments.map((experiment) => (
               <article className="experiment-row" key={experiment.id}>
                 <div>
                   <h3>{experiment.name}</h3>
                   <p>
-                    {experiment.status} - Updated {formatUpdatedAt(experiment.updated_at)}
+                    Updated {formatUpdatedAt(experiment.updated_at)}
                   </p>
                 </div>
+                <StatusBadge tone={experiment.status === "ready" ? "good" : "neutral"}>{experiment.status}</StatusBadge>
                 <Link href={`/builder/${experiment.id}`}>Open</Link>
               </article>
             ))}
           </div>
         </section>
       )}
-    </main>
+    </AppShell>
   );
 }
-

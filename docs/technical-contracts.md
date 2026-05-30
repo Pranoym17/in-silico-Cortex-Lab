@@ -377,6 +377,40 @@ python scripts/create_dev_brain_assets.py
 
 These fixtures use the production filenames and JSON contract, but `mesh-manifest.json` has `"source": "dev-fixture"` and only 16 total vertices. Replace them by running `convert_mesh.py` when real `fsaverage5` files are available.
 
+## Brain Viewer Contract
+
+The viewer renders streamed activation chunks onto the fsaverage5 GLTF meshes.
+
+Frontend responsibilities:
+
+- Load `/brain/mesh-manifest.json`.
+- Load left/right hemisphere GLTF files from `manifest.hemispheres`.
+- Keep left/right activation ordering exactly as `left-then-right`.
+- Select frames by global timestep using chunk `timestep_start` and `timestep_count`.
+- Color vertices from float32 activation frames using the active color domain.
+- Support live-follow, manual timestep scrubbing, hemisphere toggles, and auto/manual color scale.
+- Preserve partial streamed chunks when a job fails or the SSE connection reconnects.
+
+Color scale behavior:
+
+- Auto scale uses the selected frame's min/max.
+- Manual scale is valid only when both values are numeric and `min < max`.
+- Invalid manual scale falls back to auto scale and shows a user-facing error.
+
+MVP visual verification:
+
+1. Start backend and frontend.
+2. Create an experiment and run fake inference.
+3. Open `/viewer/{job_id}`.
+4. Confirm the canvas is nonblank and both hemispheres render.
+5. Confirm chunks increment during streaming.
+6. Confirm vertex colors change as timesteps arrive.
+7. Confirm Pause stops live-follow, the timestep slider scrubs previous frames, and Live jumps to the newest frame.
+8. Confirm left/right toggles never hide both hemispheres at once.
+9. Confirm manual color scale changes the displayed colors and invalid min/max shows an error.
+
+The repo intentionally does not add Playwright for MVP CI yet. Browser screenshot and canvas-pixel checks should be added when frontend visual regressions become frequent enough to justify the extra dependency and runtime.
+
 Required GLTF vertex attributes:
 
 - `POSITION`: float32 xyz.

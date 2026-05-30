@@ -1,13 +1,21 @@
 "use client";
 
 import { StimulusBlock } from "@/lib/api";
+import { getConditionColor } from "@/lib/builderConditions";
+import { formatDuration } from "@/lib/builderSummary";
+import { getStimulusReadinessIssues } from "@/lib/stimulusMetadata";
 import { getTimelineDurationMs } from "@/lib/timelineControls";
 
 const PX_PER_MS = 0.08;
 const MIN_TIMELINE_WIDTH = 720;
 
 function getBlockClassName(block: StimulusBlock, selectedBlockId: string | null) {
-  return block.id === selectedBlockId ? "timeline-block timeline-block-selected" : "timeline-block";
+  const issues = getStimulusReadinessIssues(block);
+  const classes = ["timeline-block", issues.length > 0 ? "timeline-block-blocked" : "timeline-block-ready"];
+  if (block.id === selectedBlockId) {
+    classes.push("timeline-block-selected");
+  }
+  return classes.join(" ");
 }
 
 export function BuilderTimeline({
@@ -42,8 +50,13 @@ export function BuilderTimeline({
             title={`${block.type}: ${block.start_ms}ms-${block.start_ms + block.duration_ms}ms`}
             type="button"
           >
-            <span>{block.type}</span>
-            <small>{block.condition ?? "none"}</small>
+            <span>
+              <i style={{ background: getConditionColor(block.condition ?? "unlabeled") }} />
+              {block.type}
+            </span>
+            <small>
+              {block.condition ?? "unlabeled"} · {formatDuration(block.duration_ms)}
+            </small>
           </button>
         ))}
       </div>

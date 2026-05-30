@@ -16,6 +16,7 @@ import { streamJobEvents } from "@/lib/sse";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
 import { useViewerStore } from "@/store/viewerStore";
+import { AppShell, ErrorPanel, StatusBadge } from "@/components/ui/AppShell";
 
 type ConnectionStatus = "idle" | "connecting" | "connected" | "disconnected";
 
@@ -60,6 +61,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     [latestChunk, selectedChunk, selectedFrameIndex]
   );
   const manualDomainInvalid = useManualDomain && manualDomain === null;
+  const shouldReconnect =
+    Boolean(accessToken) && connectionStatus === "disconnected" && status !== "complete" && status !== "failed";
+  const reconnectDelaySeconds = Math.min(30, 2 ** Math.min(connectAttempt, 5));
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -122,6 +126,18 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   }, [isPlaying, maxSelectableTimestep, selectedTimestep]);
 
   useEffect(() => {
+    if (!shouldReconnect) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setConnectAttempt((value) => value + 1);
+    }, reconnectDelaySeconds * 1000);
+
+    return () => window.clearTimeout(timeout);
+  }, [reconnectDelaySeconds, shouldReconnect]);
+
+  useEffect(() => {
     if (!accessToken) {
       return;
     }
@@ -161,14 +177,21 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   }, [accessToken, connectAttempt, jobId]);
 
   return (
-    <main className="shell">
-      <div className="page-header">
-        <div>
-          <h1>Viewer</h1>
-          <p>Streamed cortical activation preview.</p>
+    <AppShell
+      title="Viewer"
+      description="Inspect streamed cortical activation across the fsaverage5 surface."
+      width="full"
+      actions={
+        <div className="viewer-header-actions">
+          <StatusBadge tone={status === "complete" ? "good" : status === "failed" ? "bad" : status === "warming" ? "warn" : "neutral"}>
+            {status}
+          </StatusBadge>
+          <StatusBadge tone={connectionStatus === "connected" ? "good" : connectionStatus === "disconnected" ? "warn" : "neutral"}>
+            {connectionStatus}
+          </StatusBadge>
         </div>
-      </div>
-
+      }
+    >
       <div className="viewer-grid">
         <section className="viewer-canvas-panel">
           {manifest ? (
@@ -183,6 +206,29 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           ) : (
             <div className="brain-scene brain-loading">Loading brain mesh</div>
           )}
+          <div className="viewer-bottom-timeline">
+            <div>
+              <strong>Timestep</strong>
+              <span>
+                {selectedTimestep}/{maxSelectableTimestep}
+              </span>
+            </div>
+            <input
+              aria-label="Timestep scrubber"
+              max={maxSelectableTimestep}
+              min={0}
+              onChange={(event) => {
+                setIsPlaying(false);
+                setSelectedTimestep(Number(event.target.value));
+              }}
+              type="range"
+              value={selectedTimestep}
+            />
+            <div>
+              <strong>Streamed</strong>
+              <span>{timestep} frames</span>
+            </div>
+          </div>
         </section>
 
         <aside className="panel stack viewer-sidebar">
@@ -195,23 +241,16 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               <button type="button" onClick={() => setIsPlaying((value) => !value)}>
                 {isPlaying ? "Pause" : "Play"}
               </button>
-              <button type="button" onClick={() => setSelectedTimestep(maxSelectableTimestep)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPlaying(true);
+                  setSelectedTimestep(maxSelectableTimestep);
+                }}
+              >
                 Live
               </button>
             </div>
-            <label>
-              Timestep
-              <input
-                max={maxSelectableTimestep}
-                min={0}
-                onChange={(event) => {
-                  setIsPlaying(false);
-                  setSelectedTimestep(Number(event.target.value));
-                }}
-                type="range"
-                value={selectedTimestep}
-              />
-            </label>
             <div className="viewer-control-row">
               <label>
                 <input
@@ -337,17 +376,24 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
             </div>
           </div>
           {!accessToken ? <p>Open the dashboard and sign in to stream this job.</p> : null}
-          {assetError ? <p className="error-text">{assetError}</p> : null}
-          {error ? <p className="error-text">{error}</p> : null}
-          {streamError ? <p className="error-text">{streamError}</p> : null}
-          {accessToken && connectionStatus === "disconnected" && status !== "complete" ? (
+          {status === "failed" && chunks.length > 0 ? (
+            <div className="partial-result-banner">
+              Partial result is still available. The stream failed after receiving {chunks.length} chunk
+              {chunks.length === 1 ? "" : "s"}.
+            </div>
+          ) : null}
+          {assetError ? <ErrorPanel message={assetError} /> : null}
+          {error ? <ErrorPanel message={error} /> : null}
+          {streamError ? <ErrorPanel message={streamError} /> : null}
+          {shouldReconnect ? <p>Reconnecting in {reconnectDelaySeconds}s.</p> : null}
+          {accessToken && connectionStatus === "disconnected" && status !== "complete" && status !== "failed" ? (
             <button type="button" onClick={() => setConnectAttempt((value) => value + 1)}>
               Reconnect
             </button>
           ) : null}
         </aside>
       </div>
-    </main>
+    </AppShell>
   );
 }
 

@@ -19,8 +19,7 @@ export function getConditionSummaries(blocks: StimulusBlock[]): ConditionSummary
 }
 
 export function getConditionColor(name: string) {
-  const palette = ["#4fb3ff", "#ff7a90", "#7bd88f", "#ffd166", "#b794f4", "#4dd4c6"];
+  const palette = ["#8fbf9f", "#d08f76", "#c6a96a", "#a99bc8", "#d07f9d", "#7fb7a6"];
   const index = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0) % palette.length;
   return palette[index];
 }
-

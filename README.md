@@ -70,6 +70,15 @@ npm test
 npm run build
 ```
 
+Smoke-check the brain viewer:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Open `http://localhost:3000/viewer/<job_id>` after creating a fake run. The viewer should render both hemispheres, stream activation colors onto the mesh, support pause/live playback, scrub timesteps, toggle hemispheres, and adjust the color scale.
+
 Optional Docker flow, if Docker Desktop is working:
 
 ```bash
