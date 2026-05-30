@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import { BrainMeshManifest } from "./brainAssets";
 import {
   buildHemisphereVertexColors,
+  getChunkForTimestep,
   buildVertexColorBuffer,
   getActivationFrame,
+  getFrameIndexForTimestep,
   getHemisphereActivationFrame,
-  getLatestActivationChunk
+  getLatestActivationChunk,
+  getStreamedTimestepCount
 } from "./brainActivation";
 import { DecodedActivationChunk } from "./sse";
 
@@ -56,6 +59,20 @@ describe("brainActivation", () => {
 
     expect(getLatestActivationChunk([first, second])).toBe(second);
     expect(Array.from(getActivationFrame(second))).toEqual([6, 7, 8, 9, 10, 11]);
+  });
+
+  it("finds the chunk and local frame for a global timestep", () => {
+    const first = { ...chunk([0, 1, 2, 3, 4, 5]), timestep_start: 0, timestep_count: 1, shape: [1, 6] as [number, number] };
+    const second = {
+      ...chunk([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], 2),
+      timestep_start: 1,
+      timestep_count: 2,
+      shape: [2, 6] as [number, number]
+    };
+
+    expect(getStreamedTimestepCount([first, second])).toBe(3);
+    expect(getChunkForTimestep([first, second], 2)).toBe(second);
+    expect(getFrameIndexForTimestep(second, 2)).toBe(1);
   });
 
   it("slices activation values by hemisphere offsets", () => {

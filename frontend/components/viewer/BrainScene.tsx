@@ -12,6 +12,8 @@ type BrainSceneProps = {
   manifest: BrainMeshManifest;
   chunk: DecodedActivationChunk | null;
   frameIndex?: number;
+  showLeft?: boolean;
+  showRight?: boolean;
 };
 
 type HemisphereMeshProps = {
@@ -21,7 +23,7 @@ type HemisphereMeshProps = {
   position: [number, number, number];
 };
 
-export function BrainScene({ manifest, chunk, frameIndex = 0 }: BrainSceneProps) {
+export function BrainScene({ manifest, chunk, frameIndex = 0, showLeft = true, showRight = true }: BrainSceneProps) {
   const leftColors = useMemo(
     () => buildHemisphereVertexColors(chunk, manifest, "left", frameIndex),
     [chunk, frameIndex, manifest]
@@ -39,18 +41,22 @@ export function BrainScene({ manifest, chunk, frameIndex = 0 }: BrainSceneProps)
           <ambientLight intensity={0.85} />
           <directionalLight position={[2, 4, 5]} intensity={1.4} />
           <directionalLight position={[-4, -2, 3]} intensity={0.45} />
-          <HemisphereMesh
-            colors={leftColors}
-            hemisphere="left"
-            path={manifest.hemispheres.left.file}
-            position={[-0.72, 0, 0]}
-          />
-          <HemisphereMesh
-            colors={rightColors}
-            hemisphere="right"
-            path={manifest.hemispheres.right.file}
-            position={[0.72, 0, 0]}
-          />
+          {showLeft ? (
+            <HemisphereMesh
+              colors={leftColors}
+              hemisphere="left"
+              path={manifest.hemispheres.left.file}
+              position={showRight ? [-0.72, 0, 0] : [0, 0, 0]}
+            />
+          ) : null}
+          {showRight ? (
+            <HemisphereMesh
+              colors={rightColors}
+              hemisphere="right"
+              path={manifest.hemispheres.right.file}
+              position={showLeft ? [0.72, 0, 0] : [0, 0, 0]}
+            />
+          ) : null}
           <OrbitControls enableDamping makeDefault maxDistance={8} minDistance={2.1} />
         </Canvas>
       </Suspense>

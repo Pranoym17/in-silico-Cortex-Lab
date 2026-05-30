@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BrainScene } from "./BrainScene";
 import { BrainMeshManifest, loadBrainManifest } from "@/lib/brainAssets";
-import { getLatestActivationChunk } from "@/lib/brainActivation";
+import {
+  getChunkForTimestep,
+  getFrameIndexForTimestep,
+  getLatestActivationChunk,
+  getStreamedTimestepCount
+} from "@/lib/brainActivation";
 import { streamJobEvents } from "@/lib/sse";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
@@ -27,7 +32,18 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [connectAttempt, setConnectAttempt] = useState(0);
   const [manifest, setManifest] = useState<BrainMeshManifest | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
+  const [selectedTimestep, setSelectedTimestep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [showLeft, setShowLeft] = useState(true);
+  const [showRight, setShowRight] = useState(true);
   const latestChunk = getLatestActivationChunk(chunks);
+  const streamedTimesteps = getStreamedTimestepCount(chunks);
+  const maxSelectableTimestep = Math.max(0, streamedTimesteps - 1);
+  const selectedChunk = useMemo(
+    () => getChunkForTimestep(chunks, selectedTimestep),
+    [chunks, selectedTimestep]
+  );
+  const selectedFrameIndex = getFrameIndexForTimestep(selectedChunk, selectedTimestep);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -79,7 +95,15 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     resetJob(jobId);
     setStreamError(null);
     setConnectionStatus("idle");
+    setSelectedTimestep(0);
+    setIsPlaying(true);
   }, [jobId, resetJob]);
+
+  useEffect(() => {
+    if (isPlaying || selectedTimestep > maxSelectableTimestep) {
+      setSelectedTimestep(maxSelectableTimestep);
+    }
+  }, [isPlaying, maxSelectableTimestep, selectedTimestep]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -132,7 +156,13 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
       <div className="viewer-grid">
         <section className="viewer-canvas-panel">
           {manifest ? (
-            <BrainScene manifest={manifest} chunk={latestChunk} />
+            <BrainScene
+              chunk={selectedChunk ?? latestChunk}
+              frameIndex={selectedFrameIndex}
+              manifest={manifest}
+              showLeft={showLeft}
+              showRight={showRight}
+            />
           ) : (
             <div className="brain-scene brain-loading">Loading brain mesh</div>
           )}
@@ -142,6 +172,47 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           <div>
             <h2>Run</h2>
             <p>Job: {jobId}</p>
+          </div>
+          <div className="viewer-controls">
+            <div className="viewer-control-row">
+              <button type="button" onClick={() => setIsPlaying((value) => !value)}>
+                {isPlaying ? "Pause" : "Play"}
+              </button>
+              <button type="button" onClick={() => setSelectedTimestep(maxSelectableTimestep)}>
+                Live
+              </button>
+            </div>
+            <label>
+              Timestep
+              <input
+                max={maxSelectableTimestep}
+                min={0}
+                onChange={(event) => {
+                  setIsPlaying(false);
+                  setSelectedTimestep(Number(event.target.value));
+                }}
+                type="range"
+                value={selectedTimestep}
+              />
+            </label>
+            <div className="viewer-control-row">
+              <label>
+                <input
+                  checked={showLeft}
+                  onChange={(event) => setShowLeft(event.target.checked || !showRight)}
+                  type="checkbox"
+                />
+                Left
+              </label>
+              <label>
+                <input
+                  checked={showRight}
+                  onChange={(event) => setShowRight(event.target.checked || !showLeft)}
+                  type="checkbox"
+                />
+                Right
+              </label>
+            </div>
           </div>
           <div className="viewer-stat-grid">
             <div>
@@ -154,7 +225,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
             </div>
             <div>
               <span>Timestep</span>
-              <strong>{timestep}</strong>
+              <strong>
+                {selectedTimestep}/{maxSelectableTimestep}
+              </strong>
             </div>
             <div>
               <span>Blocks</span>
@@ -165,6 +238,10 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
             <div>
               <span>Chunks</span>
               <strong>{chunks.length}</strong>
+            </div>
+            <div>
+              <span>Streamed</span>
+              <strong>{timestep}</strong>
             </div>
             <div>
               <span>Last event</span>

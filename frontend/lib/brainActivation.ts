@@ -6,6 +6,30 @@ export function getLatestActivationChunk(chunks: readonly DecodedActivationChunk
   return chunks.length > 0 ? chunks[chunks.length - 1] : null;
 }
 
+export function getStreamedTimestepCount(chunks: readonly DecodedActivationChunk[]): number {
+  return chunks.reduce(
+    (maxTimestep, chunk) => Math.max(maxTimestep, chunk.timestep_start + chunk.timestep_count),
+    0
+  );
+}
+
+export function getChunkForTimestep(
+  chunks: readonly DecodedActivationChunk[],
+  timestep: number
+): DecodedActivationChunk | null {
+  return (
+    chunks.find((chunk) => timestep >= chunk.timestep_start && timestep < chunk.timestep_start + chunk.timestep_count) ??
+    getLatestActivationChunk(chunks)
+  );
+}
+
+export function getFrameIndexForTimestep(chunk: DecodedActivationChunk | null, timestep: number): number {
+  if (!chunk) {
+    return 0;
+  }
+  return Math.max(0, Math.min(timestep - chunk.timestep_start, chunk.timestep_count - 1));
+}
+
 export function getActivationFrame(chunk: DecodedActivationChunk, frameIndex = 0): Float32Array {
   const safeFrameIndex = Math.max(0, Math.min(frameIndex, chunk.timestep_count - 1));
   const start = safeFrameIndex * chunk.vertex_count;
