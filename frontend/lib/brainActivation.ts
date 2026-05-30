@@ -2,6 +2,8 @@ import { BrainMeshManifest, HemisphereKey } from "./brainAssets";
 import { activationToRgb, inferActivationDomain } from "./colormap";
 import { DecodedActivationChunk } from "./sse";
 
+export type ActivationDomain = readonly [number, number];
+
 export function getLatestActivationChunk(chunks: readonly DecodedActivationChunk[]): DecodedActivationChunk | null {
   return chunks.length > 0 ? chunks[chunks.length - 1] : null;
 }
@@ -37,6 +39,17 @@ export function getActivationFrame(chunk: DecodedActivationChunk, frameIndex = 0
   return chunk.activations.slice(start, end);
 }
 
+export function getActivationDomain(
+  chunk: DecodedActivationChunk | null,
+  frameIndex = 0,
+  overrideDomain?: ActivationDomain | null
+): ActivationDomain {
+  if (overrideDomain && isValidDomain(overrideDomain)) {
+    return overrideDomain;
+  }
+  return chunk ? inferActivationDomain(getActivationFrame(chunk, frameIndex)) : [-1, 1];
+}
+
 export function getHemisphereActivationFrame(
   chunk: DecodedActivationChunk | null,
   manifest: BrainMeshManifest,
@@ -52,7 +65,10 @@ export function getHemisphereActivationFrame(
   return frame.slice(metadata.activation_offset, metadata.activation_offset + metadata.vertex_count);
 }
 
-export function buildVertexColorBuffer(values: Float32Array, domain = inferActivationDomain(values)): Float32Array {
+export function buildVertexColorBuffer(
+  values: Float32Array,
+  domain: ActivationDomain = inferActivationDomain(values)
+): Float32Array {
   const colors = new Float32Array(values.length * 3);
 
   for (let index = 0; index < values.length; index += 1) {
@@ -70,9 +86,13 @@ export function buildHemisphereVertexColors(
   chunk: DecodedActivationChunk | null,
   manifest: BrainMeshManifest,
   hemisphere: HemisphereKey,
-  frameIndex = 0
+  frameIndex = 0,
+  domain?: ActivationDomain | null
 ): Float32Array {
   const values = getHemisphereActivationFrame(chunk, manifest, hemisphere, frameIndex);
-  const fullFrame = chunk ? getActivationFrame(chunk, frameIndex) : values;
-  return buildVertexColorBuffer(values, inferActivationDomain(fullFrame));
+  return buildVertexColorBuffer(values, getActivationDomain(chunk, frameIndex, domain));
+}
+
+function isValidDomain(domain: ActivationDomain) {
+  return Number.isFinite(domain[0]) && Number.isFinite(domain[1]) && domain[0] < domain[1];
 }

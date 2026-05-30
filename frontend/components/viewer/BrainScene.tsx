@@ -5,7 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import { Suspense, useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { BrainMeshManifest, HemisphereKey } from "@/lib/brainAssets";
-import { buildHemisphereVertexColors } from "@/lib/brainActivation";
+import { ActivationDomain, buildHemisphereVertexColors } from "@/lib/brainActivation";
 import { DecodedActivationChunk } from "@/lib/sse";
 
 type BrainSceneProps = {
@@ -14,6 +14,7 @@ type BrainSceneProps = {
   frameIndex?: number;
   showLeft?: boolean;
   showRight?: boolean;
+  colorDomain?: ActivationDomain | null;
 };
 
 type HemisphereMeshProps = {
@@ -23,14 +24,21 @@ type HemisphereMeshProps = {
   position: [number, number, number];
 };
 
-export function BrainScene({ manifest, chunk, frameIndex = 0, showLeft = true, showRight = true }: BrainSceneProps) {
+export function BrainScene({
+  manifest,
+  chunk,
+  frameIndex = 0,
+  showLeft = true,
+  showRight = true,
+  colorDomain = null
+}: BrainSceneProps) {
   const leftColors = useMemo(
-    () => buildHemisphereVertexColors(chunk, manifest, "left", frameIndex),
-    [chunk, frameIndex, manifest]
+    () => buildHemisphereVertexColors(chunk, manifest, "left", frameIndex, colorDomain),
+    [chunk, colorDomain, frameIndex, manifest]
   );
   const rightColors = useMemo(
-    () => buildHemisphereVertexColors(chunk, manifest, "right", frameIndex),
-    [chunk, frameIndex, manifest]
+    () => buildHemisphereVertexColors(chunk, manifest, "right", frameIndex, colorDomain),
+    [chunk, colorDomain, frameIndex, manifest]
   );
 
   return (

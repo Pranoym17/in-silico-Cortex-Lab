@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { BrainScene } from "./BrainScene";
 import { BrainMeshManifest, loadBrainManifest } from "@/lib/brainAssets";
 import {
+  ActivationDomain,
+  getActivationDomain,
   getChunkForTimestep,
   getFrameIndexForTimestep,
   getLatestActivationChunk,
@@ -36,6 +38,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [showLeft, setShowLeft] = useState(true);
   const [showRight, setShowRight] = useState(true);
+  const [useManualDomain, setUseManualDomain] = useState(false);
+  const [manualMin, setManualMin] = useState("-1");
+  const [manualMax, setManualMax] = useState("1");
   const latestChunk = getLatestActivationChunk(chunks);
   const streamedTimesteps = getStreamedTimestepCount(chunks);
   const maxSelectableTimestep = Math.max(0, streamedTimesteps - 1);
@@ -44,6 +49,11 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     [chunks, selectedTimestep]
   );
   const selectedFrameIndex = getFrameIndexForTimestep(selectedChunk, selectedTimestep);
+  const manualDomain = parseManualDomain(manualMin, manualMax);
+  const activeDomain = useMemo(
+    () => getActivationDomain(selectedChunk ?? latestChunk, selectedFrameIndex, useManualDomain ? manualDomain : null),
+    [latestChunk, manualDomain, selectedChunk, selectedFrameIndex, useManualDomain]
+  );
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -157,6 +167,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
         <section className="viewer-canvas-panel">
           {manifest ? (
             <BrainScene
+              colorDomain={activeDomain}
               chunk={selectedChunk ?? latestChunk}
               frameIndex={selectedFrameIndex}
               manifest={manifest}
@@ -213,6 +224,39 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 Right
               </label>
             </div>
+            <label>
+              <input
+                checked={useManualDomain}
+                onChange={(event) => setUseManualDomain(event.target.checked)}
+                type="checkbox"
+              />
+              Manual color scale
+            </label>
+            <div className="viewer-domain-controls">
+              <label>
+                Min
+                <input
+                  disabled={!useManualDomain}
+                  inputMode="decimal"
+                  onChange={(event) => setManualMin(event.target.value)}
+                  value={manualMin}
+                />
+              </label>
+              <label>
+                Max
+                <input
+                  disabled={!useManualDomain}
+                  inputMode="decimal"
+                  onChange={(event) => setManualMax(event.target.value)}
+                  value={manualMax}
+                />
+              </label>
+            </div>
+            <div className="viewer-legend" aria-label={`Activation scale from ${activeDomain[0]} to ${activeDomain[1]}`}>
+              <span>{formatDomainValue(activeDomain[0])}</span>
+              <div />
+              <span>{formatDomainValue(activeDomain[1])}</span>
+            </div>
           </div>
           <div className="viewer-stat-grid">
             <div>
@@ -261,4 +305,14 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
       </div>
     </main>
   );
+}
+
+function parseManualDomain(minValue: string, maxValue: string): ActivationDomain | null {
+  const min = Number(minValue);
+  const max = Number(maxValue);
+  return Number.isFinite(min) && Number.isFinite(max) && min < max ? [min, max] : null;
+}
+
+function formatDomainValue(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
