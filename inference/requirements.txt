@@ -1,5 +1,4 @@
-modal==0.73.92
+modal==1.4.3
 numpy==2.2.1
 redis==5.2.1
 msgpack==1.1.0
-

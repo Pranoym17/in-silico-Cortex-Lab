@@ -280,6 +280,21 @@ modal token new
 modal deploy inference/tribe_inference.py
 ```
 
+The backend defaults to local fake inference. To call a deployed Modal function from the backend, install the optional backend Modal client and switch the provider:
+
+```bash
+cd backend
+./.venv/Scripts/python -m pip install -r requirements-modal.txt
+```
+
+```env
+INFERENCE_PROVIDER=modal
+MODAL_APP_NAME=cortex-lab-tribe-inference
+MODAL_FUNCTION_NAME=run
+```
+
+The Modal provider consumes deployed generator events and republishes them through the same SSE contract as fake inference. Unsupported Modal event types fail the job with `internal_error`; crashes after a chunk fail with `partial_failure` so the frontend can keep partial frames visible.
+
 Pseudocode:
 
 ```python

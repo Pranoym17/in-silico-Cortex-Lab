@@ -84,6 +84,21 @@ modal token new
 modal deploy inference/tribe_inference.py
 ```
 
+To let the local backend call the deployed Modal function, install the optional Modal client dependency in the backend venv and switch providers:
+
+```bash
+cd backend
+./.venv/Scripts/python -m pip install -r requirements-modal.txt
+```
+
+```env
+INFERENCE_PROVIDER=modal
+MODAL_APP_NAME=cortex-lab-tribe-inference
+MODAL_FUNCTION_NAME=run
+```
+
+Leave `INFERENCE_PROVIDER=fake` for normal local development unless you are intentionally testing cloud inference.
+
 Smoke-check the brain viewer:
 
 ```bash
