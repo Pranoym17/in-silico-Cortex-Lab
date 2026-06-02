@@ -70,6 +70,20 @@ npm test
 npm run build
 ```
 
+Smoke-check the Modal/TRIBE scaffold without deploying anything:
+
+```bash
+backend/.venv/Scripts/python inference/tribe_inference.py --smoke
+```
+
+Deploying the scaffold to Modal is optional until Checkpoint 8 provider wiring is enabled. When you are ready, install the inference requirements, authenticate Modal, then deploy:
+
+```bash
+python -m pip install -r inference/requirements.txt
+modal token new
+modal deploy inference/tribe_inference.py
+```
+
 Smoke-check the brain viewer:
 
 ```bash

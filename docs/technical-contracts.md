@@ -264,6 +264,22 @@ Reconnect behavior:
 
 Celery owns job orchestration and job status. Modal owns GPU inference and cache lookup.
 
+Checkpoint 8 starts with a deployable fake Modal provider in `inference/tribe_inference.py`. It intentionally yields the same warming/progress/chunk/complete event categories as the local fake backend path, but it does not load TRIBE v2 yet. Keep `INFERENCE_PROVIDER=fake` until backend provider wiring is explicitly switched to Modal.
+
+Local Modal scaffold smoke test:
+
+```bash
+backend/.venv/Scripts/python inference/tribe_inference.py --smoke
+```
+
+Optional Modal deployment:
+
+```bash
+python -m pip install -r inference/requirements.txt
+modal token new
+modal deploy inference/tribe_inference.py
+```
+
 Pseudocode:
 
 ```python
@@ -468,32 +484,38 @@ Required local sequence:
 
 1. Copy `.env.example` to `.env` and fill backend values.
 2. Copy `frontend/.env.example` to `frontend/.env.local` and fill frontend values.
-3. Create/authenticate Modal credentials:
+3. Smoke-check the Modal inference scaffold:
+
+```bash
+backend/.venv/Scripts/python inference/tribe_inference.py --smoke
+```
+
+4. Optional: create/authenticate Modal credentials when Checkpoint 8 provider wiring is ready:
 
 ```bash
 modal token new
 ```
 
-4. Deploy the Modal function:
+5. Optional: deploy the Modal scaffold:
 
 ```bash
-python inference/tribe_inference.py --deploy
+modal deploy inference/tribe_inference.py
 ```
 
-5. Start local infrastructure:
+6. Start local infrastructure:
 
 ```bash
 docker-compose up
 ```
 
-6. Apply backend migrations:
+7. Apply backend migrations:
 
 ```bash
 cd backend
 alembic upgrade head
 ```
 
-7. Start frontend:
+8. Start frontend:
 
 ```bash
 cd frontend

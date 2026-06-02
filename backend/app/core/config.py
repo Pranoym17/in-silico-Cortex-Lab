@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     frontend_origin: str = "http://localhost:3000"
     job_execution_mode: Literal["background", "celery", "manual"] = "background"
+    inference_provider: Literal["fake", "modal"] = "fake"
+    modal_app_name: str = "cortex-lab-tribe-inference"
+    modal_function_name: str = "run"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
