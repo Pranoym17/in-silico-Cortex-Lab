@@ -98,13 +98,21 @@ def test_fake_modal_stream_rejects_empty_specs():
 class FakeTribeModel:
     def __init__(self):
         self.text_paths = []
+        self.audio_paths = []
+        self.video_paths = []
         self.predicted_events = []
 
     def get_events_dataframe(self, *, text_path=None, audio_path=None, video_path=None):
-        assert audio_path is None
-        assert video_path is None
-        self.text_paths.append(text_path)
-        return {"text_path": text_path}
+        if text_path is not None:
+            self.text_paths.append(text_path)
+            return {"text_path": text_path}
+        if audio_path is not None:
+            self.audio_paths.append(audio_path)
+            return {"audio_path": audio_path}
+        if video_path is not None:
+            self.video_paths.append(video_path)
+            return {"video_path": video_path}
+        raise AssertionError("expected text_path, audio_path, or video_path")
 
     def predict(self, *, events):
         self.predicted_events.append(events)
@@ -159,5 +167,66 @@ def test_real_tribe_stream_rejects_unsupported_image_blocks():
     stream = tribe_inference.run_real_tribe_stream(spec, model=model, working_dir=_working_dir("image"))
     next(stream)
     next(stream)
-    with pytest.raises(ValueError, match="image blocks need a documented conversion decision"):
+    with pytest.raises(ValueError, match="Image blocks need a documented conversion decision"):
         next(stream)
+
+
+def test_real_tribe_stream_uses_official_audio_path_flow():
+    model = FakeTribeModel()
+    audio_path = _working_dir("audio") / "stimulus.wav"
+    audio_path.write_bytes(b"RIFF")
+    spec = {
+        "blocks": [
+            {
+                "id": "audio-real",
+                "type": "audio",
+                "start_ms": 0,
+                "duration_ms": 1000,
+                "content_hash": "sha256:abc123",
+                "local_path": str(audio_path),
+                "mime_type": "audio/wav",
+            }
+        ],
+        "settings": {"target_sample_rate_hz": 2},
+    }
+
+    events = list(tribe_inference.run_real_tribe_stream(spec, model=model, working_dir=_working_dir("audio-work")))
+
+    assert model.audio_paths == [str(audio_path)]
+    assert model.predicted_events == [{"audio_path": str(audio_path)}]
+    assert events[2]["type"] == "chunk"
+
+
+def test_real_tribe_stream_materializes_s3_audio(monkeypatch):
+    model = FakeTribeModel()
+    downloads = []
+
+    def fake_download_s3_object(*, bucket_name, key, destination):
+        downloads.append((bucket_name, key, destination))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"RIFF")
+        return destination
+
+    monkeypatch.setenv("S3_BUCKET_NAME", "cortexlab-test")
+    monkeypatch.setattr(tribe_inference, "download_s3_object", fake_download_s3_object)
+    spec = {
+        "blocks": [
+            {
+                "id": "audio-s3",
+                "type": "audio",
+                "start_ms": 0,
+                "duration_ms": 1000,
+                "content_hash": "sha256:abc123",
+                "s3_key": "uploads/audio.wav",
+                "mime_type": "audio/wav",
+            }
+        ]
+    }
+
+    list(tribe_inference.run_real_tribe_stream(spec, model=model, working_dir=_working_dir("s3-audio")))
+
+    assert len(downloads) == 1
+    assert downloads[0][0] == "cortexlab-test"
+    assert downloads[0][1] == "uploads/audio.wav"
+    assert downloads[0][2].name == "audio-s3.wav"
+    assert model.audio_paths == [str(downloads[0][2])]

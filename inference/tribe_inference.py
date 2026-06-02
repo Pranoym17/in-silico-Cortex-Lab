@@ -23,6 +23,17 @@ TRIBE_MODEL_ID = "facebook/tribev2"
 FAKE_VERTEX_COUNT = 16
 FAKE_TIMESTEPS_PER_BLOCK = 1
 DEFAULT_SAMPLE_RATE_HZ = 2
+AUDIO_EXTENSIONS_BY_MIME = {
+    "audio/mpeg": ".mp3",
+    "audio/wav": ".wav",
+    "audio/mp4": ".m4a",
+    "audio/x-m4a": ".m4a",
+}
+VIDEO_EXTENSIONS_BY_MIME = {
+    "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
+    "video/webm": ".webm",
+}
 
 
 def _run_blocks(spec: dict[str, Any]) -> list[dict[str, Any]]:
@@ -164,19 +175,76 @@ def _write_text_block(block: dict[str, Any], working_dir: Path) -> Path:
     return path
 
 
+def _safe_file_stem(block: dict[str, Any], fallback: str) -> str:
+    raw_id = str(block.get("id") or fallback)
+    return "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in raw_id)
+
+
+def download_s3_object(*, bucket_name: str, key: str, destination: Path) -> Path:
+    try:
+        import boto3
+    except ImportError as exc:
+        raise RuntimeError("boto3 is required to materialize S3 inputs for real TRIBE inference") from exc
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    client = boto3.client("s3", region_name=os.environ.get("AWS_REGION"))
+    client.download_file(bucket_name, key, str(destination))
+    return destination
+
+
+def _materialize_media_block(
+    block: dict[str, Any],
+    working_dir: Path,
+    *,
+    extensions_by_mime: dict[str, str],
+    fallback_extension: str,
+) -> Path:
+    local_path = block.get("local_path")
+    if isinstance(local_path, str) and local_path:
+        path = Path(local_path)
+        if not path.exists():
+            raise FileNotFoundError(f"local input file does not exist: {path}")
+        return path
+
+    s3_key = block.get("s3_key")
+    if not isinstance(s3_key, str) or not s3_key:
+        raise ValueError("real TRIBE media blocks require local_path or s3_key")
+
+    bucket_name = os.environ.get("S3_BUCKET_NAME")
+    if not bucket_name:
+        raise ValueError("S3_BUCKET_NAME is required to materialize S3 inputs")
+
+    mime_type = str(block.get("mime_type") or "")
+    extension = extensions_by_mime.get(mime_type, fallback_extension)
+    destination = working_dir / "inputs" / f"{_safe_file_stem(block, 'media')}{extension}"
+    return download_s3_object(bucket_name=bucket_name, key=s3_key, destination=destination)
+
+
 def _events_dataframe_for_block(model: Any, block: dict[str, Any], working_dir: Path) -> Any:
     block_type = block.get("type")
     if block_type == "text":
         text_path = _write_text_block(block, working_dir)
         return model.get_events_dataframe(text_path=str(text_path))
-    if block_type == "audio" and block.get("local_path"):
-        return model.get_events_dataframe(audio_path=str(block["local_path"]))
-    if block_type == "video" and block.get("local_path"):
-        return model.get_events_dataframe(video_path=str(block["local_path"]))
+    if block_type == "audio":
+        audio_path = _materialize_media_block(
+            block,
+            working_dir,
+            extensions_by_mime=AUDIO_EXTENSIONS_BY_MIME,
+            fallback_extension=".wav",
+        )
+        return model.get_events_dataframe(audio_path=str(audio_path))
+    if block_type == "video":
+        video_path = _materialize_media_block(
+            block,
+            working_dir,
+            extensions_by_mime=VIDEO_EXTENSIONS_BY_MIME,
+            fallback_extension=".mp4",
+        )
+        return model.get_events_dataframe(video_path=str(video_path))
 
     raise ValueError(
-        "Real TRIBE inference currently supports text blocks directly. Audio/video require local materialized files; "
-        "image blocks need a documented conversion decision before real TRIBE inference."
+        "Real TRIBE inference supports official text_path, audio_path, and video_path inputs. "
+        "Image blocks need a documented conversion decision before real TRIBE inference."
     )
 
 

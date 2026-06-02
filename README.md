@@ -109,6 +109,8 @@ HF_TOKEN=
 
 For real text inference, Hugging Face access to the gated LLaMA 3.2-3B dependency may be required. Do not set `TRIBE_INFERENCE_MODE=real` casually; real mode can trigger model downloads and Modal GPU time.
 
+Real audio/video inference uses TRIBE's official `audio_path` and `video_path` inputs. If the run spec contains S3 keys, the Modal function downloads those objects only after `TRIBE_INFERENCE_MODE=real` is enabled. Image blocks remain fake-only until we choose a scientifically acceptable conversion path, because the official TRIBE v2 card documents video/audio/text inputs rather than still images.
+
 Smoke-check the brain viewer:
 
 ```bash

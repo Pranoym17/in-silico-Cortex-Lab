@@ -302,6 +302,8 @@ Official TRIBE v2 integration constraints:
 - Build inputs with `model.get_events_dataframe(video_path=...)`, `audio_path=...`, or `text_path=...`.
 - Predict with `preds, segments = model.predict(events=df)`.
 - Treat `preds` as `(n_timesteps, n_vertices)` on the fsaverage5 cortical mesh.
+- Real text blocks are materialized as temporary `.txt` files and passed through `text_path`.
+- Real audio/video blocks are passed through `audio_path`/`video_path`. If a local path is not provided, the Modal function materializes the S3 object into a temporary file first.
 - The model card documents video/audio/text naturalistic stimuli. Still image inference needs a deliberate conversion decision, such as static video generation, before it is considered scientifically acceptable.
 - The text encoder requires access to the gated LLaMA 3.2-3B model, so real text inference may require a Hugging Face read token with the required access.
 - The project license is CC-BY-NC-4.0, so this MVP is non-commercial unless licensing is reviewed separately.
