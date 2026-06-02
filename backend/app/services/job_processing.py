@@ -9,6 +9,7 @@ from app.models.job import Job, JobStatus
 from app.schemas.run import RunExperimentRequest
 from app.schemas.sse import CompleteEvent, ErrorEvent, ProgressEvent, QueuedEvent, WarmingEvent
 from app.services.activation_events import fake_activation_chunk
+from app.services.modal_inference import ModalInferenceError, encode_modal_chunk_event, stream_deployed_modal_events
 from app.services.sse_broker import JobEventBroker, get_job_event_broker
 
 
@@ -153,3 +154,215 @@ async def process_fake_inference_job(
         ).model_dump(mode="json"),
     )
     return job
+
+
+async def process_modal_inference_job(
+    session: AsyncSession,
+    job_id: UUID,
+    broker: JobEventBroker | None = None,
+    *,
+    app_name: str,
+    function_name: str,
+    environment_name: str | None = None,
+) -> Job:
+    broker = broker or get_job_event_broker()
+    job = await get_job_for_processing(session, job_id)
+
+    if job.status in TERMINAL_STATUSES:
+        return job
+
+    await broker.publish(
+        job.id,
+        "queued",
+        QueuedEvent(job_id=str(job.id), status=JobStatus.queued).model_dump(mode="json"),
+    )
+
+    try:
+        run_request = RunExperimentRequest.model_validate(job.run_spec)
+    except ValidationError as exc:
+        failed_job = await mark_job_failed(
+            session,
+            job,
+            error_code="validation_failed",
+            error_message=str(exc),
+        )
+        await broker.publish(
+            job.id,
+            "error",
+            ErrorEvent(
+                job_id=str(job.id),
+                code="validation_failed",
+                message="Run specification failed validation.",
+                retryable=False,
+            ).model_dump(mode="json"),
+        )
+        return failed_job
+
+    modal_spec = run_request.model_dump(mode="json")
+    modal_spec["job_id"] = str(job.id)
+
+    chunk_seen = False
+    completed_timesteps = 0
+    vertex_count = 0
+
+    try:
+        async for event in stream_deployed_modal_events(
+            app_name=app_name,
+            function_name=function_name,
+            environment_name=environment_name,
+            spec=modal_spec,
+        ):
+            event_type = event.get("type")
+
+            if event_type == "warming":
+                job.status = JobStatus.warming
+                await session.commit()
+                await session.refresh(job)
+                await broker.publish(
+                    job.id,
+                    "warming",
+                    WarmingEvent(
+                        job_id=str(job.id),
+                        reason=str(event.get("reason") or "modal_cold_start"),
+                        estimated_seconds=int(event.get("estimated_seconds") or 0),
+                    ).model_dump(mode="json"),
+                )
+                continue
+
+            if event_type == "progress":
+                if job.status in {JobStatus.queued, JobStatus.warming}:
+                    job.status = JobStatus.running
+                    job.started_at = job.started_at or datetime.now(UTC)
+                    await session.commit()
+                    await session.refresh(job)
+
+                completed_timesteps = int(event.get("completed_timesteps") or completed_timesteps)
+                await broker.publish(
+                    job.id,
+                    "progress",
+                    ProgressEvent(
+                        job_id=str(job.id),
+                        completed_blocks=int(event.get("completed_blocks") or 0),
+                        total_blocks=int(event.get("total_blocks") or len(run_request.blocks)),
+                        completed_timesteps=completed_timesteps,
+                    ).model_dump(mode="json"),
+                )
+                continue
+
+            if event_type == "chunk":
+                if job.status != JobStatus.streaming:
+                    job.status = JobStatus.streaming
+                    job.started_at = job.started_at or datetime.now(UTC)
+                    await session.commit()
+                    await session.refresh(job)
+
+                envelope = encode_modal_chunk_event(event)
+                chunk_seen = True
+                completed_timesteps = max(
+                    completed_timesteps,
+                    int(event["timestep_start"]) + int(event["timestep_count"]),
+                )
+                vertex_count = int(event["vertex_count"])
+                await broker.publish(job.id, "chunk", envelope.model_dump(mode="json"))
+                continue
+
+            if event_type == "complete":
+                completed_timesteps = int(event.get("timesteps") or completed_timesteps)
+                vertex_count = int(event.get("vertex_count") or vertex_count)
+                job.status = JobStatus.complete
+                job.completed_at = datetime.now(UTC)
+                await session.commit()
+                await session.refresh(job)
+                await broker.publish(
+                    job.id,
+                    "complete",
+                    CompleteEvent(
+                        job_id=str(job.id),
+                        status=JobStatus.complete,
+                        result_s3_key=event.get("result_s3_key"),
+                        timesteps=completed_timesteps,
+                        vertex_count=vertex_count,
+                    ).model_dump(mode="json"),
+                )
+                return job
+
+            if event_type == "error":
+                code = str(event.get("code") or "modal_error")
+                message = str(event.get("message") or "Modal inference failed.")
+                failed_job = await mark_job_failed(
+                    session,
+                    job,
+                    error_code=code,
+                    error_message=message,
+                )
+                await broker.publish(
+                    job.id,
+                    "error",
+                    ErrorEvent(
+                        job_id=str(job.id),
+                        code=code,
+                        message=message,
+                        retryable=bool(event.get("retryable", True)),
+                        last_timestep=event.get("last_timestep"),
+                    ).model_dump(mode="json"),
+                )
+                return failed_job
+
+            raise ModalInferenceError(f"Unsupported Modal event type: {event_type}")
+    except Exception as exc:
+        code = "partial_failure" if chunk_seen else "internal_error"
+        message = str(exc)
+        failed_job = await mark_job_failed(session, job, error_code=code, error_message=message)
+        await broker.publish(
+            job.id,
+            "error",
+            ErrorEvent(
+                job_id=str(job.id),
+                code=code,
+                message="Inference failed after streaming partial results." if chunk_seen else "Inference failed.",
+                retryable=True,
+                last_timestep=completed_timesteps - 1 if completed_timesteps > 0 else None,
+            ).model_dump(mode="json"),
+        )
+        return failed_job
+
+    failed_job = await mark_job_failed(
+        session,
+        job,
+        error_code="internal_error",
+        error_message="Modal inference ended without a complete event.",
+    )
+    await broker.publish(
+        job.id,
+        "error",
+        ErrorEvent(
+            job_id=str(job.id),
+            code="internal_error",
+            message="Inference ended without a complete event.",
+            retryable=True,
+            last_timestep=completed_timesteps - 1 if completed_timesteps > 0 else None,
+        ).model_dump(mode="json"),
+    )
+    return failed_job
+
+
+async def process_configured_inference_job(
+    session: AsyncSession,
+    job_id: UUID,
+    broker: JobEventBroker | None = None,
+) -> Job:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.inference_provider == "fake":
+        return await process_fake_inference_job(session, job_id, broker)
+    if settings.inference_provider == "modal":
+        return await process_modal_inference_job(
+            session,
+            job_id,
+            broker,
+            app_name=settings.modal_app_name,
+            function_name=settings.modal_function_name,
+            environment_name=settings.modal_environment_name,
+        )
+    raise ValueError(f"Unsupported inference provider: {settings.inference_provider}")

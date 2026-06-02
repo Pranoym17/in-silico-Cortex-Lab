@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     inference_provider: Literal["fake", "modal"] = "fake"
     modal_app_name: str = "cortex-lab-tribe-inference"
     modal_function_name: str = "run"
+    modal_environment_name: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

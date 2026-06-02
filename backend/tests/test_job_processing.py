@@ -8,7 +8,7 @@ import pytest
 
 from app.models.job import JobStatus
 from app.services.job_processing import FAKE_VERTEX_COUNT
-from app.services.job_processing import JobProcessingError, process_fake_inference_job
+from app.services.job_processing import JobProcessingError, process_fake_inference_job, process_modal_inference_job
 from app.services.sse_broker import JobEventBroker
 from app.tasks.inference_task import _run_inference
 
@@ -207,6 +207,120 @@ async def test_process_fake_inference_job_rejects_missing_job():
 
     assert "was not found" in str(exc.value)
     assert broker.events == []
+
+
+@pytest.mark.asyncio
+async def test_process_modal_inference_job_publishes_modal_stream(monkeypatch):
+    job = make_job()
+    session = FakeSession(job)
+    broker = FakeBroker()
+
+    async def fake_stream_deployed_modal_events(**kwargs):
+        assert kwargs["app_name"] == "cortex-lab-tribe-inference"
+        assert kwargs["function_name"] == "run"
+        assert kwargs["environment_name"] is None
+        assert kwargs["spec"]["job_id"] == str(job.id)
+        block_id = kwargs["spec"]["blocks"][0]["id"]
+        yield {"type": "warming", "job_id": str(job.id), "reason": "modal_fake_provider", "estimated_seconds": 1}
+        yield {
+            "type": "progress",
+            "job_id": str(job.id),
+            "completed_blocks": 0,
+            "total_blocks": 1,
+            "completed_timesteps": 0,
+        }
+        yield {
+            "type": "chunk",
+            "job_id": str(job.id),
+            "block_id": block_id,
+            "chunk_index": 0,
+            "timestep_start": 0,
+            "timestep_count": 1,
+            "sample_rate_hz": 2,
+            "vertex_count": 2,
+            "dtype": "float32",
+            "shape": [1, 2],
+            "activations": b"\x00\x00\x00\x00\x00\x00\x80?",
+        }
+        yield {
+            "type": "complete",
+            "job_id": str(job.id),
+            "status": "complete",
+            "timesteps": 1,
+            "vertex_count": 2,
+        }
+
+    monkeypatch.setattr("app.services.job_processing.stream_deployed_modal_events", fake_stream_deployed_modal_events)
+
+    processed = await process_modal_inference_job(
+        session,
+        job.id,
+        broker,
+        app_name="cortex-lab-tribe-inference",
+        function_name="run",
+    )
+
+    assert processed is job
+    assert job.status == JobStatus.complete
+    assert [event for _, event, _ in broker.events] == ["queued", "warming", "progress", "chunk", "complete"]
+    chunk_payload = msgpack.unpackb(base64.b64decode(broker.events[3][2]["payload"]), raw=False)
+    assert broker.events[3][2]["encoding"] == "base64-msgpack"
+    assert chunk_payload["job_id"] == str(job.id)
+    assert chunk_payload["vertex_count"] == 2
+    assert broker.events[-1][2] == {
+        "job_id": str(job.id),
+        "status": "complete",
+        "result_s3_key": None,
+        "timesteps": 1,
+        "vertex_count": 2,
+    }
+
+
+@pytest.mark.asyncio
+async def test_process_modal_inference_job_marks_partial_failure(monkeypatch):
+    job = make_job()
+    session = FakeSession(job)
+    broker = FakeBroker()
+
+    async def fake_stream_deployed_modal_events(**kwargs):
+        block_id = kwargs["spec"]["blocks"][0]["id"]
+        yield {
+            "type": "chunk",
+            "job_id": str(job.id),
+            "block_id": block_id,
+            "chunk_index": 0,
+            "timestep_start": 0,
+            "timestep_count": 1,
+            "sample_rate_hz": 2,
+            "vertex_count": 2,
+            "dtype": "float32",
+            "shape": [1, 2],
+            "activations": b"\x00\x00\x00\x00\x00\x00\x80?",
+        }
+        raise RuntimeError("modal crashed")
+
+    monkeypatch.setattr("app.services.job_processing.stream_deployed_modal_events", fake_stream_deployed_modal_events)
+
+    processed = await process_modal_inference_job(
+        session,
+        job.id,
+        broker,
+        app_name="cortex-lab-tribe-inference",
+        function_name="run",
+    )
+
+    assert processed is job
+    assert job.status == JobStatus.failed
+    assert job.error_code == "partial_failure"
+    assert "modal crashed" in job.error_message
+    assert [event for _, event, _ in broker.events] == ["queued", "chunk", "error"]
+    assert broker.events[-1][2] == {
+        "job_id": str(job.id),
+        "code": "partial_failure",
+        "message": "Inference failed after streaming partial results.",
+        "retryable": True,
+        "last_timestep": 0,
+    }
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@ from uuid import UUID
 
 from app.core.database import AsyncSessionLocal
 from app.models.job import JobStatus
-from app.services.job_processing import JobProcessingError, process_fake_inference_job
+from app.services.job_processing import JobProcessingError, process_configured_inference_job
 from app.tasks.celery_app import celery_app
 
 
@@ -19,7 +19,7 @@ async def _run_inference(job_id: str) -> dict[str, str]:
         raise JobProcessingError(f"Invalid job id: {job_id}") from exc
 
     async with AsyncSessionLocal() as session:
-        job = await process_fake_inference_job(session, parsed_job_id)
+        job = await process_configured_inference_job(session, parsed_job_id)
 
     status = job.status.value if isinstance(job.status, JobStatus) else str(job.status)
     return {"job_id": str(job.id), "status": status}
