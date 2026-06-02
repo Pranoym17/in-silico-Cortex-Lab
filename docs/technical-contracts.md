@@ -312,9 +312,13 @@ To avoid accidental Modal GPU spend, real TRIBE mode is opt-in:
 
 ```env
 TRIBE_INFERENCE_MODE=fake
+TRIBE_CHUNK_TIMESTEPS=4
+TRIBE_EXPECTED_VERTEX_COUNT=
 ```
 
 Only set `TRIBE_INFERENCE_MODE=real` for a planned cloud smoke test.
+
+`TRIBE_CHUNK_TIMESTEPS` controls how many TRIBE timesteps are packed into each streamed activation chunk. `TRIBE_EXPECTED_VERTEX_COUNT` is optional, but when set it fails inference before streaming scientifically wrong geometry if the model output vertex count does not match the frontend mesh manifest.
 
 Pseudocode:
 

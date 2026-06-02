@@ -96,11 +96,12 @@ def test_fake_modal_stream_rejects_empty_specs():
 
 
 class FakeTribeModel:
-    def __init__(self):
+    def __init__(self, predictions=None):
         self.text_paths = []
         self.audio_paths = []
         self.video_paths = []
         self.predicted_events = []
+        self.predictions = predictions
 
     def get_events_dataframe(self, *, text_path=None, audio_path=None, video_path=None):
         if text_path is not None:
@@ -116,6 +117,8 @@ class FakeTribeModel:
 
     def predict(self, *, events):
         self.predicted_events.append(events)
+        if self.predictions is not None:
+            return self.predictions, [{"segment": 0}]
         return np.array([[0.0, 1.0], [2.0, 3.0]], dtype=np.float32), [{"segment": 0}]
 
 
@@ -146,6 +149,55 @@ def test_real_tribe_stream_uses_official_text_prediction_flow():
     assert events[2]["timestep_count"] == 2
     assert events[-1]["timesteps"] == 2
     assert events[-1]["vertex_count"] == 2
+
+
+def test_real_tribe_stream_chunks_prediction_timesteps(monkeypatch):
+    monkeypatch.setenv("TRIBE_CHUNK_TIMESTEPS", "2")
+    model = FakeTribeModel(predictions=np.arange(15, dtype=np.float32).reshape(5, 3))
+    spec = {
+        "blocks": [
+            {
+                "id": "text-chunked",
+                "type": "text",
+                "start_ms": 0,
+                "duration_ms": 1000,
+                "content_hash": "sha256:abc123",
+                "text": "chunk me",
+            }
+        ]
+    }
+
+    events = list(tribe_inference.run_real_tribe_stream(spec, model=model, working_dir=_working_dir("chunked")))
+    chunks = [event for event in events if event["type"] == "chunk"]
+
+    assert [chunk["chunk_index"] for chunk in chunks] == [0, 1, 2]
+    assert [chunk["timestep_start"] for chunk in chunks] == [0, 2, 4]
+    assert [chunk["shape"] for chunk in chunks] == [[2, 3], [2, 3], [1, 3]]
+    assert events[-1]["timesteps"] == 5
+    assert events[-1]["vertex_count"] == 3
+
+
+def test_real_tribe_stream_validates_expected_vertex_count(monkeypatch):
+    monkeypatch.setenv("TRIBE_EXPECTED_VERTEX_COUNT", "4")
+    model = FakeTribeModel(predictions=np.arange(6, dtype=np.float32).reshape(2, 3))
+    spec = {
+        "blocks": [
+            {
+                "id": "text-wrong-vertices",
+                "type": "text",
+                "start_ms": 0,
+                "duration_ms": 1000,
+                "content_hash": "sha256:abc123",
+                "text": "wrong vertices",
+            }
+        ]
+    }
+
+    stream = tribe_inference.run_real_tribe_stream(spec, model=model, working_dir=_working_dir("vertices"))
+    next(stream)
+    next(stream)
+    with pytest.raises(ValueError, match="predicted 3 vertices"):
+        next(stream)
 
 
 def test_real_tribe_stream_rejects_unsupported_image_blocks():

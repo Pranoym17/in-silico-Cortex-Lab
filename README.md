@@ -104,6 +104,8 @@ Real TRIBE v2 mode is also opt-in. The official model card loads the model with 
 ```env
 TRIBE_INFERENCE_MODE=fake
 TRIBE_CACHE_FOLDER=./cache
+TRIBE_CHUNK_TIMESTEPS=4
+TRIBE_EXPECTED_VERTEX_COUNT=
 HF_TOKEN=
 ```
 

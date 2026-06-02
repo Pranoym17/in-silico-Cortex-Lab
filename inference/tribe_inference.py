@@ -23,6 +23,7 @@ TRIBE_MODEL_ID = "facebook/tribev2"
 FAKE_VERTEX_COUNT = 16
 FAKE_TIMESTEPS_PER_BLOCK = 1
 DEFAULT_SAMPLE_RATE_HZ = 2
+DEFAULT_REAL_CHUNK_TIMESTEPS = 4
 AUDIO_EXTENSIONS_BY_MIME = {
     "audio/mpeg": ".mp3",
     "audio/wav": ".wav",
@@ -50,6 +51,30 @@ def _sample_rate_hz(spec: dict[str, Any]) -> int:
         if isinstance(sample_rate, int) and sample_rate > 0:
             return sample_rate
     return DEFAULT_SAMPLE_RATE_HZ
+
+
+def _real_chunk_timesteps() -> int:
+    raw_value = os.environ.get("TRIBE_CHUNK_TIMESTEPS", str(DEFAULT_REAL_CHUNK_TIMESTEPS))
+    try:
+        chunk_timesteps = int(raw_value)
+    except ValueError as exc:
+        raise ValueError("TRIBE_CHUNK_TIMESTEPS must be an integer") from exc
+    if chunk_timesteps <= 0:
+        raise ValueError("TRIBE_CHUNK_TIMESTEPS must be positive")
+    return chunk_timesteps
+
+
+def _expected_vertex_count() -> int | None:
+    raw_value = os.environ.get("TRIBE_EXPECTED_VERTEX_COUNT", "").strip()
+    if not raw_value:
+        return None
+    try:
+        vertex_count = int(raw_value)
+    except ValueError as exc:
+        raise ValueError("TRIBE_EXPECTED_VERTEX_COUNT must be an integer") from exc
+    if vertex_count <= 0:
+        raise ValueError("TRIBE_EXPECTED_VERTEX_COUNT must be positive")
+    return vertex_count
 
 
 def build_fake_activation_matrix(
@@ -97,6 +122,42 @@ def activation_chunk_event(
         "shape": [timestep_count, vertex_count],
         "activations": matrix.tobytes(order="C"),
     }
+
+
+def iter_activation_chunks(
+    *,
+    activations: np.ndarray,
+    chunk_timesteps: int,
+) -> Generator[tuple[int, np.ndarray], None, None]:
+    matrix = np.asarray(activations, dtype="<f4")
+    if matrix.ndim != 2:
+        raise ValueError("activation matrix must have shape (n_timesteps, n_vertices)")
+    if chunk_timesteps <= 0:
+        raise ValueError("chunk_timesteps must be positive")
+
+    timestep_count = matrix.shape[0]
+    for timestep_start in range(0, timestep_count, chunk_timesteps):
+        yield timestep_start, np.ascontiguousarray(matrix[timestep_start : timestep_start + chunk_timesteps], dtype="<f4")
+
+
+def validate_prediction_matrix(
+    predictions: Any,
+    *,
+    expected_vertex_count: int | None,
+) -> np.ndarray:
+    activations = np.asarray(predictions, dtype="<f4")
+    if activations.ndim != 2:
+        raise ValueError("TRIBE predictions must have shape (n_timesteps, n_vertices)")
+    if activations.shape[0] <= 0:
+        raise ValueError("TRIBE predictions must include at least one timestep")
+    if activations.shape[1] <= 0:
+        raise ValueError("TRIBE predictions must include at least one vertex")
+    if expected_vertex_count is not None and activations.shape[1] != expected_vertex_count:
+        raise ValueError(
+            f"TRIBE predicted {activations.shape[1]} vertices, but TRIBE_EXPECTED_VERTEX_COUNT="
+            f"{expected_vertex_count}. Check mesh/output ordering before rendering."
+        )
+    return np.ascontiguousarray(activations, dtype="<f4")
 
 
 def run_fake_stream(spec: dict[str, Any]) -> Generator[dict[str, Any], None, None]:
@@ -266,9 +327,12 @@ def run_real_tribe_stream(
     }
 
     model = model or load_tribe_model()
+    chunk_timesteps = _real_chunk_timesteps()
+    expected_vertex_count = _expected_vertex_count()
     completed_timesteps = 0
     total_blocks = len(blocks)
     vertex_count = 0
+    chunk_index = 0
 
     yield {
         "type": "progress",
@@ -286,23 +350,26 @@ def run_real_tribe_stream(
         working_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        for chunk_index, block in enumerate(blocks):
-            block_id = str(block.get("id") or f"block-{chunk_index}")
+        for block_index, block in enumerate(blocks):
+            block_id = str(block.get("id") or f"block-{block_index}")
             events = _events_dataframe_for_block(model, block, working_dir)
             predictions, _segments = model.predict(events=events)
-            activations = np.asarray(predictions, dtype="<f4")
-            if activations.ndim != 2:
-                raise ValueError("TRIBE predictions must have shape (n_timesteps, n_vertices)")
+            activations = validate_prediction_matrix(predictions, expected_vertex_count=expected_vertex_count)
 
             vertex_count = int(activations.shape[1])
-            yield activation_chunk_event(
-                job_id=job_id,
-                block_id=block_id,
-                chunk_index=chunk_index,
-                timestep_start=completed_timesteps,
-                sample_rate_hz=sample_rate_hz,
+            for local_timestep_start, activation_chunk in iter_activation_chunks(
                 activations=activations,
-            )
+                chunk_timesteps=chunk_timesteps,
+            ):
+                yield activation_chunk_event(
+                    job_id=job_id,
+                    block_id=block_id,
+                    chunk_index=chunk_index,
+                    timestep_start=completed_timesteps + local_timestep_start,
+                    sample_rate_hz=sample_rate_hz,
+                    activations=activation_chunk,
+                )
+                chunk_index += 1
 
             completed_timesteps += int(activations.shape[0])
             yield {
