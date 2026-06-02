@@ -1,0 +1,5 @@
+# TRIBE v2 is installed from the official Hugging Face repository.
+# Clone https://huggingface.co/facebook/tribev2, then run:
+# python -m pip install -e path\to\tribev2
+-r requirements.txt
+huggingface-hub==1.2.2

@@ -3,6 +3,8 @@ logs
 *.log
 .dev-logs/
 .tmp_pytest/
+.tmp_*/
+backend/tmp_*/
 __pycache__/
 *.py[cod]
 npm-debug.log*

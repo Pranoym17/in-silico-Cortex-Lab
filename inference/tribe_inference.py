@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import tempfile
 from collections.abc import Generator, Iterable
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -15,6 +19,7 @@ except ImportError:  # Modal is optional for local contract tests.
 
 APP_NAME = "cortex-lab-tribe-inference"
 FUNCTION_NAME = "run"
+TRIBE_MODEL_ID = "facebook/tribev2"
 FAKE_VERTEX_COUNT = 16
 FAKE_TIMESTEPS_PER_BLOCK = 1
 DEFAULT_SAMPLE_RATE_HZ = 2
@@ -135,6 +140,134 @@ def run_fake_stream(spec: dict[str, Any]) -> Generator[dict[str, Any], None, Non
     }
 
 
+@lru_cache(maxsize=1)
+def load_tribe_model():
+    try:
+        from tribev2 import TribeModel
+    except ImportError as exc:
+        raise RuntimeError(
+            "TRIBE v2 is not installed. Clone the official facebook/tribev2 repository and install it with "
+            "`pip install -e .` before setting TRIBE_INFERENCE_MODE=real."
+        ) from exc
+
+    cache_folder = os.environ.get("TRIBE_CACHE_FOLDER", "./cache")
+    return TribeModel.from_pretrained(TRIBE_MODEL_ID, cache_folder=cache_folder)
+
+
+def _write_text_block(block: dict[str, Any], working_dir: Path) -> Path:
+    text = block.get("text")
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("text blocks require non-empty text for TRIBE inference")
+
+    path = working_dir / f"{block.get('id', 'text')}.txt"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _events_dataframe_for_block(model: Any, block: dict[str, Any], working_dir: Path) -> Any:
+    block_type = block.get("type")
+    if block_type == "text":
+        text_path = _write_text_block(block, working_dir)
+        return model.get_events_dataframe(text_path=str(text_path))
+    if block_type == "audio" and block.get("local_path"):
+        return model.get_events_dataframe(audio_path=str(block["local_path"]))
+    if block_type == "video" and block.get("local_path"):
+        return model.get_events_dataframe(video_path=str(block["local_path"]))
+
+    raise ValueError(
+        "Real TRIBE inference currently supports text blocks directly. Audio/video require local materialized files; "
+        "image blocks need a documented conversion decision before real TRIBE inference."
+    )
+
+
+def run_real_tribe_stream(
+    spec: dict[str, Any],
+    *,
+    model: Any | None = None,
+    working_dir: Path | None = None,
+) -> Generator[dict[str, Any], None, None]:
+    blocks = _run_blocks(spec)
+    job_id = str(spec.get("job_id") or "tribe-real")
+    sample_rate_hz = _sample_rate_hz(spec)
+
+    yield {
+        "type": "warming",
+        "job_id": job_id,
+        "reason": "tribe_model_loading",
+        "estimated_seconds": 120,
+    }
+
+    model = model or load_tribe_model()
+    completed_timesteps = 0
+    total_blocks = len(blocks)
+    vertex_count = 0
+
+    yield {
+        "type": "progress",
+        "job_id": job_id,
+        "completed_blocks": 0,
+        "total_blocks": total_blocks,
+        "completed_timesteps": completed_timesteps,
+    }
+
+    temp_context = None
+    if working_dir is None:
+        temp_context = tempfile.TemporaryDirectory(prefix="cortex-tribe-")
+        working_dir = Path(temp_context.name)
+    else:
+        working_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        for chunk_index, block in enumerate(blocks):
+            block_id = str(block.get("id") or f"block-{chunk_index}")
+            events = _events_dataframe_for_block(model, block, working_dir)
+            predictions, _segments = model.predict(events=events)
+            activations = np.asarray(predictions, dtype="<f4")
+            if activations.ndim != 2:
+                raise ValueError("TRIBE predictions must have shape (n_timesteps, n_vertices)")
+
+            vertex_count = int(activations.shape[1])
+            yield activation_chunk_event(
+                job_id=job_id,
+                block_id=block_id,
+                chunk_index=chunk_index,
+                timestep_start=completed_timesteps,
+                sample_rate_hz=sample_rate_hz,
+                activations=activations,
+            )
+
+            completed_timesteps += int(activations.shape[0])
+            yield {
+                "type": "progress",
+                "job_id": job_id,
+                "completed_blocks": chunk_index + 1,
+                "total_blocks": total_blocks,
+                "completed_timesteps": completed_timesteps,
+            }
+    finally:
+        if temp_context is not None:
+            temp_context.cleanup()
+
+    yield {
+        "type": "complete",
+        "job_id": job_id,
+        "status": "complete",
+        "timesteps": completed_timesteps,
+        "vertex_count": vertex_count,
+    }
+
+
+def run_configured_stream(spec: dict[str, Any]) -> Generator[dict[str, Any], None, None]:
+    mode = os.environ.get("TRIBE_INFERENCE_MODE", "fake").strip().lower()
+    if mode == "fake":
+        yield from run_fake_stream(spec)
+        return
+    if mode == "real":
+        yield from run_real_tribe_stream(spec)
+        return
+    raise ValueError(f"Unsupported TRIBE_INFERENCE_MODE: {mode}")
+
+
 def _json_safe_event(event: dict[str, Any]) -> dict[str, Any]:
     if event.get("type") != "chunk":
         return event
@@ -188,7 +321,7 @@ if modal is not None:
 
     @app.function(image=image, gpu="A10G", timeout=300)
     def run(spec: dict[str, Any]):
-        yield from run_fake_stream(spec)
+        yield from run_configured_stream(spec)
 
 else:
     app = None

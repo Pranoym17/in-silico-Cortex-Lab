@@ -99,6 +99,16 @@ MODAL_FUNCTION_NAME=run
 
 Leave `INFERENCE_PROVIDER=fake` for normal local development unless you are intentionally testing cloud inference.
 
+Real TRIBE v2 mode is also opt-in. The official model card loads the model with `TribeModel.from_pretrained("facebook/tribev2")`, builds events with `model.get_events_dataframe(...)`, and predicts `(n_timesteps, n_vertices)` with `model.predict(events=df)`. Keep this disabled unless you are ready for a planned Modal smoke test:
+
+```env
+TRIBE_INFERENCE_MODE=fake
+TRIBE_CACHE_FOLDER=./cache
+HF_TOKEN=
+```
+
+For real text inference, Hugging Face access to the gated LLaMA 3.2-3B dependency may be required. Do not set `TRIBE_INFERENCE_MODE=real` casually; real mode can trigger model downloads and Modal GPU time.
+
 Smoke-check the brain viewer:
 
 ```bash

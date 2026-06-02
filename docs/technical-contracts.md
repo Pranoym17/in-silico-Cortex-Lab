@@ -295,6 +295,25 @@ MODAL_FUNCTION_NAME=run
 
 The Modal provider consumes deployed generator events and republishes them through the same SSE contract as fake inference. Unsupported Modal event types fail the job with `internal_error`; crashes after a chunk fail with `partial_failure` so the frontend can keep partial frames visible.
 
+Official TRIBE v2 integration constraints:
+
+- Use `from tribev2 import TribeModel`.
+- Load weights with `TribeModel.from_pretrained("facebook/tribev2", cache_folder=...)`.
+- Build inputs with `model.get_events_dataframe(video_path=...)`, `audio_path=...`, or `text_path=...`.
+- Predict with `preds, segments = model.predict(events=df)`.
+- Treat `preds` as `(n_timesteps, n_vertices)` on the fsaverage5 cortical mesh.
+- The model card documents video/audio/text naturalistic stimuli. Still image inference needs a deliberate conversion decision, such as static video generation, before it is considered scientifically acceptable.
+- The text encoder requires access to the gated LLaMA 3.2-3B model, so real text inference may require a Hugging Face read token with the required access.
+- The project license is CC-BY-NC-4.0, so this MVP is non-commercial unless licensing is reviewed separately.
+
+To avoid accidental Modal GPU spend, real TRIBE mode is opt-in:
+
+```env
+TRIBE_INFERENCE_MODE=fake
+```
+
+Only set `TRIBE_INFERENCE_MODE=real` for a planned cloud smoke test.
+
 Pseudocode:
 
 ```python
