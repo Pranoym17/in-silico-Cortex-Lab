@@ -529,7 +529,7 @@ def _print_smoke_events(events: Iterable[dict[str, Any]]) -> None:
 if modal is not None:
     fake_image = modal.Image.debian_slim(python_version="3.11").pip_install("numpy==2.2.1", "msgpack==1.1.0")
     real_image = (
-        fake_image.apt_install("git")
+        fake_image.apt_install("git", "ffmpeg")
         .pip_install(
             "boto3==1.35.90",
             OFFICIAL_TRIBE_SOURCE_URL,
