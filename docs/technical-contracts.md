@@ -320,6 +320,20 @@ Only set `TRIBE_INFERENCE_MODE=real` for a planned cloud smoke test.
 
 `TRIBE_CHUNK_TIMESTEPS` controls how many TRIBE timesteps are packed into each streamed activation chunk. `TRIBE_EXPECTED_VERTEX_COUNT` is optional, but when set it fails inference before streaming scientifically wrong geometry if the model output vertex count does not match the frontend mesh manifest.
 
+Readiness can be checked without loading model weights or running GPU:
+
+```bash
+backend/.venv/Scripts/python inference/tribe_inference.py --check-real-config
+```
+
+When `TRIBE_INFERENCE_MODE=real`, the Modal function must run the same readiness check before loading model weights. If readiness fails, it emits:
+
+```json
+{"type":"error","code":"tribe_not_ready","retryable":false}
+```
+
+This prevents accidental model-load attempts when Hugging Face/model setup is incomplete.
+
 Pseudocode:
 
 ```python

@@ -113,6 +113,14 @@ For real text inference, Hugging Face access to the gated LLaMA 3.2-3B dependenc
 
 Real audio/video inference uses TRIBE's official `audio_path` and `video_path` inputs. If the run spec contains S3 keys, the Modal function downloads those objects only after `TRIBE_INFERENCE_MODE=real` is enabled. Image blocks remain fake-only until we choose a scientifically acceptable conversion path, because the official TRIBE v2 card documents video/audio/text inputs rather than still images.
 
+Check real TRIBE readiness without loading model weights or running GPU:
+
+```bash
+backend/.venv/Scripts/python inference/tribe_inference.py --check-real-config
+```
+
+If real mode is enabled before setup is complete, the Modal function emits a `tribe_not_ready` error event instead of loading weights.
+
 Smoke-check the brain viewer:
 
 ```bash

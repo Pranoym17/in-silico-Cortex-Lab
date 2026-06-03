@@ -200,6 +200,122 @@ def test_real_tribe_stream_validates_expected_vertex_count(monkeypatch):
         next(stream)
 
 
+def test_check_real_tribe_config_reports_missing_tribe(monkeypatch):
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.setenv("TRIBE_CHUNK_TIMESTEPS", "4")
+    monkeypatch.delenv("TRIBE_EXPECTED_VERTEX_COUNT", raising=False)
+
+    result = tribe_inference.check_real_tribe_config({"blocks": []})
+
+    assert result["ready"] is False
+    assert "TRIBE v2 package is not installed" in result["blockers"]
+    assert "HF_TOKEN is not set; official TRIBE text inference may need gated LLaMA access" in result["warnings"]
+    assert result["checks"]["chunk_timesteps_valid"] is True
+
+
+def test_check_real_tribe_config_requires_s3_env_for_s3_media(monkeypatch):
+    monkeypatch.setattr(tribe_inference.importlib.util, "find_spec", lambda name: object() if name == "tribev2" else None)
+    monkeypatch.delenv("S3_BUCKET_NAME", raising=False)
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    spec = {
+        "blocks": [
+            {
+                "id": "audio-s3",
+                "type": "audio",
+                "s3_key": "uploads/audio.wav",
+                "mime_type": "audio/wav",
+            }
+        ]
+    }
+
+    result = tribe_inference.check_real_tribe_config(spec)
+
+    assert result["ready"] is False
+    assert "S3_BUCKET_NAME is required for S3-backed audio/video blocks" in result["blockers"]
+    assert "AWS_REGION is required for S3-backed audio/video blocks" in result["blockers"]
+    assert result["checks"]["requires_s3_materialization"] is True
+
+
+def test_check_real_tribe_config_passes_for_local_media_when_dependencies_are_present(monkeypatch):
+    monkeypatch.setattr(tribe_inference.importlib.util, "find_spec", lambda name: object() if name == "tribev2" else None)
+    monkeypatch.setenv("HF_TOKEN", "hf_test")
+    monkeypatch.setenv("TRIBE_CHUNK_TIMESTEPS", "4")
+    monkeypatch.setenv("TRIBE_EXPECTED_VERTEX_COUNT", "20484")
+    spec = {
+        "blocks": [
+            {
+                "id": "audio-local",
+                "type": "audio",
+                "local_path": "C:/tmp/audio.wav",
+                "mime_type": "audio/wav",
+            }
+        ]
+    }
+
+    result = tribe_inference.check_real_tribe_config(spec)
+
+    assert result["ready"] is True
+    assert result["blockers"] == []
+    assert result["checks"]["expected_vertex_count_valid"] is True
+
+
+def test_configured_stream_real_mode_emits_readiness_error(monkeypatch):
+    monkeypatch.setenv("TRIBE_INFERENCE_MODE", "real")
+    monkeypatch.setattr(
+        tribe_inference,
+        "check_real_tribe_config",
+        lambda spec: {
+            "ready": False,
+            "blockers": ["TRIBE v2 package is not installed"],
+            "warnings": [],
+            "checks": {},
+        },
+    )
+
+    events = list(tribe_inference.run_configured_stream({"job_id": "job-not-ready", "blocks": [{"id": "b1"}]}))
+
+    assert events == [
+        {
+            "type": "error",
+            "job_id": "job-not-ready",
+            "code": "tribe_not_ready",
+            "message": "TRIBE v2 package is not installed",
+            "retryable": False,
+            "readiness": {
+                "ready": False,
+                "blockers": ["TRIBE v2 package is not installed"],
+                "warnings": [],
+                "checks": {},
+            },
+        }
+    ]
+
+
+def test_configured_stream_real_mode_uses_real_stream_when_ready(monkeypatch):
+    monkeypatch.setenv("TRIBE_INFERENCE_MODE", "real")
+    monkeypatch.setattr(
+        tribe_inference,
+        "check_real_tribe_config",
+        lambda spec: {
+            "ready": True,
+            "blockers": [],
+            "warnings": [],
+            "checks": {},
+        },
+    )
+
+    def fake_real_stream(spec):
+        yield {"type": "complete", "job_id": spec["job_id"], "status": "complete", "timesteps": 1, "vertex_count": 2}
+
+    monkeypatch.setattr(tribe_inference, "run_real_tribe_stream", fake_real_stream)
+
+    events = list(tribe_inference.run_configured_stream({"job_id": "job-ready", "blocks": [{"id": "b1"}]}))
+
+    assert events == [
+        {"type": "complete", "job_id": "job-ready", "status": "complete", "timesteps": 1, "vertex_count": 2}
+    ]
+
+
 def test_real_tribe_stream_rejects_unsupported_image_blocks():
     model = FakeTribeModel()
     spec = {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import tempfile
@@ -226,6 +227,58 @@ def load_tribe_model():
     return TribeModel.from_pretrained(TRIBE_MODEL_ID, cache_folder=cache_folder)
 
 
+def check_real_tribe_config(spec: dict[str, Any] | None = None) -> dict[str, Any]:
+    spec = spec or {}
+    blocks = spec.get("blocks") if isinstance(spec.get("blocks"), list) else []
+    media_blocks = [block for block in blocks if isinstance(block, dict) and block.get("type") in {"audio", "video"}]
+    s3_media_blocks = [block for block in media_blocks if block.get("s3_key") and not block.get("local_path")]
+
+    checks = {
+        "tribe_package_available": importlib.util.find_spec("tribev2") is not None,
+        "modal_package_available": modal is not None,
+        "hf_token_present": bool(os.environ.get("HF_TOKEN")),
+        "s3_bucket_present": bool(os.environ.get("S3_BUCKET_NAME")),
+        "aws_region_present": bool(os.environ.get("AWS_REGION")),
+        "chunk_timesteps_valid": True,
+        "expected_vertex_count_valid": True,
+        "requires_s3_materialization": bool(s3_media_blocks),
+    }
+
+    try:
+        _real_chunk_timesteps()
+    except ValueError:
+        checks["chunk_timesteps_valid"] = False
+
+    try:
+        _expected_vertex_count()
+    except ValueError:
+        checks["expected_vertex_count_valid"] = False
+
+    blockers = []
+    warnings = []
+    if not checks["tribe_package_available"]:
+        blockers.append("TRIBE v2 package is not installed")
+    if not checks["chunk_timesteps_valid"]:
+        blockers.append("TRIBE_CHUNK_TIMESTEPS must be a positive integer")
+    if not checks["expected_vertex_count_valid"]:
+        blockers.append("TRIBE_EXPECTED_VERTEX_COUNT must be empty or a positive integer")
+    if checks["requires_s3_materialization"] and not checks["s3_bucket_present"]:
+        blockers.append("S3_BUCKET_NAME is required for S3-backed audio/video blocks")
+    if checks["requires_s3_materialization"] and not checks["aws_region_present"]:
+        blockers.append("AWS_REGION is required for S3-backed audio/video blocks")
+    if not checks["hf_token_present"]:
+        warnings.append("HF_TOKEN is not set; official TRIBE text inference may need gated LLaMA access")
+    if not checks["modal_package_available"]:
+        warnings.append("modal package is not installed in this interpreter; deploy/call Modal from a Modal-enabled venv")
+
+    return {
+        "ready": not blockers,
+        "checks": checks,
+        "blockers": blockers,
+        "warnings": warnings,
+    }
+
+
 def _write_text_block(block: dict[str, Any], working_dir: Path) -> Path:
     text = block.get("text")
     if not isinstance(text, str) or not text.strip():
@@ -398,6 +451,17 @@ def run_configured_stream(spec: dict[str, Any]) -> Generator[dict[str, Any], Non
         yield from run_fake_stream(spec)
         return
     if mode == "real":
+        readiness = check_real_tribe_config(spec)
+        if not readiness["ready"]:
+            yield {
+                "type": "error",
+                "job_id": str(spec.get("job_id") or "tribe-real"),
+                "code": "tribe_not_ready",
+                "message": "; ".join(readiness["blockers"]),
+                "retryable": False,
+                "readiness": readiness,
+            }
+            return
         yield from run_real_tribe_stream(spec)
         return
     raise ValueError(f"Unsupported TRIBE_INFERENCE_MODE: {mode}")
@@ -465,10 +529,18 @@ else:
 def main() -> None:
     parser = argparse.ArgumentParser(description="TRIBE inference Modal scaffold")
     parser.add_argument("--smoke", action="store_true", help="run the local fake stream contract smoke test")
+    parser.add_argument(
+        "--check-real-config",
+        action="store_true",
+        help="check real TRIBE configuration without loading the model or running inference",
+    )
     args = parser.parse_args()
 
     if args.smoke:
         _print_smoke_events(run_fake_stream(_smoke_spec()))
+        return
+    if args.check_real_config:
+        print(json.dumps(check_real_tribe_config(_smoke_spec()), indent=2, sort_keys=True))
         return
 
     parser.print_help()
