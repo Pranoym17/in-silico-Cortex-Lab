@@ -317,6 +317,68 @@ def test_configured_stream_real_mode_uses_real_stream_when_ready(monkeypatch):
     ]
 
 
+def test_configured_stream_real_mode_maps_gated_hf_errors(monkeypatch):
+    monkeypatch.setenv("TRIBE_INFERENCE_MODE", "real")
+    monkeypatch.setattr(
+        tribe_inference,
+        "check_real_tribe_config",
+        lambda spec: {
+            "ready": True,
+            "blockers": [],
+            "warnings": [],
+            "checks": {},
+        },
+    )
+
+    def fake_real_stream(spec):
+        yield {"type": "warming", "job_id": spec["job_id"], "reason": "tribe_model_loading", "estimated_seconds": 120}
+        raise OSError(
+            "You are trying to access a gated repo. Cannot access gated repo for url "
+            "https://huggingface.co/meta-llama/Llama-3.2-3B/resolve/main/config.json. "
+            "Access to model meta-llama/Llama-3.2-3B is restricted and you are not in the authorized list."
+        )
+
+    monkeypatch.setattr(tribe_inference, "run_real_tribe_stream", fake_real_stream)
+
+    events = list(tribe_inference.run_configured_stream({"job_id": "job-gated", "blocks": [{"id": "b1"}]}))
+
+    assert events == [
+        {"type": "warming", "job_id": "job-gated", "reason": "tribe_model_loading", "estimated_seconds": 120},
+        {
+            "type": "error",
+            "code": "model_access_required",
+            "message": (
+                "Model access is required for meta-llama/Llama-3.2-3B. Request/accept access on Hugging Face, "
+                "then retry this run."
+            ),
+            "retryable": False,
+            "details": {
+                "provider": "huggingface",
+                "repo_id": "meta-llama/Llama-3.2-3B",
+                "error_type": "OSError",
+            },
+            "job_id": "job-gated",
+        },
+    ]
+
+
+def test_classify_real_tribe_error_maps_generic_hf_403():
+    result = tribe_inference.classify_real_tribe_error(
+        RuntimeError("403 Client Error from https://huggingface.co/facebook/tribev2")
+    )
+
+    assert result == {
+        "type": "error",
+        "code": "tribe_access_denied",
+        "message": "Hugging Face denied access to a model required by TRIBE v2.",
+        "retryable": False,
+        "details": {
+            "provider": "huggingface",
+            "error_type": "RuntimeError",
+        },
+    }
+
+
 def test_real_tribe_stream_rejects_unsupported_image_blocks():
     model = FakeTribeModel()
     spec = {

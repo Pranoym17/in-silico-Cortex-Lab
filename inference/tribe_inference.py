@@ -294,6 +294,44 @@ def check_real_tribe_config(spec: dict[str, Any] | None = None) -> dict[str, Any
     }
 
 
+def classify_real_tribe_error(exc: BaseException) -> dict[str, Any] | None:
+    message = str(exc)
+    lowered_message = message.lower()
+    if "gated repo" in lowered_message or "restricted and you are not in the authorized list" in lowered_message:
+        repo_id = "unknown"
+        for candidate in ("meta-llama/Llama-3.2-3B", "facebook/tribev2"):
+            if candidate.lower() in lowered_message:
+                repo_id = candidate
+                break
+
+        return {
+            "type": "error",
+            "code": "model_access_required",
+            "message": (
+                f"Model access is required for {repo_id}. Request/accept access on Hugging Face, "
+                "then retry this run."
+            ),
+            "retryable": False,
+            "details": {
+                "provider": "huggingface",
+                "repo_id": repo_id,
+                "error_type": type(exc).__name__,
+            },
+        }
+    if "403 client error" in lowered_message and "huggingface.co" in lowered_message:
+        return {
+            "type": "error",
+            "code": "tribe_access_denied",
+            "message": "Hugging Face denied access to a model required by TRIBE v2.",
+            "retryable": False,
+            "details": {
+                "provider": "huggingface",
+                "error_type": type(exc).__name__,
+            },
+        }
+    return None
+
+
 def _write_text_block(block: dict[str, Any], working_dir: Path) -> Path:
     text = block.get("text")
     if not isinstance(text, str) or not text.strip():
@@ -477,7 +515,14 @@ def run_configured_stream(spec: dict[str, Any]) -> Generator[dict[str, Any], Non
                 "readiness": readiness,
             }
             return
-        yield from run_real_tribe_stream(spec)
+        try:
+            yield from run_real_tribe_stream(spec)
+        except Exception as exc:
+            classified_error = classify_real_tribe_error(exc)
+            if classified_error is None:
+                raise
+            classified_error["job_id"] = str(spec.get("job_id") or "tribe-real")
+            yield classified_error
         return
     raise ValueError(f"Unsupported TRIBE_INFERENCE_MODE: {mode}")
 

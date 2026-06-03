@@ -148,6 +148,8 @@ Failure classes:
 - `upload_failed`: S3 upload failed before inference starts. UI returns user to builder and marks the affected block.
 - `validation_failed`: backend rejected the run spec. UI opens builder with validation messages.
 - `modal_oom`: TRIBE v2 OOM, usually large audio or too many generated timesteps. UI suggests shortening/compressing the stimulus.
+- `model_access_required`: Hugging Face access to a gated dependency such as `meta-llama/Llama-3.2-3B` has not been approved for the configured token. UI tells the user to request/accept model access and retry.
+- `tribe_access_denied`: Hugging Face denied access to TRIBE v2 or one of its dependencies. UI shows the required provider/model access step instead of a raw stack trace.
 - `timeout`: job exceeded `5 min` wall-clock runtime for MVP. UI offers retry.
 - `partial_failure`: at least one chunk was streamed before crash. UI keeps partial frames visible and labels result incomplete.
 - `cache_corrupt`: Redis cache payload failed checksum/decode. Backend deletes the bad key and recomputes once.

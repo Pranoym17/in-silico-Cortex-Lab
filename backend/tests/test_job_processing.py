@@ -324,6 +324,49 @@ async def test_process_modal_inference_job_marks_partial_failure(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_process_modal_inference_job_preserves_model_access_errors(monkeypatch):
+    job = make_job()
+    session = FakeSession(job)
+    broker = FakeBroker()
+
+    async def fake_stream_deployed_modal_events(**kwargs):
+        yield {
+            "type": "error",
+            "job_id": str(job.id),
+            "code": "model_access_required",
+            "message": "Model access is required for meta-llama/Llama-3.2-3B.",
+            "retryable": False,
+            "details": {
+                "provider": "huggingface",
+                "repo_id": "meta-llama/Llama-3.2-3B",
+            },
+        }
+
+    monkeypatch.setattr("app.services.job_processing.stream_deployed_modal_events", fake_stream_deployed_modal_events)
+
+    processed = await process_modal_inference_job(
+        session,
+        job.id,
+        broker,
+        app_name="cortex-lab-tribe-inference",
+        function_name="run_real",
+    )
+
+    assert processed is job
+    assert job.status == JobStatus.failed
+    assert job.error_code == "model_access_required"
+    assert job.error_message == "Model access is required for meta-llama/Llama-3.2-3B."
+    assert [event for _, event, _ in broker.events] == ["queued", "error"]
+    assert broker.events[-1][2] == {
+        "job_id": str(job.id),
+        "code": "model_access_required",
+        "message": "Model access is required for meta-llama/Llama-3.2-3B.",
+        "retryable": False,
+        "last_timestep": None,
+    }
+
+
+@pytest.mark.asyncio
 async def test_run_inference_rejects_invalid_job_id():
     with pytest.raises(JobProcessingError) as exc:
         await _run_inference("not-a-uuid")
