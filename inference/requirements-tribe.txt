@@ -1,5 +1,11 @@
-# TRIBE v2 is installed from the official Hugging Face repository.
-# Clone https://huggingface.co/facebook/tribev2, then run:
-# python -m pip install -e path\to\tribev2
+# TRIBE v2 weights live at https://huggingface.co/facebook/tribev2.
+# The installable official source lives at https://github.com/facebookresearch/tribev2.
+# Local validation flow:
+# git clone https://github.com/facebookresearch/tribev2 ..\tribe-v2-source
+# cd ..\tribe-v2-source
+# python -m venv .venv
+# .\.venv\Scripts\python.exe -m pip install -e .
+# .\.venv\Scripts\python.exe -m pip install "exca==0.5.20"
+# .\.venv\Scripts\python.exe -c "from tribev2 import TribeModel; print('tribev2 import ok')"
 -r requirements.txt
 huggingface-hub==1.2.2

@@ -280,6 +280,22 @@ modal token new
 modal deploy inference/tribe_inference.py
 ```
 
+The deployed Modal app exposes two inference entrypoints. `run` stays lightweight and fake. `run_real` uses the real TRIBE image and should only be selected for planned cloud tests:
+
+```env
+MODAL_FUNCTION_NAME=run
+MODAL_HF_SECRET_NAME=huggingface-secret
+```
+
+The real TRIBE image is built on deploy, but it does not run inference until the backend calls `run_real`:
+
+```powershell
+.\inference\.venv\Scripts\modal.exe secret create huggingface-secret HF_TOKEN=hf_your_new_read_token
+.\inference\.venv\Scripts\modal.exe deploy inference\tribe_inference.py
+```
+
+Do not place `HF_TOKEN` in committed files. Modal receives it through `MODAL_HF_SECRET_NAME`.
+
 The backend defaults to local fake inference. To call a deployed Modal function from the backend, install the optional backend Modal client and switch the provider:
 
 ```bash
@@ -302,6 +318,8 @@ Official TRIBE v2 integration constraints:
 - Build inputs with `model.get_events_dataframe(video_path=...)`, `audio_path=...`, or `text_path=...`.
 - Predict with `preds, segments = model.predict(events=df)`.
 - Treat `preds` as `(n_timesteps, n_vertices)` on the fsaverage5 cortical mesh.
+- Install the Python package from the official source repository `https://github.com/facebookresearch/tribev2`; `https://huggingface.co/facebook/tribev2` is the model/weights repository.
+- Pin `exca==0.5.20` until the upstream `neuralset==0.0.2` compatibility issue with newer `exca` releases is resolved.
 - Real text blocks are materialized as temporary `.txt` files and passed through `text_path`.
 - Real audio/video blocks are passed through `audio_path`/`video_path`. If a local path is not provided, the Modal function materializes the S3 object into a temporary file first.
 - The model card documents video/audio/text naturalistic stimuli. Still image inference needs a deliberate conversion decision, such as static video generation, before it is considered scientifically acceptable.

@@ -84,6 +84,13 @@ modal token new
 modal deploy inference/tribe_inference.py
 ```
 
+The deployed Modal app exposes two inference entrypoints. `run` stays lightweight and fake. `run_real` uses the real TRIBE image and should only be selected for planned cloud tests:
+
+```env
+MODAL_FUNCTION_NAME=run
+MODAL_HF_SECRET_NAME=huggingface-secret
+```
+
 To let the local backend call the deployed Modal function, install the optional Modal client dependency in the backend venv and switch providers:
 
 ```bash
@@ -109,7 +116,32 @@ TRIBE_EXPECTED_VERTEX_COUNT=
 HF_TOKEN=
 ```
 
-For real text inference, Hugging Face access to the gated LLaMA 3.2-3B dependency may be required. Do not set `TRIBE_INFERENCE_MODE=real` casually; real mode can trigger model downloads and Modal GPU time.
+For real text inference, Hugging Face access to the gated LLaMA 3.2-3B dependency may be required. Do not set `TRIBE_INFERENCE_MODE=real` casually; real mode can trigger model downloads and Modal GPU time. The installable official source repository is `https://github.com/facebookresearch/tribev2`; the Hugging Face `facebook/tribev2` repository is the model/weights repository, not the editable Python package source.
+
+Local TRIBE source validation can live outside this repository:
+
+```bash
+cd "C:\Users\Pranoy\Cortex Lab"
+git clone https://github.com/facebookresearch/tribev2 tribe-v2-source
+cd tribe-v2-source
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m pip install "exca==0.5.20"
+.\.venv\Scripts\python.exe -c "from tribev2 import TribeModel; print('tribev2 import ok')"
+```
+
+Before deploying the real Modal image, put your Hugging Face read token in a Modal secret instead of `.env`:
+
+```bash
+.\inference\.venv\Scripts\modal.exe secret create huggingface-secret HF_TOKEN=hf_your_new_read_token
+```
+
+Then deploy the app. This creates both `run` and `run_real`, but it does not run real inference:
+
+```bash
+.\inference\.venv\Scripts\modal.exe deploy inference\tribe_inference.py
+```
 
 Real audio/video inference uses TRIBE's official `audio_path` and `video_path` inputs. If the run spec contains S3 keys, the Modal function downloads those objects only after `TRIBE_INFERENCE_MODE=real` is enabled. Image blocks remain fake-only until we choose a scientifically acceptable conversion path, because the official TRIBE v2 card documents video/audio/text inputs rather than still images.
 

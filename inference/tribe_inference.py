@@ -21,6 +21,8 @@ except ImportError:  # Modal is optional for local contract tests.
 APP_NAME = "cortex-lab-tribe-inference"
 FUNCTION_NAME = "run"
 TRIBE_MODEL_ID = "facebook/tribev2"
+OFFICIAL_TRIBE_SOURCE_URL = "git+https://github.com/facebookresearch/tribev2.git"
+COMPATIBLE_EXCA_VERSION = "0.5.20"
 FAKE_VERTEX_COUNT = 16
 FAKE_TIMESTEPS_PER_BLOCK = 1
 DEFAULT_SAMPLE_RATE_HZ = 2
@@ -76,6 +78,19 @@ def _expected_vertex_count() -> int | None:
     if vertex_count <= 0:
         raise ValueError("TRIBE_EXPECTED_VERTEX_COUNT must be positive")
     return vertex_count
+
+
+def _modal_secret_name() -> str:
+    return os.environ.get("MODAL_HF_SECRET_NAME", "huggingface-secret").strip() or "huggingface-secret"
+
+
+def _real_tribe_env() -> dict[str, str]:
+    return {
+        "TRIBE_INFERENCE_MODE": "real",
+        "TRIBE_CACHE_FOLDER": "/cache",
+        "TRIBE_CHUNK_TIMESTEPS": os.environ.get("TRIBE_CHUNK_TIMESTEPS", str(DEFAULT_REAL_CHUNK_TIMESTEPS)),
+        "TRIBE_EXPECTED_VERTEX_COUNT": os.environ.get("TRIBE_EXPECTED_VERTEX_COUNT", ""),
+    }
 
 
 def build_fake_activation_matrix(
@@ -428,7 +443,7 @@ def run_real_tribe_stream(
             yield {
                 "type": "progress",
                 "job_id": job_id,
-                "completed_blocks": chunk_index + 1,
+                "completed_blocks": block_index + 1,
                 "total_blocks": total_blocks,
                 "completed_timesteps": completed_timesteps,
             }
@@ -512,15 +527,55 @@ def _print_smoke_events(events: Iterable[dict[str, Any]]) -> None:
 
 
 if modal is not None:
-    image = modal.Image.debian_slim(python_version="3.11").pip_install(
-        "numpy==2.2.1",
-        "msgpack==1.1.0",
+    fake_image = modal.Image.debian_slim(python_version="3.11").pip_install("numpy==2.2.1", "msgpack==1.1.0")
+    real_image = (
+        fake_image.apt_install("git")
+        .pip_install(
+            "boto3==1.35.90",
+            OFFICIAL_TRIBE_SOURCE_URL,
+        )
+        .pip_install(f"exca=={COMPATIBLE_EXCA_VERSION}")
+        .env(_real_tribe_env())
     )
+    real_secrets = [modal.Secret.from_name(_modal_secret_name())]
+
     app = modal.App(APP_NAME)
 
-    @app.function(image=image, gpu="A10G", timeout=300)
+    @app.function(image=fake_image, gpu="A10G", timeout=300)
     def run(spec: dict[str, Any]):
+        os.environ["TRIBE_INFERENCE_MODE"] = "fake"
         yield from run_configured_stream(spec)
+
+    @app.function(image=real_image, secrets=real_secrets, gpu="A10G", timeout=300)
+    def run_real(spec: dict[str, Any]):
+        yield from run_configured_stream(spec)
+
+    @app.function(image=real_image, secrets=real_secrets, timeout=60)
+    def check_real_runtime() -> dict[str, Any]:
+        readiness = check_real_tribe_config({"blocks": []})
+        result: dict[str, Any] = {
+            "image_profile": "real",
+            "readiness": readiness,
+            "tribe_import_ok": False,
+            "model_id": TRIBE_MODEL_ID,
+            "model_loaded": False,
+        }
+        try:
+            from tribev2 import TribeModel
+
+            result["tribe_import_ok"] = True
+            result["tribe_model_class"] = TribeModel.__name__
+        except Exception as exc:  # pragma: no cover - only exercised inside Modal.
+            result["tribe_import_error"] = f"{type(exc).__name__}: {exc}"
+
+        try:
+            import exca
+
+            result["exca_version"] = getattr(exca, "__version__", "unknown")
+        except Exception as exc:  # pragma: no cover - only exercised inside Modal.
+            result["exca_import_error"] = f"{type(exc).__name__}: {exc}"
+
+        return result
 
 else:
     app = None

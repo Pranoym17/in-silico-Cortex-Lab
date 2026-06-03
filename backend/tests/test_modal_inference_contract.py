@@ -173,6 +173,7 @@ def test_real_tribe_stream_chunks_prediction_timesteps(monkeypatch):
     assert [chunk["chunk_index"] for chunk in chunks] == [0, 1, 2]
     assert [chunk["timestep_start"] for chunk in chunks] == [0, 2, 4]
     assert [chunk["shape"] for chunk in chunks] == [[2, 3], [2, 3], [1, 3]]
+    assert [event["completed_blocks"] for event in events if event["type"] == "progress"] == [0, 1]
     assert events[-1]["timesteps"] == 5
     assert events[-1]["vertex_count"] == 3
 
