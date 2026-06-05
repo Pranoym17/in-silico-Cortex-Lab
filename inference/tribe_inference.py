@@ -23,6 +23,7 @@ FUNCTION_NAME = "run"
 TRIBE_MODEL_ID = "facebook/tribev2"
 OFFICIAL_TRIBE_SOURCE_URL = "git+https://github.com/facebookresearch/tribev2.git"
 COMPATIBLE_EXCA_VERSION = "0.5.20"
+COMPATIBLE_TRANSFORMERS_VERSION = "4.48.3"
 FAKE_VERTEX_COUNT = 16
 FAKE_TIMESTEPS_PER_BLOCK = 1
 DEFAULT_SAMPLE_RATE_HZ = 2
@@ -580,6 +581,7 @@ if modal is not None:
             OFFICIAL_TRIBE_SOURCE_URL,
         )
         .pip_install(f"exca=={COMPATIBLE_EXCA_VERSION}")
+        .pip_install(f"transformers=={COMPATIBLE_TRANSFORMERS_VERSION}")
         .env(_real_tribe_env())
     )
     real_secrets = [modal.Secret.from_name(_modal_secret_name())]

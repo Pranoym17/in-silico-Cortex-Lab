@@ -16,10 +16,39 @@ from app.services.sse_broker import JobEventBroker, get_job_event_broker
 TERMINAL_STATUSES = {JobStatus.complete, JobStatus.failed, JobStatus.cancelled}
 FAKE_VERTEX_COUNT = 16
 FAKE_TIMESTEPS_PER_BLOCK = 1
+MAX_USER_ERROR_MESSAGE_LENGTH = 600
 
 
 class JobProcessingError(RuntimeError):
     pass
+
+
+def user_facing_inference_failure(exc: Exception, *, chunk_seen: bool) -> str:
+    if chunk_seen:
+        return "Inference failed after streaming partial results."
+
+    message = str(exc).strip()
+    if not message:
+        return "Inference failed."
+
+    if message.startswith("Modal inference call failed: "):
+        message = message.removeprefix("Modal inference call failed: ").strip()
+
+    if "Modal provider selected, but the modal package is not installed" in message:
+        return message
+
+    if "Function not found" in message or "App not found" in message:
+        return f"Modal inference endpoint was not found. Check MODAL_APP_NAME and MODAL_FUNCTION_NAME. Details: {message}"
+
+    if "TRIBE predicted" in message and "TRIBE_EXPECTED_VERTEX_COUNT" in message:
+        return message
+
+    if "model_access_required" in message or "tribe_access_denied" in message:
+        return message
+
+    if len(message) > MAX_USER_ERROR_MESSAGE_LENGTH:
+        message = f"{message[:MAX_USER_ERROR_MESSAGE_LENGTH].rstrip()}..."
+    return message
 
 
 async def get_job_for_processing(session: AsyncSession, job_id: UUID) -> Job:
@@ -313,13 +342,14 @@ async def process_modal_inference_job(
         code = "partial_failure" if chunk_seen else "internal_error"
         message = str(exc)
         failed_job = await mark_job_failed(session, job, error_code=code, error_message=message)
+        user_message = user_facing_inference_failure(exc, chunk_seen=chunk_seen)
         await broker.publish(
             job.id,
             "error",
             ErrorEvent(
                 job_id=str(job.id),
                 code=code,
-                message="Inference failed after streaming partial results." if chunk_seen else "Inference failed.",
+                message=user_message,
                 retryable=True,
                 last_timestep=completed_timesteps - 1 if completed_timesteps > 0 else None,
             ).model_dump(mode="json"),

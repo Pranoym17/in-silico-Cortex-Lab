@@ -2,7 +2,7 @@
 
 import { OrbitControls, useGLTF } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import { Suspense, useEffect, useMemo } from "react";
+import { Component, ReactNode, Suspense, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import { BrainMeshManifest, HemisphereKey } from "@/lib/brainAssets";
 import { ActivationDomain, buildHemisphereVertexColors } from "@/lib/brainActivation";
@@ -40,34 +40,71 @@ export function BrainScene({
     () => buildHemisphereVertexColors(chunk, manifest, "right", frameIndex, colorDomain),
     [chunk, colorDomain, frameIndex, manifest]
   );
+  const [webglAvailable, setWebglAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setWebglAvailable(canCreateWebGLContext());
+  }, []);
+
+  if (webglAvailable === false) {
+    return <BrainSceneFallback reason="WebGL is unavailable in this browser session." />;
+  }
 
   return (
     <div className="brain-scene" aria-label="3D brain activation viewer">
-      <Suspense fallback={<div className="brain-loading">Loading brain mesh</div>}>
-        <Canvas camera={{ position: [0, 0.5, 5.25], fov: 42 }}>
-          <color attach="background" args={["#101114"]} />
-          <ambientLight intensity={0.85} />
-          <directionalLight position={[2, 4, 5]} intensity={1.4} />
-          <directionalLight position={[-4, -2, 3]} intensity={0.45} />
-          {showLeft ? (
-            <HemisphereMesh
-              colors={leftColors}
-              hemisphere="left"
-              path={manifest.hemispheres.left.file}
-              position={showRight ? [-0.72, 0, 0] : [0, 0, 0]}
-            />
-          ) : null}
-          {showRight ? (
-            <HemisphereMesh
-              colors={rightColors}
-              hemisphere="right"
-              path={manifest.hemispheres.right.file}
-              position={showLeft ? [0.72, 0, 0] : [0, 0, 0]}
-            />
-          ) : null}
-          <OrbitControls enableDamping makeDefault maxDistance={8} minDistance={2.1} />
-        </Canvas>
-      </Suspense>
+      <WebGLErrorBoundary>
+        <Suspense fallback={<div className="brain-loading">Loading brain mesh</div>}>
+          <Canvas camera={{ position: [0, 0.5, 5.25], fov: 42 }}>
+            <color attach="background" args={["#101114"]} />
+            <ambientLight intensity={0.85} />
+            <directionalLight position={[2, 4, 5]} intensity={1.4} />
+            <directionalLight position={[-4, -2, 3]} intensity={0.45} />
+            {showLeft ? (
+              <HemisphereMesh
+                colors={leftColors}
+                hemisphere="left"
+                path={manifest.hemispheres.left.file}
+                position={showRight ? [-0.72, 0, 0] : [0, 0, 0]}
+              />
+            ) : null}
+            {showRight ? (
+              <HemisphereMesh
+                colors={rightColors}
+                hemisphere="right"
+                path={manifest.hemispheres.right.file}
+                position={showLeft ? [0.72, 0, 0] : [0, 0, 0]}
+              />
+            ) : null}
+            <OrbitControls enableDamping makeDefault maxDistance={8} minDistance={2.1} />
+          </Canvas>
+        </Suspense>
+      </WebGLErrorBoundary>
+    </div>
+  );
+}
+
+class WebGLErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error): { error: Error } {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return <BrainSceneFallback reason={this.state.error.message} />;
+    }
+
+    return this.props.children;
+  }
+}
+
+function BrainSceneFallback({ reason }: { reason: string }) {
+  return (
+    <div className="brain-webgl-fallback" role="status">
+      <strong>3D viewer unavailable</strong>
+      <p>{reason}</p>
+      <p>Streaming diagnostics remain available in the sidebar.</p>
     </div>
   );
 }
@@ -119,4 +156,18 @@ function findFirstMesh(object: THREE.Object3D): THREE.Mesh<THREE.BufferGeometry>
   });
 
   return mesh;
+}
+
+function canCreateWebGLContext() {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("webgl2") ?? canvas.getContext("webgl") ?? canvas.getContext("experimental-webgl");
+  if (context && "getExtension" in context) {
+    const loseContext = context.getExtension("WEBGL_lose_context");
+    loseContext?.loseContext();
+  }
+  return Boolean(context);
 }

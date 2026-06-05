@@ -9,6 +9,7 @@ import pytest
 from app.models.job import JobStatus
 from app.services.job_processing import FAKE_VERTEX_COUNT
 from app.services.job_processing import JobProcessingError, process_fake_inference_job, process_modal_inference_job
+from app.services.job_processing import user_facing_inference_failure
 from app.services.sse_broker import JobEventBroker
 from app.tasks.inference_task import _run_inference
 
@@ -321,6 +322,53 @@ async def test_process_modal_inference_job_marks_partial_failure(monkeypatch):
         "retryable": True,
         "last_timestep": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_process_modal_inference_job_publishes_sanitized_internal_error(monkeypatch):
+    job = make_job()
+    session = FakeSession(job)
+    broker = FakeBroker()
+
+    async def fake_stream_deployed_modal_events(**kwargs):
+        if False:
+            yield
+        raise RuntimeError("Modal inference call failed: Function not found: cortex-lab-tribe-inference.run_real")
+
+    monkeypatch.setattr("app.services.job_processing.stream_deployed_modal_events", fake_stream_deployed_modal_events)
+
+    processed = await process_modal_inference_job(
+        session,
+        job.id,
+        broker,
+        app_name="cortex-lab-tribe-inference",
+        function_name="run_real",
+    )
+
+    assert processed is job
+    assert job.status == JobStatus.failed
+    assert job.error_code == "internal_error"
+    assert "Function not found" in job.error_message
+    assert [event for _, event, _ in broker.events] == ["queued", "error"]
+    assert broker.events[-1][2] == {
+        "job_id": str(job.id),
+        "code": "internal_error",
+        "message": (
+            "Modal inference endpoint was not found. Check MODAL_APP_NAME and MODAL_FUNCTION_NAME. "
+            "Details: Function not found: cortex-lab-tribe-inference.run_real"
+        ),
+        "retryable": True,
+        "last_timestep": None,
+    }
+
+
+def test_user_facing_inference_failure_preserves_modal_install_guidance():
+    message = user_facing_inference_failure(
+        RuntimeError("Modal provider selected, but the modal package is not installed in the backend environment."),
+        chunk_seen=False,
+    )
+
+    assert message == "Modal provider selected, but the modal package is not installed in the backend environment."
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,5 @@
 import base64
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -56,11 +57,29 @@ async def stream_deployed_modal_events(
 
     try:
         function = modal.Function.from_name(app_name, function_name, environment_name=environment_name)
-        async for event in function.remote_gen(spec):
-            if not isinstance(event, dict):
-                raise ModalInferenceError(f"Modal yielded unsupported event type: {type(event).__name__}")
-            yield event
+        remote_gen_aio = getattr(function.remote_gen, "aio", None)
+        if callable(remote_gen_aio):
+            stream = remote_gen_aio(spec)
+            async for event in stream:
+                yield validate_modal_event(event)
+            return
+
+        stream = function.remote_gen(spec)
+        if hasattr(stream, "__aiter__"):
+            async for event in stream:
+                yield validate_modal_event(event)
+            return
+
+        events = await asyncio.to_thread(list, stream)
+        for event in events:
+            yield validate_modal_event(event)
     except ModalInferenceError:
         raise
     except Exception as exc:
         raise ModalInferenceError(f"Modal inference call failed: {exc}") from exc
+
+
+def validate_modal_event(event: Any) -> dict[str, Any]:
+    if not isinstance(event, dict):
+        raise ModalInferenceError(f"Modal yielded unsupported event type: {type(event).__name__}")
+    return event

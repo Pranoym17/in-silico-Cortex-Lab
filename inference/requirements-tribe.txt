@@ -6,6 +6,7 @@
 # python -m venv .venv
 # .\.venv\Scripts\python.exe -m pip install -e .
 # .\.venv\Scripts\python.exe -m pip install "exca==0.5.20"
+# .\.venv\Scripts\python.exe -m pip install "transformers==4.48.3"
 # .\.venv\Scripts\python.exe -c "from tribev2 import TribeModel; print('tribev2 import ok')"
 -r requirements.txt
 huggingface-hub==1.2.2

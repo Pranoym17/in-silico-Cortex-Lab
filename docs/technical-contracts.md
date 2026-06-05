@@ -322,6 +322,7 @@ Official TRIBE v2 integration constraints:
 - Treat `preds` as `(n_timesteps, n_vertices)` on the fsaverage5 cortical mesh.
 - Install the Python package from the official source repository `https://github.com/facebookresearch/tribev2`; `https://huggingface.co/facebook/tribev2` is the model/weights repository.
 - Pin `exca==0.5.20` until the upstream `neuralset==0.0.2` compatibility issue with newer `exca` releases is resolved.
+- Pin `transformers==4.48.3` for the current Modal image because newer Transformers releases can require Torch float8 attributes that are not present in TRIBE's `torch<2.7` dependency range.
 - Real text blocks are materialized as temporary `.txt` files and passed through `text_path`.
 - Real audio/video blocks are passed through `audio_path`/`video_path`. If a local path is not provided, the Modal function materializes the S3 object into a temporary file first.
 - The model card documents video/audio/text naturalistic stimuli. Still image inference needs a deliberate conversion decision, such as static video generation, before it is considered scientifically acceptable.

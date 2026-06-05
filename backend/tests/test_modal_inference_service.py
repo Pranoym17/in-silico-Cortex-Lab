@@ -1,9 +1,11 @@
 import base64
+import sys
+from types import SimpleNamespace
 
 import msgpack
 import pytest
 
-from app.services.modal_inference import ModalInferenceError, encode_modal_chunk_event
+from app.services.modal_inference import ModalInferenceError, encode_modal_chunk_event, stream_deployed_modal_events
 
 
 def valid_chunk_event():
@@ -49,3 +51,78 @@ def test_encode_modal_chunk_event_rejects_non_binary_activations():
 
     with pytest.raises(ModalInferenceError, match="raw bytes"):
         encode_modal_chunk_event(event)
+
+
+@pytest.mark.asyncio
+async def test_stream_deployed_modal_events_prefers_modal_async_generator(monkeypatch):
+    class FakeRemoteGen:
+        def __call__(self, spec):
+            raise AssertionError("sync remote_gen should not be used when aio is available")
+
+        async def aio(self, spec):
+            yield {"type": "warming", "job_id": spec["job_id"]}
+
+    class FakeFunction:
+        remote_gen = FakeRemoteGen()
+
+    fake_modal = SimpleNamespace(
+        Function=SimpleNamespace(from_name=lambda *args, **kwargs: FakeFunction()),
+    )
+    monkeypatch.setitem(sys.modules, "modal", fake_modal)
+
+    events = [
+        event
+        async for event in stream_deployed_modal_events(
+            app_name="app",
+            function_name="run_real",
+            spec={"job_id": "job-1"},
+        )
+    ]
+
+    assert events == [{"type": "warming", "job_id": "job-1"}]
+
+
+@pytest.mark.asyncio
+async def test_stream_deployed_modal_events_accepts_sync_remote_generator_fallback(monkeypatch):
+    class FakeFunction:
+        def remote_gen(self, spec):
+            yield {"type": "warming", "job_id": spec["job_id"]}
+
+    fake_modal = SimpleNamespace(
+        Function=SimpleNamespace(from_name=lambda *args, **kwargs: FakeFunction()),
+    )
+    monkeypatch.setitem(sys.modules, "modal", fake_modal)
+
+    events = [
+        event
+        async for event in stream_deployed_modal_events(
+            app_name="app",
+            function_name="run_real",
+            spec={"job_id": "job-1"},
+        )
+    ]
+
+    assert events == [{"type": "warming", "job_id": "job-1"}]
+
+
+@pytest.mark.asyncio
+async def test_stream_deployed_modal_events_accepts_async_remote_generator(monkeypatch):
+    class FakeFunction:
+        async def remote_gen(self, spec):
+            yield {"type": "warming", "job_id": spec["job_id"]}
+
+    fake_modal = SimpleNamespace(
+        Function=SimpleNamespace(from_name=lambda *args, **kwargs: FakeFunction()),
+    )
+    monkeypatch.setitem(sys.modules, "modal", fake_modal)
+
+    events = [
+        event
+        async for event in stream_deployed_modal_events(
+            app_name="app",
+            function_name="run_real",
+            spec={"job_id": "job-1"},
+        )
+    ]
+
+    assert events == [{"type": "warming", "job_id": "job-1"}]

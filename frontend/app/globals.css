@@ -623,6 +623,25 @@ button:disabled {
   color: var(--muted);
 }
 
+.brain-webgl-fallback {
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  min-height: inherit;
+  padding: 24px;
+  text-align: center;
+}
+
+.brain-webgl-fallback strong {
+  font-size: 18px;
+}
+
+.brain-webgl-fallback p {
+  max-width: 460px;
+  margin: 0 auto;
+  color: var(--muted);
+}
+
 .viewer-sidebar {
   align-self: start;
 }
