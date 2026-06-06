@@ -21,4 +21,4 @@ class User(TimestampMixin, Base):
 
     experiments = relationship("Experiment", back_populates="owner", cascade="all, delete-orphan")
     jobs = relationship("Job", back_populates="owner", cascade="all, delete-orphan")
-
+    results = relationship("Result", back_populates="owner", cascade="all, delete-orphan")

@@ -8,7 +8,9 @@ from app.api.dependencies import require_user
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.job import JobResponse
+from app.schemas.result import ResultResponse
 from app.services.jobs import get_owned_job
+from app.services.results import get_result_for_owned_job
 from app.services.sse_broker import JobEventBroker, get_job_event_broker
 from app.services.sse import encode_sse
 
@@ -22,6 +24,15 @@ async def get_job_route(
     session: AsyncSession = Depends(get_db),
 ):
     return await get_owned_job(session, user, job_id)
+
+
+@router.get("/{job_id}/result", response_model=ResultResponse)
+async def get_job_result_route(
+    job_id: UUID,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+):
+    return await get_result_for_owned_job(session, user, job_id)
 
 
 @router.get("/{job_id}/stream")

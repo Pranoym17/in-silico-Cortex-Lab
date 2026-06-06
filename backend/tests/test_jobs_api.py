@@ -60,6 +60,30 @@ def make_job(owner_id, experiment_id=None, **overrides):
     return SimpleNamespace(**data)
 
 
+def make_result(owner_id, job_id=None, experiment_id=None, **overrides):
+    now = datetime.now(UTC)
+    data = {
+        "id": uuid4(),
+        "job_id": job_id or uuid4(),
+        "experiment_id": experiment_id or uuid4(),
+        "owner_id": owner_id,
+        "s3_key": "results/job-1/activations.npz",
+        "format": "npz",
+        "dtype": "float32",
+        "shape": [4, 20484],
+        "vertex_count": 20484,
+        "timestep_count": 4,
+        "sample_rate_hz": 2.0,
+        "model_name": "tribev2",
+        "model_version": "v2",
+        "metadata_json": {"surface": "fsaverage5"},
+        "created_at": now,
+        "updated_at": now,
+    }
+    data.update(overrides)
+    return SimpleNamespace(**data)
+
+
 @pytest.fixture
 def auth_user(monkeypatch):
     user = make_user()
@@ -101,6 +125,45 @@ async def test_get_job(auth_user, monkeypatch):
     assert response.json()["id"] == str(job.id)
     assert response.json()["status"] == "queued"
     assert response.json()["run_spec"] == job.run_spec
+
+
+@pytest.mark.asyncio
+async def test_get_job_result(auth_user, monkeypatch):
+    job_id = uuid4()
+    result = make_result(auth_user.id, job_id=job_id)
+
+    async def fake_get_result_for_owned_job(session, owner, requested_job_id):
+        assert owner.id == auth_user.id
+        assert requested_job_id == job_id
+        return result
+
+    monkeypatch.setattr("app.api.jobs.get_result_for_owned_job", fake_get_result_for_owned_job)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            f"/api/jobs/{job_id}/result",
+            headers={"Authorization": f"Bearer {make_token()}"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == str(result.id)
+    assert payload["job_id"] == str(job_id)
+    assert payload["s3_key"] == "results/job-1/activations.npz"
+    assert payload["shape"] == [4, 20484]
+    assert payload["vertex_count"] == 20484
+    assert payload["timestep_count"] == 4
+    assert payload["sample_rate_hz"] == 2.0
+    assert payload["model_name"] == "tribev2"
+    assert payload["metadata_json"] == {"surface": "fsaverage5"}
+
+
+@pytest.mark.asyncio
+async def test_get_job_result_requires_authentication():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(f"/api/jobs/{uuid4()}/result")
+
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
