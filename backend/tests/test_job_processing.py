@@ -7,8 +7,14 @@ import msgpack
 import pytest
 
 from app.models.job import JobStatus
+from app.services.result_cache import CachedResult
 from app.services.job_processing import FAKE_VERTEX_COUNT
-from app.services.job_processing import JobProcessingError, process_fake_inference_job, process_modal_inference_job
+from app.services.job_processing import (
+    JobProcessingError,
+    complete_job_from_cached_result,
+    process_fake_inference_job,
+    process_modal_inference_job,
+)
 from app.services.job_processing import user_facing_inference_failure
 from app.services.sse_broker import JobEventBroker
 from app.tasks.inference_task import _run_inference
@@ -92,6 +98,7 @@ def fake_result_storage(monkeypatch):
     monkeypatch.setattr("app.services.result_storage._s3_client", lambda: FakeS3Client())
     monkeypatch.setenv("S3_BUCKET_NAME", "test-results")
     monkeypatch.setenv("RESULTS_S3_PREFIX", "results")
+    monkeypatch.setattr("app.services.job_processing.set_cached_result", lambda content_hash, result: None)
     yield
 
 
@@ -432,6 +439,38 @@ async def test_process_modal_inference_job_preserves_model_access_errors(monkeyp
         "message": "Model access is required for meta-llama/Llama-3.2-3B.",
         "retryable": False,
         "last_timestep": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_complete_job_from_cached_result_marks_job_complete():
+    job = make_job()
+    session = FakeSession(job)
+    broker = FakeBroker()
+    cached = CachedResult(
+        s3_key="results/cached/activations.npz",
+        shape=[4, 20484],
+        vertex_count=20484,
+        timestep_count=4,
+        sample_rate_hz=2,
+        model_name="tribev2",
+        metadata_json={"surface": "fsaverage5"},
+    )
+
+    processed = await complete_job_from_cached_result(session, job.id, cached, broker)
+
+    assert processed is job
+    assert job.status == JobStatus.complete
+    assert len(session.added) == 1
+    assert session.added[0].s3_key == "results/cached/activations.npz"
+    assert session.added[0].metadata_json["cache_hit"] is True
+    assert [event for _, event, _ in broker.events] == ["queued", "progress", "complete"]
+    assert broker.events[-1][2] == {
+        "job_id": str(job.id),
+        "status": "complete",
+        "result_s3_key": "results/cached/activations.npz",
+        "timesteps": 4,
+        "vertex_count": 20484,
     }
 
 

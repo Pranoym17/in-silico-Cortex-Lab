@@ -10,6 +10,7 @@ from app.schemas.run import RunExperimentRequest
 from app.schemas.sse import CompleteEvent, ErrorEvent, ProgressEvent, QueuedEvent, WarmingEvent
 from app.services.activation_events import fake_activation_chunk
 from app.services.modal_inference import ModalInferenceError, encode_modal_chunk_event, stream_deployed_modal_events
+from app.services.result_cache import CachedResult, cached_result_to_metadata, set_cached_result
 from app.services.result_storage import ActivationMatrixAssembler, store_job_result
 from app.services.sse_broker import JobEventBroker, get_job_event_broker
 
@@ -73,6 +74,75 @@ async def mark_job_failed(
     job.completed_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(job)
+    return job
+
+
+async def create_result_row_from_cache(session: AsyncSession, job: Job, cached: CachedResult):
+    from app.models.result import Result
+
+    result = Result(
+        job_id=job.id,
+        experiment_id=job.experiment_id,
+        owner_id=job.owner_id,
+        s3_key=cached.s3_key,
+        format=cached.format,
+        dtype=cached.dtype,
+        shape=cached.shape,
+        vertex_count=cached.vertex_count,
+        timestep_count=cached.timestep_count,
+        sample_rate_hz=cached.sample_rate_hz,
+        model_name=cached.model_name,
+        model_version=cached.model_version,
+        metadata_json=cached_result_to_metadata(cached),
+    )
+    session.add(result)
+    await session.flush()
+    return result
+
+
+async def complete_job_from_cached_result(
+    session: AsyncSession,
+    job_id: UUID,
+    cached: CachedResult,
+    broker: JobEventBroker | None = None,
+) -> Job:
+    broker = broker or get_job_event_broker()
+    job = await get_job_for_processing(session, job_id)
+
+    if job.status in TERMINAL_STATUSES:
+        return job
+
+    await broker.publish(
+        job.id,
+        "queued",
+        QueuedEvent(job_id=str(job.id), status=JobStatus.queued).model_dump(mode="json"),
+    )
+    await broker.publish(
+        job.id,
+        "progress",
+        ProgressEvent(
+            job_id=str(job.id),
+            completed_blocks=1,
+            total_blocks=1,
+            completed_timesteps=cached.timestep_count,
+        ).model_dump(mode="json"),
+    )
+    result = await create_result_row_from_cache(session, job, cached)
+    job.status = JobStatus.complete
+    job.completed_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(job)
+    await broker.publish(
+        job.id,
+        "complete",
+        CompleteEvent(
+            job_id=str(job.id),
+            status=JobStatus.complete,
+            result_s3_key=result.s3_key,
+            timesteps=cached.timestep_count,
+            vertex_count=cached.vertex_count,
+        ).model_dump(mode="json"),
+    )
     return job
 
 
@@ -184,6 +254,8 @@ async def process_fake_inference_job(
             "atlas": run_request.settings.atlas,
         },
     )
+    if len(run_request.blocks) == 1 and run_request.blocks[0].type == "text":
+        set_cached_result(run_request.blocks[0].content_hash, result)
     job.status = JobStatus.complete
     job.completed_at = datetime.now(UTC)
     await session.commit()
@@ -332,6 +404,8 @@ async def process_modal_inference_job(
                         "atlas": run_request.settings.atlas,
                     },
                 )
+                if len(run_request.blocks) == 1 and run_request.blocks[0].type == "text":
+                    set_cached_result(run_request.blocks[0].content_hash, result)
                 job.status = JobStatus.complete
                 job.completed_at = datetime.now(UTC)
                 await session.commit()

@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     s3_upload_expires_seconds: int = 900
     results_s3_prefix: str = "results"
     result_download_expires_seconds: int = 900
+    result_cache_enabled: bool = True
+    result_cache_ttl_seconds: int = 2_592_000
     sqs_queue_url: str = "http://localhost:4566/000000000000/cortexlab-jobs"
     supabase_jwt_secret: str = "replace-me"
     supabase_url: str | None = None

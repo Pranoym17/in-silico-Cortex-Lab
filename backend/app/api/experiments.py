@@ -20,6 +20,8 @@ from app.services.experiments import (
 )
 from app.services.job_dispatch import dispatch_inference_job
 from app.services.jobs import create_job_from_experiment, list_jobs_for_experiment
+from app.services.result_cache import get_cached_result
+from app.services.job_processing import complete_job_from_cached_result
 
 router = APIRouter()
 
@@ -130,7 +132,11 @@ async def run_experiment(
     session: AsyncSession = Depends(get_db),
 ) -> RunExperimentResponse:
     job = await create_job_from_experiment(session, user, experiment_id, body.settings)
-    dispatch_inference_job(background_tasks, job.id)
+    cached_result = get_run_cache_hit(job.run_spec)
+    if cached_result is not None:
+        await complete_job_from_cached_result(session, job.id, cached_result)
+    else:
+        dispatch_inference_job(background_tasks, job.id)
     return RunExperimentResponse(
         job_id=str(job.id),
         experiment_id=str(job.experiment_id),
@@ -147,3 +153,19 @@ async def list_experiment_jobs_route(
     session: AsyncSession = Depends(get_db),
 ):
     return await list_jobs_for_experiment(session, user, experiment_id)
+
+
+def get_run_cache_hit(run_spec: dict):
+    blocks = run_spec.get("blocks")
+    if not isinstance(blocks, list) or len(blocks) != 1:
+        return None
+
+    block = blocks[0]
+    if not isinstance(block, dict) or block.get("type") != "text":
+        return None
+
+    content_hash = block.get("content_hash")
+    if not isinstance(content_hash, str) or not content_hash.strip():
+        return None
+
+    return get_cached_result(content_hash)

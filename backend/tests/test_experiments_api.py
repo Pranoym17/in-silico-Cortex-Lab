@@ -185,9 +185,15 @@ async def test_run_experiment_creates_persisted_job(auth_user, monkeypatch):
         assert owner.id == auth_user.id
         assert requested_experiment_id == experiment_id
         assert settings.surface == "fsaverage5"
-        return SimpleNamespace(id=job_id, experiment_id=experiment_id, status=JobStatus.queued)
+        return SimpleNamespace(
+            id=job_id,
+            experiment_id=experiment_id,
+            status=JobStatus.queued,
+            run_spec={"blocks": [{"type": "text", "content_hash": "sha256:abc123"}]},
+        )
 
     monkeypatch.setattr("app.api.experiments.create_job_from_experiment", fake_create_job_from_experiment)
+    monkeypatch.setattr("app.api.experiments.get_cached_result", lambda content_hash: None)
     monkeypatch.setattr(
         "app.api.experiments.dispatch_inference_job",
         lambda background_tasks, dispatched_job_id: dispatched_ids.append(dispatched_job_id),
@@ -221,3 +227,57 @@ async def test_run_experiment_creates_persisted_job(auth_user, monkeypatch):
         "user_id": str(auth_user.id),
     }
     assert dispatched_ids == [job_id]
+
+
+@pytest.mark.asyncio
+async def test_run_experiment_completes_from_cache_without_dispatch(auth_user, monkeypatch):
+    experiment_id = uuid4()
+    job_id = uuid4()
+    dispatched_ids = []
+    completed_ids = []
+    cached_result = SimpleNamespace(s3_key="results/cached/activations.npz")
+
+    async def fake_create_job_from_experiment(session, owner, requested_experiment_id, settings):
+        assert owner.id == auth_user.id
+        assert requested_experiment_id == experiment_id
+        return SimpleNamespace(
+            id=job_id,
+            experiment_id=experiment_id,
+            status=JobStatus.queued,
+            run_spec={"blocks": [{"type": "text", "content_hash": "sha256:abc123"}]},
+        )
+
+    async def fake_complete_job_from_cached_result(session, completed_job_id, requested_cached_result):
+        assert requested_cached_result is cached_result
+        completed_ids.append(completed_job_id)
+
+    monkeypatch.setattr("app.api.experiments.create_job_from_experiment", fake_create_job_from_experiment)
+    monkeypatch.setattr("app.api.experiments.get_cached_result", lambda content_hash: cached_result)
+    monkeypatch.setattr("app.api.experiments.complete_job_from_cached_result", fake_complete_job_from_cached_result)
+    monkeypatch.setattr(
+        "app.api.experiments.dispatch_inference_job",
+        lambda background_tasks, dispatched_job_id: dispatched_ids.append(dispatched_job_id),
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/experiments/{experiment_id}/run",
+            headers={"Authorization": f"Bearer {make_token()}"},
+            json={
+                "blocks": [
+                    {
+                        "id": str(uuid4()),
+                        "type": "text",
+                        "condition": "faces",
+                        "start_ms": 0,
+                        "duration_ms": 1000,
+                        "content_hash": "sha256:abc123",
+                        "text": "face",
+                    }
+                ]
+            },
+        )
+
+    assert response.status_code == 202
+    assert completed_ids == [job_id]
+    assert dispatched_ids == []
