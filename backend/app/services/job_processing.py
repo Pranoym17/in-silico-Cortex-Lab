@@ -10,6 +10,7 @@ from app.schemas.run import RunExperimentRequest
 from app.schemas.sse import CompleteEvent, ErrorEvent, ProgressEvent, QueuedEvent, WarmingEvent
 from app.services.activation_events import fake_activation_chunk
 from app.services.modal_inference import ModalInferenceError, encode_modal_chunk_event, stream_deployed_modal_events
+from app.services.result_storage import ActivationMatrixAssembler, store_job_result
 from app.services.sse_broker import JobEventBroker, get_job_event_broker
 
 
@@ -144,6 +145,7 @@ async def process_fake_inference_job(
     )
 
     sample_rate_hz = run_request.settings.target_sample_rate_hz
+    result_assembler = ActivationMatrixAssembler()
     for chunk_index, block in enumerate(run_request.blocks):
         chunk = fake_activation_chunk(
             job_id=str(job.id),
@@ -154,6 +156,7 @@ async def process_fake_inference_job(
             vertex_count=FAKE_VERTEX_COUNT,
             sample_rate_hz=sample_rate_hz,
         )
+        result_assembler.add_chunk(decode_chunk_envelope(chunk.payload))
         await broker.publish(job.id, "chunk", chunk.model_dump(mode="json"))
 
         completed_timesteps += FAKE_TIMESTEPS_PER_BLOCK
@@ -168,6 +171,19 @@ async def process_fake_inference_job(
             ).model_dump(mode="json"),
         )
 
+    result = await store_job_result(
+        session,
+        job,
+        result_assembler.assemble(),
+        sample_rate_hz=result_assembler.sample_rate_hz,
+        model_name="fake",
+        model_version="dev",
+        metadata={
+            "provider": "fake",
+            "surface": run_request.settings.surface,
+            "atlas": run_request.settings.atlas,
+        },
+    )
     job.status = JobStatus.complete
     job.completed_at = datetime.now(UTC)
     await session.commit()
@@ -178,6 +194,7 @@ async def process_fake_inference_job(
         CompleteEvent(
             job_id=str(job.id),
             status=JobStatus.complete,
+            result_s3_key=result.s3_key,
             timesteps=completed_timesteps,
             vertex_count=FAKE_VERTEX_COUNT,
         ).model_dump(mode="json"),
@@ -233,6 +250,7 @@ async def process_modal_inference_job(
     chunk_seen = False
     completed_timesteps = 0
     vertex_count = 0
+    result_assembler = ActivationMatrixAssembler()
 
     try:
         async for event in stream_deployed_modal_events(
@@ -286,6 +304,7 @@ async def process_modal_inference_job(
                     await session.refresh(job)
 
                 envelope = encode_modal_chunk_event(event)
+                result_assembler.add_chunk(event)
                 chunk_seen = True
                 completed_timesteps = max(
                     completed_timesteps,
@@ -298,6 +317,21 @@ async def process_modal_inference_job(
             if event_type == "complete":
                 completed_timesteps = int(event.get("timesteps") or completed_timesteps)
                 vertex_count = int(event.get("vertex_count") or vertex_count)
+                result = await store_job_result(
+                    session,
+                    job,
+                    result_assembler.assemble(),
+                    sample_rate_hz=result_assembler.sample_rate_hz,
+                    model_name="tribev2",
+                    model_version=str(event.get("model_version")) if event.get("model_version") else None,
+                    metadata={
+                        "provider": "modal",
+                        "app_name": app_name,
+                        "function_name": function_name,
+                        "surface": run_request.settings.surface,
+                        "atlas": run_request.settings.atlas,
+                    },
+                )
                 job.status = JobStatus.complete
                 job.completed_at = datetime.now(UTC)
                 await session.commit()
@@ -308,7 +342,7 @@ async def process_modal_inference_job(
                     CompleteEvent(
                         job_id=str(job.id),
                         status=JobStatus.complete,
-                        result_s3_key=event.get("result_s3_key"),
+                        result_s3_key=result.s3_key,
                         timesteps=completed_timesteps,
                         vertex_count=vertex_count,
                     ).model_dump(mode="json"),
@@ -396,3 +430,11 @@ async def process_configured_inference_job(
             environment_name=settings.modal_environment_name,
         )
     raise ValueError(f"Unsupported inference provider: {settings.inference_provider}")
+
+
+def decode_chunk_envelope(payload: str) -> dict:
+    import base64
+
+    import msgpack
+
+    return msgpack.unpackb(base64.b64decode(payload), raw=False)

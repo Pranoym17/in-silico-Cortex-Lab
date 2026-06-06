@@ -39,6 +39,8 @@ def valid_run_spec():
 def make_job(**overrides):
     data = {
         "id": uuid4(),
+        "experiment_id": uuid4(),
+        "owner_id": uuid4(),
         "status": JobStatus.queued,
         "run_spec": valid_run_spec(),
         "error_code": None,
@@ -63,6 +65,7 @@ class FakeSession:
         self.job = job
         self.commits = 0
         self.refreshed = []
+        self.added = []
 
     async def execute(self, query):
         return FakeScalarResult(self.job)
@@ -72,6 +75,24 @@ class FakeSession:
 
     async def refresh(self, job):
         self.refreshed.append(job)
+
+    def add(self, value):
+        self.added.append(value)
+
+    async def flush(self):
+        return None
+
+
+@pytest.fixture(autouse=True)
+def fake_result_storage(monkeypatch):
+    class FakeS3Client:
+        def put_object(self, **kwargs):
+            return None
+
+    monkeypatch.setattr("app.services.result_storage._s3_client", lambda: FakeS3Client())
+    monkeypatch.setenv("S3_BUCKET_NAME", "test-results")
+    monkeypatch.setenv("RESULTS_S3_PREFIX", "results")
+    yield
 
 
 class FakeBroker:
@@ -124,7 +145,7 @@ async def test_process_fake_inference_job_completes_valid_job():
     assert broker.events[5][2] == {
         "job_id": str(job.id),
         "status": "complete",
-        "result_s3_key": None,
+        "result_s3_key": f"results/{job.id}/activations.npz",
         "timesteps": 1,
         "vertex_count": FAKE_VERTEX_COUNT,
     }
@@ -271,7 +292,7 @@ async def test_process_modal_inference_job_publishes_modal_stream(monkeypatch):
     assert broker.events[-1][2] == {
         "job_id": str(job.id),
         "status": "complete",
-        "result_s3_key": None,
+        "result_s3_key": f"results/{job.id}/activations.npz",
         "timesteps": 1,
         "vertex_count": 2,
     }

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     aws_secret_access_key: str | None = None
     s3_bucket_name: str = "cortexlab-local"
     s3_upload_expires_seconds: int = 900
+    results_s3_prefix: str = "results"
     sqs_queue_url: str = "http://localhost:4566/000000000000/cortexlab-jobs"
     supabase_jwt_secret: str = "replace-me"
     supabase_url: str | None = None

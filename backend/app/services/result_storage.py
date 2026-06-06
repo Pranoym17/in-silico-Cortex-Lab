@@ -1,0 +1,139 @@
+from io import BytesIO
+from typing import Any
+
+import boto3
+import numpy as np
+from numpy.typing import NDArray
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import get_settings
+from app.models.job import Job
+from app.models.result import Result
+
+
+class ResultStorageError(RuntimeError):
+    pass
+
+
+def _s3_client():
+    settings = get_settings()
+    client_kwargs = {
+        "region_name": settings.aws_region,
+        "endpoint_url": f"https://s3.{settings.aws_region}.amazonaws.com",
+    }
+    if settings.aws_access_key_id and settings.aws_secret_access_key:
+        client_kwargs["aws_access_key_id"] = settings.aws_access_key_id
+        client_kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
+    return boto3.client("s3", **client_kwargs)
+
+
+def result_object_key(job_id: str) -> str:
+    settings = get_settings()
+    prefix = settings.results_s3_prefix.strip("/").strip()
+    return f"{prefix}/{job_id}/activations.npz" if prefix else f"{job_id}/activations.npz"
+
+
+class ActivationMatrixAssembler:
+    def __init__(self) -> None:
+        self._chunks: list[tuple[int, NDArray[np.float32]]] = []
+        self.vertex_count: int | None = None
+        self.sample_rate_hz: float | None = None
+
+    def add_chunk(self, event: dict[str, Any]) -> None:
+        vertex_count = int(event["vertex_count"])
+        timestep_count = int(event["timestep_count"])
+        shape = event.get("shape")
+        if shape != [timestep_count, vertex_count]:
+            raise ResultStorageError("Activation chunk shape does not match timestep and vertex counts")
+
+        if self.vertex_count is not None and vertex_count != self.vertex_count:
+            raise ResultStorageError("Activation chunks have inconsistent vertex counts")
+
+        activations = event["activations"]
+        if not isinstance(activations, bytes):
+            raise ResultStorageError("Activation chunk payload must be bytes")
+
+        matrix = np.frombuffer(activations, dtype="<f4").reshape(timestep_count, vertex_count).copy()
+        self._chunks.append((int(event["timestep_start"]), matrix))
+        self.vertex_count = vertex_count
+        self.sample_rate_hz = float(event["sample_rate_hz"])
+
+    def assemble(self) -> NDArray[np.float32]:
+        if not self._chunks:
+            raise ResultStorageError("No activation chunks were captured")
+
+        ordered_chunks = sorted(self._chunks, key=lambda item: item[0])
+        expected_start = 0
+        matrices: list[NDArray[np.float32]] = []
+        for timestep_start, matrix in ordered_chunks:
+            if timestep_start != expected_start:
+                raise ResultStorageError("Activation chunks are missing timesteps")
+            matrices.append(matrix)
+            expected_start += matrix.shape[0]
+
+        return np.ascontiguousarray(np.vstack(matrices), dtype="<f4")
+
+
+def serialize_activation_npz(
+    matrix: NDArray[np.float32],
+    *,
+    sample_rate_hz: float | None,
+    metadata: dict[str, Any],
+) -> bytes:
+    buffer = BytesIO()
+    np.savez_compressed(
+        buffer,
+        activations=np.ascontiguousarray(matrix, dtype="<f4"),
+        sample_rate_hz=np.array(sample_rate_hz if sample_rate_hz is not None else np.nan, dtype="<f4"),
+        metadata=np.array([metadata], dtype=object),
+    )
+    return buffer.getvalue()
+
+
+async def store_job_result(
+    session: AsyncSession,
+    job: Job,
+    matrix: NDArray[np.float32],
+    *,
+    sample_rate_hz: float | None,
+    model_name: str = "tribev2",
+    model_version: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> Result:
+    if matrix.ndim != 2:
+        raise ResultStorageError("Activation result matrix must be 2D")
+    if matrix.dtype != np.dtype("float32"):
+        matrix = matrix.astype("<f4", copy=False)
+
+    s3_key = result_object_key(str(job.id))
+    result_metadata = metadata or {}
+    payload = serialize_activation_npz(matrix, sample_rate_hz=sample_rate_hz, metadata=result_metadata)
+
+    try:
+        _s3_client().put_object(
+            Bucket=get_settings().s3_bucket_name,
+            Key=s3_key,
+            Body=payload,
+            ContentType="application/octet-stream",
+        )
+    except Exception as exc:
+        raise ResultStorageError(f"Failed to store result artifact: {exc}") from exc
+
+    result = Result(
+        job_id=job.id,
+        experiment_id=job.experiment_id,
+        owner_id=job.owner_id,
+        s3_key=s3_key,
+        format="npz",
+        dtype="float32",
+        shape=[int(matrix.shape[0]), int(matrix.shape[1])],
+        vertex_count=int(matrix.shape[1]),
+        timestep_count=int(matrix.shape[0]),
+        sample_rate_hz=sample_rate_hz,
+        model_name=model_name,
+        model_version=model_version,
+        metadata_json=result_metadata,
+    )
+    session.add(result)
+    await session.flush()
+    return result
