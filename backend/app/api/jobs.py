@@ -5,11 +5,13 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_user
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.job import JobResponse
-from app.schemas.result import ResultResponse
+from app.schemas.result import ResultDownloadResponse, ResultResponse
 from app.services.jobs import get_owned_job
+from app.services.result_storage import create_result_download_url
 from app.services.results import get_result_for_owned_job
 from app.services.sse_broker import JobEventBroker, get_job_event_broker
 from app.services.sse import encode_sse
@@ -33,6 +35,21 @@ async def get_job_result_route(
     session: AsyncSession = Depends(get_db),
 ):
     return await get_result_for_owned_job(session, user, job_id)
+
+
+@router.get("/{job_id}/result/download", response_model=ResultDownloadResponse)
+async def get_job_result_download_route(
+    job_id: UUID,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+):
+    result = await get_result_for_owned_job(session, user, job_id)
+    return ResultDownloadResponse(
+        result_id=result.id,
+        job_id=result.job_id,
+        download_url=create_result_download_url(result.s3_key),
+        expires_in_seconds=get_settings().result_download_expires_seconds,
+    )
 
 
 @router.get("/{job_id}/stream")

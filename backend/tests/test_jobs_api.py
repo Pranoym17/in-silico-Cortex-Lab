@@ -159,6 +159,34 @@ async def test_get_job_result(auth_user, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_job_result_download(auth_user, monkeypatch):
+    job_id = uuid4()
+    result = make_result(auth_user.id, job_id=job_id)
+
+    async def fake_get_result_for_owned_job(session, owner, requested_job_id):
+        assert owner.id == auth_user.id
+        assert requested_job_id == job_id
+        return result
+
+    monkeypatch.setattr("app.api.jobs.get_result_for_owned_job", fake_get_result_for_owned_job)
+    monkeypatch.setattr("app.api.jobs.create_result_download_url", lambda s3_key: f"https://s3.example/{s3_key}")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            f"/api/jobs/{job_id}/result/download",
+            headers={"Authorization": f"Bearer {make_token()}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "result_id": str(result.id),
+        "job_id": str(job_id),
+        "download_url": "https://s3.example/results/job-1/activations.npz",
+        "expires_in_seconds": 900,
+    }
+
+
+@pytest.mark.asyncio
 async def test_get_job_result_requires_authentication():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(f"/api/jobs/{uuid4()}/result")

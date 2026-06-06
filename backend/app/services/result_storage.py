@@ -33,6 +33,19 @@ def result_object_key(job_id: str) -> str:
     return f"{prefix}/{job_id}/activations.npz" if prefix else f"{job_id}/activations.npz"
 
 
+def create_result_download_url(s3_key: str) -> str:
+    settings = get_settings()
+    return _s3_client().generate_presigned_url(
+        ClientMethod="get_object",
+        Params={
+            "Bucket": settings.s3_bucket_name,
+            "Key": s3_key,
+        },
+        ExpiresIn=settings.result_download_expires_seconds,
+        HttpMethod="GET",
+    )
+
+
 class ActivationMatrixAssembler:
     def __init__(self) -> None:
         self._chunks: list[tuple[int, NDArray[np.float32]]] = []

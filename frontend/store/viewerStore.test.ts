@@ -59,11 +59,18 @@ describe("viewerStore", () => {
     useViewerStore.getState().handleStreamEvent({
       id: 9,
       event: "complete",
-      data: { job_id: "job_1", status: "complete", result_s3_key: null, timesteps: 4, vertex_count: 16 }
+      data: {
+        job_id: "job_1",
+        status: "complete",
+        result_s3_key: "results/job_1/activations.npz",
+        timesteps: 4,
+        vertex_count: 16
+      }
     });
 
     expect(useViewerStore.getState().status).toBe("complete");
     expect(useViewerStore.getState().timestep).toBe(4);
+    expect(useViewerStore.getState().resultS3Key).toBe("results/job_1/activations.npz");
 
     useViewerStore.getState().handleStreamEvent({
       id: 10,

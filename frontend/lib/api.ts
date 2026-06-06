@@ -110,6 +110,32 @@ export type RunExperimentResponse = {
   user_id?: string | null;
 };
 
+export type ResultMetadata = {
+  id: string;
+  job_id: string;
+  experiment_id: string;
+  owner_id: string;
+  s3_key: string;
+  format: string;
+  dtype: string;
+  shape: number[];
+  vertex_count: number;
+  timestep_count: number;
+  sample_rate_hz: number | null;
+  model_name: string;
+  model_version: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ResultDownload = {
+  result_id: string;
+  job_id: string;
+  download_url: string;
+  expires_in_seconds: number;
+};
+
 export async function apiFetch(path: string, token?: string | null, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
 
@@ -219,4 +245,12 @@ export function runExperiment(experimentId: string, input: unknown, token?: stri
     method: "POST",
     body: JSON.stringify(input)
   });
+}
+
+export function getJobResult(jobId: string, token?: string | null) {
+  return apiJson<ResultMetadata>(`/api/jobs/${jobId}/result`, token);
+}
+
+export function getJobResultDownload(jobId: string, token?: string | null) {
+  return apiJson<ResultDownload>(`/api/jobs/${jobId}/result/download`, token);
 }

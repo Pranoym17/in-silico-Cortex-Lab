@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { BrainScene } from "./BrainScene";
 import { BrainMeshManifest, loadBrainManifest } from "@/lib/brainAssets";
 import {
+  getJobResult,
+  getJobResultDownload,
+  ResultMetadata,
+  ApiError
+} from "@/lib/api";
+import {
   ActivationDomain,
   getActivationDomain,
   getActivationStats,
@@ -29,6 +35,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const totalBlocks = useViewerStore((state) => state.totalBlocks);
   const chunks = useViewerStore((state) => state.chunks);
   const lastEventId = useViewerStore((state) => state.lastEventId);
+  const resultS3Key = useViewerStore((state) => state.resultS3Key);
   const error = useViewerStore((state) => state.error);
   const resetJob = useViewerStore((state) => state.resetJob);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("idle");
@@ -36,6 +43,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [connectAttempt, setConnectAttempt] = useState(0);
   const [manifest, setManifest] = useState<BrainMeshManifest | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
+  const [result, setResult] = useState<ResultMetadata | null>(null);
+  const [resultError, setResultError] = useState<string | null>(null);
+  const [isDownloadingResult, setIsDownloadingResult] = useState(false);
   const [selectedTimestep, setSelectedTimestep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [showLeft, setShowLeft] = useState(true);
@@ -117,7 +127,38 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     setConnectionStatus("idle");
     setSelectedTimestep(0);
     setIsPlaying(true);
+    setResult(null);
+    setResultError(null);
   }, [jobId, resetJob]);
+
+  useEffect(() => {
+    if (!accessToken || status !== "complete") {
+      return;
+    }
+
+    let cancelled = false;
+    getJobResult(jobId, accessToken)
+      .then((metadata) => {
+        if (!cancelled) {
+          setResult(metadata);
+          setResultError(null);
+        }
+      })
+      .catch((caught) => {
+        if (cancelled) {
+          return;
+        }
+        if (caught instanceof ApiError && caught.status === 404) {
+          setResultError("Result metadata is not available yet.");
+          return;
+        }
+        setResultError(caught instanceof Error ? caught.message : "Result metadata failed to load");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, jobId, status]);
 
   useEffect(() => {
     if (isPlaying || selectedTimestep > maxSelectableTimestep) {
@@ -175,6 +216,24 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
       controller.abort();
     };
   }, [accessToken, connectAttempt, jobId]);
+
+  async function downloadResult() {
+    if (!accessToken) {
+      setResultError("Sign in again to download this result.");
+      return;
+    }
+
+    setIsDownloadingResult(true);
+    setResultError(null);
+    try {
+      const download = await getJobResultDownload(jobId, accessToken);
+      window.location.assign(download.download_url);
+    } catch (caught) {
+      setResultError(caught instanceof Error ? caught.message : "Result download failed");
+    } finally {
+      setIsDownloadingResult(false);
+    }
+  }
 
   return (
     <AppShell
@@ -333,6 +392,30 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               </div>
             </div>
           </div>
+          <div className="viewer-section">
+            <h3>Result</h3>
+            <div className="viewer-stat-grid">
+              <div>
+                <span>Saved</span>
+                <strong>{resultS3Key || result?.s3_key ? "yes" : "no"}</strong>
+              </div>
+              <div>
+                <span>Format</span>
+                <strong>{result?.format ?? "none"}</strong>
+              </div>
+              <div>
+                <span>Shape</span>
+                <strong>{result ? result.shape.join(" x ") : "none"}</strong>
+              </div>
+              <div>
+                <span>Model</span>
+                <strong>{result?.model_name ?? "none"}</strong>
+              </div>
+            </div>
+            <button disabled={!result || isDownloadingResult} onClick={downloadResult} type="button">
+              {isDownloadingResult ? "Preparing" : "Download NPZ"}
+            </button>
+          </div>
           <div className="viewer-stat-grid">
             <div>
               <span>Status</span>
@@ -385,6 +468,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           {assetError ? <ErrorPanel message={assetError} /> : null}
           {error ? <ErrorPanel message={error} /> : null}
           {streamError ? <ErrorPanel message={streamError} /> : null}
+          {resultError ? <ErrorPanel message={resultError} /> : null}
           {shouldReconnect ? <p>Reconnecting in {reconnectDelaySeconds}s.</p> : null}
           {accessToken && connectionStatus === "disconnected" && status !== "complete" && status !== "failed" ? (
             <button type="button" onClick={() => setConnectAttempt((value) => value + 1)}>

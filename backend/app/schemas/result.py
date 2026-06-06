@@ -24,3 +24,10 @@ class ResultResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ResultDownloadResponse(BaseModel):
+    result_id: UUID
+    job_id: UUID
+    download_url: str
+    expires_in_seconds: int

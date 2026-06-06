@@ -5,7 +5,12 @@ import numpy as np
 import pytest
 
 from app.services import result_storage
-from app.services.result_storage import ActivationMatrixAssembler, ResultStorageError, store_job_result
+from app.services.result_storage import (
+    ActivationMatrixAssembler,
+    ResultStorageError,
+    create_result_download_url,
+    store_job_result,
+)
 
 
 def chunk_event(timestep_start: int, values: list[list[float]]) -> dict:
@@ -46,6 +51,34 @@ def test_activation_matrix_assembler_rejects_missing_timesteps():
 
     with pytest.raises(ResultStorageError, match="missing timesteps"):
         assembler.assemble()
+
+
+def test_create_result_download_url_uses_configured_bucket_and_expiry(monkeypatch):
+    captured = {}
+
+    class FakeS3Client:
+        def generate_presigned_url(self, **kwargs):
+            captured.update(kwargs)
+            return "https://s3.example/download"
+
+    monkeypatch.setattr(result_storage, "_s3_client", lambda: FakeS3Client())
+    result_storage.get_settings.cache_clear()
+    monkeypatch.setenv("S3_BUCKET_NAME", "cortexlab-results")
+    monkeypatch.setenv("RESULT_DOWNLOAD_EXPIRES_SECONDS", "120")
+
+    url = create_result_download_url("results/job-1/activations.npz")
+
+    assert url == "https://s3.example/download"
+    assert captured == {
+        "ClientMethod": "get_object",
+        "Params": {
+            "Bucket": "cortexlab-results",
+            "Key": "results/job-1/activations.npz",
+        },
+        "ExpiresIn": 120,
+        "HttpMethod": "GET",
+    }
+    result_storage.get_settings.cache_clear()
 
 
 @pytest.mark.asyncio

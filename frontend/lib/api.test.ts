@@ -6,6 +6,8 @@ import {
   createBlock,
   createExperiment,
   createUploadIntent,
+  getJobResult,
+  getJobResultDownload,
   reorderBlocks,
   runExperiment
 } from "./api";
@@ -130,5 +132,29 @@ describe("runExperiment", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("/api/experiments/exp_1/run");
     expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
     expect(fetchMock.mock.calls[0][1]?.body).toBe(JSON.stringify({ blocks: [], settings: {} }));
+  });
+});
+
+describe("result helpers", () => {
+  it("fetches job result metadata", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: "result_1", s3_key: "results/job_1/activations.npz" }), { status: 200 })
+    );
+
+    await getJobResult("job_1", "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/jobs/job_1/result");
+    expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
+  });
+
+  it("fetches a presigned result download URL", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ download_url: "https://s3.example/download" }), { status: 200 })
+    );
+
+    await getJobResultDownload("job_1", "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/jobs/job_1/result/download");
+    expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
   });
 });

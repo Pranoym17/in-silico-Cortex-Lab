@@ -9,6 +9,7 @@ type ViewerState = {
   totalBlocks: number;
   chunks: DecodedActivationChunk[];
   lastEventId: number | null;
+  resultS3Key: string | null;
   error: string | null;
   resetJob: (jobId: string) => void;
   setTimestep: (timestep: number) => void;
@@ -23,6 +24,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   totalBlocks: 0,
   chunks: [],
   lastEventId: null,
+  resultS3Key: null,
   error: null,
   resetJob: (jobId) =>
     set({
@@ -33,6 +35,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
       totalBlocks: 0,
       chunks: [],
       lastEventId: null,
+      resultS3Key: null,
       error: null
     }),
   setTimestep: (timestep) => set({ timestep }),
@@ -77,6 +80,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
           ...base,
           jobId: event.data.job_id,
           status: "complete",
+          resultS3Key: event.data.result_s3_key,
           timestep: event.data.timesteps,
           error: null
         };
