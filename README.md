@@ -130,9 +130,6 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install "exca==0.5.20"
 .\.venv\Scripts\python.exe -c "from tribev2 import TribeModel; print('tribev2 import ok')"
 ```
-
-Before deploying the real Modal image, put your Hugging Face read token in a Modal secret instead of `.env`:
-
 ```bash
 .\inference\.venv\Scripts\modal.exe secret create huggingface-secret HF_TOKEN=hf_your_new_read_token
 ```
