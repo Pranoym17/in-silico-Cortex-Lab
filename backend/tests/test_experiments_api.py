@@ -236,20 +236,22 @@ async def test_run_experiment_completes_from_cache_without_dispatch(auth_user, m
     dispatched_ids = []
     completed_ids = []
     cached_result = SimpleNamespace(s3_key="results/cached/activations.npz")
+    job = SimpleNamespace(
+        id=job_id,
+        experiment_id=experiment_id,
+        status=JobStatus.queued,
+        run_spec={"blocks": [{"type": "text", "content_hash": "sha256:abc123"}]},
+    )
 
     async def fake_create_job_from_experiment(session, owner, requested_experiment_id, settings):
         assert owner.id == auth_user.id
         assert requested_experiment_id == experiment_id
-        return SimpleNamespace(
-            id=job_id,
-            experiment_id=experiment_id,
-            status=JobStatus.queued,
-            run_spec={"blocks": [{"type": "text", "content_hash": "sha256:abc123"}]},
-        )
+        return job
 
     async def fake_complete_job_from_cached_result(session, completed_job_id, requested_cached_result):
         assert requested_cached_result is cached_result
         completed_ids.append(completed_job_id)
+        job.status = JobStatus.complete
 
     monkeypatch.setattr("app.api.experiments.create_job_from_experiment", fake_create_job_from_experiment)
     monkeypatch.setattr("app.api.experiments.get_cached_result", lambda content_hash: cached_result)
@@ -279,5 +281,6 @@ async def test_run_experiment_completes_from_cache_without_dispatch(auth_user, m
         )
 
     assert response.status_code == 202
+    assert response.json()["status"] == "complete"
     assert completed_ids == [job_id]
     assert dispatched_ids == []

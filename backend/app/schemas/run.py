@@ -81,7 +81,6 @@ class RunExperimentRequest(BaseModel):
 class RunExperimentResponse(BaseModel):
     job_id: str
     experiment_id: str
-    status: Literal["queued"]
+    status: Literal["queued", "complete"]
     stream_url: str
     user_id: str | None = None
-

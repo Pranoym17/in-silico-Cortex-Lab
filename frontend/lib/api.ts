@@ -105,7 +105,7 @@ export type UploadIntent = {
 export type RunExperimentResponse = {
   job_id: string;
   experiment_id: string;
-  status: "queued";
+  status: "queued" | "complete";
   stream_url: string;
   user_id?: string | null;
 };
