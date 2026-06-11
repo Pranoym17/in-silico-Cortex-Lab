@@ -1,7 +1,9 @@
 export type HemisphereKey = "left" | "right";
 
 export type BrainHemisphereManifest = {
+  path: string;
   file: string;
+  vertex_start: number;
   vertex_count: number;
   activation_offset: number;
 };
@@ -10,6 +12,8 @@ export type BrainMeshManifest = {
   source?: string;
   atlas_source?: string;
   surface: "fsaverage5";
+  vertex_order: "left_then_right";
+  total_vertex_count: number;
   vertex_count: number;
   left_vertex_count: number;
   right_vertex_count: number;
@@ -48,6 +52,9 @@ export function validateBrainManifest(value: unknown): BrainMeshManifest {
   if (manifest.surface !== "fsaverage5") {
     throw new Error("Brain mesh manifest surface must be fsaverage5");
   }
+  if (manifest.vertex_order !== "left_then_right") {
+    throw new Error("Brain mesh manifest vertex order must be left_then_right");
+  }
   if (manifest.atlas !== "desikan-killiany") {
     throw new Error("Brain mesh manifest atlas must be desikan-killiany");
   }
@@ -65,6 +72,9 @@ export function validateBrainManifest(value: unknown): BrainMeshManifest {
   }
   if (manifest.vertex_count !== manifest.left_vertex_count + manifest.right_vertex_count) {
     throw new Error("Brain mesh manifest total vertex count must equal left plus right");
+  }
+  if (manifest.total_vertex_count !== manifest.vertex_count) {
+    throw new Error("Brain mesh manifest total_vertex_count must match vertex_count");
   }
   if (!isRecord(manifest.gltf) || typeof manifest.gltf.left !== "string" || typeof manifest.gltf.right !== "string") {
     throw new Error("Brain mesh manifest must include left and right GLTF paths");
@@ -104,8 +114,14 @@ function validateHemisphere(
   if (typeof value.file !== "string" || !value.file.endsWith(`fsaverage5_${key}.gltf`)) {
     throw new Error(`Brain mesh manifest ${key} hemisphere file path is invalid`);
   }
+  if (typeof value.path !== "string" || value.path !== value.file) {
+    throw new Error(`Brain mesh manifest ${key} hemisphere path must match file`);
+  }
   if (value.vertex_count !== expectedVertexCount) {
     throw new Error(`Brain mesh manifest ${key} vertex count does not match top-level count`);
+  }
+  if (value.vertex_start !== expectedActivationOffset) {
+    throw new Error(`Brain mesh manifest ${key} vertex start is invalid`);
   }
   if (value.activation_offset !== expectedActivationOffset) {
     throw new Error(`Brain mesh manifest ${key} activation offset is invalid`);

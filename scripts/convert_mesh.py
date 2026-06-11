@@ -38,6 +38,8 @@ def build_manifest(
 ) -> dict[str, Any]:
     manifest: dict[str, Any] = {
         "surface": SURFACE,
+        "vertex_order": "left_then_right",
+        "total_vertex_count": left_vertex_count + right_vertex_count,
         "vertex_count": left_vertex_count + right_vertex_count,
         "left_vertex_count": left_vertex_count,
         "right_vertex_count": right_vertex_count,
@@ -51,12 +53,16 @@ def build_manifest(
         },
         "hemispheres": {
             "left": {
+                "path": "/brain/fsaverage5_left.gltf",
                 "file": "/brain/fsaverage5_left.gltf",
+                "vertex_start": 0,
                 "vertex_count": left_vertex_count,
                 "activation_offset": 0,
             },
             "right": {
+                "path": "/brain/fsaverage5_right.gltf",
                 "file": "/brain/fsaverage5_right.gltf",
+                "vertex_start": left_vertex_count,
                 "vertex_count": right_vertex_count,
                 "activation_offset": left_vertex_count,
             },

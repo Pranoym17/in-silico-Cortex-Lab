@@ -135,6 +135,8 @@ def build_manifest() -> dict[str, Any]:
     return {
         "source": "dev-fixture",
         "surface": "fsaverage5",
+        "vertex_order": "left_then_right",
+        "total_vertex_count": left_count + right_count,
         "vertex_count": left_count + right_count,
         "left_vertex_count": left_count,
         "right_vertex_count": right_count,
@@ -145,9 +147,17 @@ def build_manifest() -> dict[str, Any]:
             "right": "/brain/fsaverage5_right.gltf",
         },
         "hemispheres": {
-            "left": {"file": "/brain/fsaverage5_left.gltf", "vertex_count": left_count, "activation_offset": 0},
+            "left": {
+                "path": "/brain/fsaverage5_left.gltf",
+                "file": "/brain/fsaverage5_left.gltf",
+                "vertex_start": 0,
+                "vertex_count": left_count,
+                "activation_offset": 0,
+            },
             "right": {
+                "path": "/brain/fsaverage5_right.gltf",
                 "file": "/brain/fsaverage5_right.gltf",
+                "vertex_start": left_count,
                 "vertex_count": right_count,
                 "activation_offset": left_count,
             },

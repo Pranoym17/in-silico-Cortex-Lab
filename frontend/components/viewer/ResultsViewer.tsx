@@ -16,7 +16,8 @@ import {
   getChunkForTimestep,
   getFrameIndexForTimestep,
   getLatestActivationChunk,
-  getStreamedTimestepCount
+  getStreamedTimestepCount,
+  validateActivationChunkAgainstManifest
 } from "@/lib/brainActivation";
 import { streamJobEvents } from "@/lib/sse";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
@@ -70,6 +71,11 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     () => getActivationStats(selectedChunk ?? latestChunk, selectedFrameIndex),
     [latestChunk, selectedChunk, selectedFrameIndex]
   );
+  const selectedValidation = useMemo(
+    () => validateActivationChunkAgainstManifest(selectedChunk ?? latestChunk, manifest),
+    [latestChunk, manifest, selectedChunk]
+  );
+  const renderableChunk = selectedValidation.valid ? selectedChunk ?? latestChunk : null;
   const manualDomainInvalid = useManualDomain && manualDomain === null;
   const shouldReconnect =
     Boolean(accessToken) && connectionStatus === "disconnected" && status !== "complete" && status !== "failed";
@@ -256,7 +262,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           {manifest ? (
             <BrainScene
               colorDomain={activeDomain}
-              chunk={selectedChunk ?? latestChunk}
+              chunk={renderableChunk}
               frameIndex={selectedFrameIndex}
               manifest={manifest}
               showLeft={showLeft}
@@ -392,6 +398,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               </div>
             </div>
           </div>
+          {!selectedValidation.valid ? <ErrorPanel message={selectedValidation.message ?? "Activation mesh validation failed."} /> : null}
           <div className="viewer-section">
             <h3>Result</h3>
             <div className="viewer-stat-grid">

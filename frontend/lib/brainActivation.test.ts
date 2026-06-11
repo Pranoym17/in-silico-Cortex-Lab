@@ -10,12 +10,15 @@ import {
   getFrameIndexForTimestep,
   getHemisphereActivationFrame,
   getLatestActivationChunk,
-  getStreamedTimestepCount
+  getStreamedTimestepCount,
+  validateActivationChunkAgainstManifest
 } from "./brainActivation";
 import { DecodedActivationChunk } from "./sse";
 
 const manifest: BrainMeshManifest = {
   surface: "fsaverage5",
+  vertex_order: "left_then_right",
+  total_vertex_count: 6,
   vertex_count: 6,
   left_vertex_count: 2,
   right_vertex_count: 4,
@@ -27,12 +30,16 @@ const manifest: BrainMeshManifest = {
   },
   hemispheres: {
     left: {
+      path: "/brain/fsaverage5_left.gltf",
       file: "/brain/fsaverage5_left.gltf",
+      vertex_start: 0,
       vertex_count: 2,
       activation_offset: 0
     },
     right: {
+      path: "/brain/fsaverage5_right.gltf",
       file: "/brain/fsaverage5_right.gltf",
+      vertex_start: 2,
       vertex_count: 4,
       activation_offset: 2
     }
@@ -82,6 +89,18 @@ describe("brainActivation", () => {
 
     expect(Array.from(getHemisphereActivationFrame(current, manifest, "left"))).toEqual([0, 1]);
     expect(Array.from(getHemisphereActivationFrame(current, manifest, "right"))).toEqual([2, 3, 4, 5]);
+  });
+
+  it("validates activation chunks against manifest vertex counts and ranges", () => {
+    const current = chunk([0, 1, 2, 3, 4, 5]);
+    const mismatch = { ...current, vertex_count: 5, shape: [1, 5] as [number, number] };
+
+    expect(validateActivationChunkAgainstManifest(current, manifest)).toEqual({ valid: true, message: null });
+    expect(validateActivationChunkAgainstManifest(mismatch, manifest)).toEqual({
+      valid: false,
+      message: "Activation vertex count 5 does not match mesh vertex count 6."
+    });
+    expect(Array.from(getHemisphereActivationFrame(mismatch, manifest, "right"))).toEqual([0, 0, 0, 0]);
   });
 
   it("builds one rgb triplet per vertex", () => {

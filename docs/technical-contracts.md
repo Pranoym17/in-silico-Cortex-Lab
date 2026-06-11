@@ -503,8 +503,8 @@ Viewer and asset implications:
 
 - GLTF conversion must preserve source vertex order for each hemisphere.
 - Do not simplify, merge, weld, deduplicate, reorder, or remesh vertices unless the exact activation index mapping is written to the manifest.
-- `mesh-manifest.json` must declare `vertex_count`, `left_vertex_count`, `right_vertex_count`, and each hemisphere `activation_offset`.
-- Runtime chunks must be rejected or clearly warned if `chunk.vertex_count` differs from `mesh-manifest.json.vertex_count`.
+- `mesh-manifest.json` must declare `total_vertex_count`, `vertex_order`, and each hemisphere `vertex_start`/`vertex_count`.
+- Runtime chunks must be rejected or clearly warned if `chunk.vertex_count` differs from `mesh-manifest.json.total_vertex_count`.
 - Atlas region indices must use the same global activation index space.
 
 ## Brain Viewer Contract
@@ -516,6 +516,8 @@ Frontend responsibilities:
 - Load `/brain/mesh-manifest.json`.
 - Load left/right hemisphere GLTF files from `manifest.hemispheres`.
 - Keep left/right activation ordering exactly as `left-then-right`.
+- Validate each activation chunk against the manifest before coloring.
+- Show a viewer-sidebar error and render neutral mesh colors if activation vertex counts or hemisphere ranges do not match.
 - Select frames by global timestep using chunk `timestep_start` and `timestep_count`.
 - Color vertices from float32 activation frames using the active color domain.
 - Support live-follow, manual timestep scrubbing, hemisphere toggles, and auto/manual color scale.
@@ -568,10 +570,14 @@ Manifest shape:
 ```json
 {
   "surface": "fsaverage5",
+  "vertex_order": "left_then_right",
+  "total_vertex_count": 20484,
   "vertex_count": 20484,
   "left_vertex_count": 10242,
   "right_vertex_count": 10242,
   "ordering": "left-then-right",
+  "ordering_rule": "left source vertex order, then right source vertex order",
+  "coordinate_units": "millimeters",
   "atlas": "desikan-killiany",
   "gltf": {
     "left": "/brain/fsaverage5_left.gltf",
@@ -579,12 +585,16 @@ Manifest shape:
   },
   "hemispheres": {
     "left": {
+      "path": "/brain/fsaverage5_left.gltf",
       "file": "/brain/fsaverage5_left.gltf",
+      "vertex_start": 0,
       "vertex_count": 10242,
       "activation_offset": 0
     },
     "right": {
+      "path": "/brain/fsaverage5_right.gltf",
       "file": "/brain/fsaverage5_right.gltf",
+      "vertex_start": 10242,
       "vertex_count": 10242,
       "activation_offset": 10242
     }

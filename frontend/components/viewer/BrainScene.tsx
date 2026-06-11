@@ -63,7 +63,7 @@ export function BrainScene({
               <HemisphereMesh
                 colors={leftColors}
                 hemisphere="left"
-                path={manifest.hemispheres.left.file}
+                path={manifest.hemispheres.left.path}
                 position={showRight ? [-0.72, 0, 0] : [0, 0, 0]}
               />
             ) : null}
@@ -71,7 +71,7 @@ export function BrainScene({
               <HemisphereMesh
                 colors={rightColors}
                 hemisphere="right"
-                path={manifest.hemispheres.right.file}
+                path={manifest.hemispheres.right.path}
                 position={showLeft ? [0.72, 0, 0] : [0, 0, 0]}
               />
             ) : null}

@@ -19,6 +19,8 @@ def test_build_manifest_matches_brain_asset_contract():
 
     assert manifest == {
         "surface": "fsaverage5",
+        "vertex_order": "left_then_right",
+        "total_vertex_count": 20484,
         "vertex_count": 20484,
         "left_vertex_count": 10242,
         "right_vertex_count": 10242,
@@ -32,12 +34,16 @@ def test_build_manifest_matches_brain_asset_contract():
         },
         "hemispheres": {
             "left": {
+                "path": "/brain/fsaverage5_left.gltf",
                 "file": "/brain/fsaverage5_left.gltf",
+                "vertex_start": 0,
                 "vertex_count": 10242,
                 "activation_offset": 0,
             },
             "right": {
+                "path": "/brain/fsaverage5_right.gltf",
                 "file": "/brain/fsaverage5_right.gltf",
+                "vertex_start": 10242,
                 "vertex_count": 10242,
                 "activation_offset": 10242,
             },

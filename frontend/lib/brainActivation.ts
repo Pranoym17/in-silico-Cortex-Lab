@@ -12,6 +12,11 @@ export type ActivationStats = {
   vertexCount: number;
 };
 
+export type ActivationManifestValidation = {
+  valid: boolean;
+  message: string | null;
+};
+
 export function getLatestActivationChunk(chunks: readonly DecodedActivationChunk[]): DecodedActivationChunk | null {
   return chunks.length > 0 ? chunks[chunks.length - 1] : null;
 }
@@ -114,6 +119,51 @@ export function getActivationStats(chunk: DecodedActivationChunk | null, frameIn
   };
 }
 
+export function validateActivationChunkAgainstManifest(
+  chunk: DecodedActivationChunk | null,
+  manifest: BrainMeshManifest | null
+): ActivationManifestValidation {
+  if (!chunk || !manifest) {
+    return { valid: true, message: null };
+  }
+
+  if (chunk.vertex_count !== manifest.total_vertex_count) {
+    return {
+      valid: false,
+      message: `Activation vertex count ${chunk.vertex_count} does not match mesh vertex count ${manifest.total_vertex_count}.`
+    };
+  }
+
+  if (chunk.shape[1] !== chunk.vertex_count) {
+    return {
+      valid: false,
+      message: `Activation shape declares ${chunk.shape[1]} vertices but chunk vertex_count is ${chunk.vertex_count}.`
+    };
+  }
+
+  if (manifest.hemispheres.left.vertex_start !== 0) {
+    return { valid: false, message: "Left hemisphere must start at activation index 0." };
+  }
+
+  if (manifest.hemispheres.right.vertex_start !== manifest.hemispheres.left.vertex_count) {
+    return {
+      valid: false,
+      message: `Right hemisphere must start at activation index ${manifest.hemispheres.left.vertex_count}.`
+    };
+  }
+
+  const expectedTotal =
+    manifest.hemispheres.right.vertex_start + manifest.hemispheres.right.vertex_count;
+  if (expectedTotal !== manifest.total_vertex_count) {
+    return {
+      valid: false,
+      message: `Hemisphere vertex ranges sum to ${expectedTotal}, not ${manifest.total_vertex_count}.`
+    };
+  }
+
+  return { valid: true, message: null };
+}
+
 export function getHemisphereActivationFrame(
   chunk: DecodedActivationChunk | null,
   manifest: BrainMeshManifest,
@@ -121,12 +171,12 @@ export function getHemisphereActivationFrame(
   frameIndex = 0
 ): Float32Array {
   const metadata = manifest.hemispheres[hemisphere];
-  if (!chunk || chunk.vertex_count < metadata.activation_offset + metadata.vertex_count) {
+  if (!chunk || !validateActivationChunkAgainstManifest(chunk, manifest).valid) {
     return new Float32Array(metadata.vertex_count);
   }
 
   const frame = getActivationFrame(chunk, frameIndex);
-  return frame.slice(metadata.activation_offset, metadata.activation_offset + metadata.vertex_count);
+  return frame.slice(metadata.vertex_start, metadata.vertex_start + metadata.vertex_count);
 }
 
 export function buildVertexColorBuffer(
