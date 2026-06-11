@@ -23,7 +23,9 @@ def test_build_manifest_matches_brain_asset_contract():
         "left_vertex_count": 10242,
         "right_vertex_count": 10242,
         "ordering": "left-then-right",
+        "ordering_rule": "left source vertex order, then right source vertex order",
         "atlas": "desikan-killiany",
+        "coordinate_units": "millimeters",
         "gltf": {
             "left": "/brain/fsaverage5_left.gltf",
             "right": "/brain/fsaverage5_right.gltf",
@@ -41,6 +43,21 @@ def test_build_manifest_matches_brain_asset_contract():
             },
         },
     }
+
+
+def test_build_manifest_can_record_real_mesh_source():
+    manifest = convert_mesh.build_manifest(
+        left_vertex_count=10242,
+        right_vertex_count=10242,
+        source="nilearn-fsaverage5",
+        atlas_source="unknown-placeholder",
+    )
+
+    assert manifest["source"] == "nilearn-fsaverage5"
+    assert manifest["atlas_source"] == "unknown-placeholder"
+    assert manifest["coordinate_units"] == "millimeters"
+    assert manifest["ordering_rule"] == "left source vertex order, then right source vertex order"
+    assert manifest["vertex_count"] == 20484
 
 
 def test_build_vertex_atlas_uses_global_left_then_right_indices():
@@ -79,3 +96,11 @@ def test_require_inputs_reports_missing_files():
 def test_normalize_region_name_adds_hemisphere_prefix():
     assert convert_mesh.normalize_region_name(hemisphere_prefix="Left", raw_name=b"bankssts") == "Left-bankssts"
     assert convert_mesh.normalize_region_name(hemisphere_prefix="Right", raw_name="unknown") == "Right-Unknown"
+
+
+def test_build_unknown_region_names_matches_vertex_count():
+    assert convert_mesh.build_unknown_region_names(vertex_count=3, hemisphere_prefix="Left") == [
+        "Left-Unknown",
+        "Left-Unknown",
+        "Left-Unknown",
+    ]

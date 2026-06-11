@@ -7,6 +7,8 @@ const manifest = {
   left_vertex_count: 10242,
   right_vertex_count: 10242,
   ordering: "left-then-right",
+  ordering_rule: "left source vertex order, then right source vertex order",
+  coordinate_units: "millimeters",
   atlas: "desikan-killiany",
   gltf: {
     left: "/brain/fsaverage5_left.gltf",
@@ -34,6 +36,15 @@ describe("brain asset validation", () => {
   it("rejects mismatched vertex counts", () => {
     expect(() => validateBrainManifest({ ...manifest, vertex_count: 10 })).toThrow(
       "Brain mesh manifest total vertex count must equal left plus right"
+    );
+  });
+
+  it("rejects invalid coordinate metadata", () => {
+    expect(() => validateBrainManifest({ ...manifest, coordinate_units: "meters" })).toThrow(
+      "Brain mesh manifest coordinate units must be millimeters"
+    );
+    expect(() => validateBrainManifest({ ...manifest, ordering_rule: "right-first" })).toThrow(
+      "Brain mesh manifest ordering rule is invalid"
     );
   });
 

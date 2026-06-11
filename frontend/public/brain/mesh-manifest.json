@@ -1,5 +1,7 @@
 {
   "atlas": "desikan-killiany",
+  "atlas_source": "unknown-placeholder",
+  "coordinate_units": "millimeters",
   "gltf": {
     "left": "/brain/fsaverage5_left.gltf",
     "right": "/brain/fsaverage5_right.gltf"
@@ -8,18 +10,19 @@
     "left": {
       "activation_offset": 0,
       "file": "/brain/fsaverage5_left.gltf",
-      "vertex_count": 8
+      "vertex_count": 10242
     },
     "right": {
-      "activation_offset": 8,
+      "activation_offset": 10242,
       "file": "/brain/fsaverage5_right.gltf",
-      "vertex_count": 8
+      "vertex_count": 10242
     }
   },
-  "left_vertex_count": 8,
+  "left_vertex_count": 10242,
   "ordering": "left-then-right",
-  "right_vertex_count": 8,
-  "source": "dev-fixture",
+  "ordering_rule": "left source vertex order, then right source vertex order",
+  "right_vertex_count": 10242,
+  "source": "nilearn-fsaverage5",
   "surface": "fsaverage5",
-  "vertex_count": 16
+  "vertex_count": 20484
 }

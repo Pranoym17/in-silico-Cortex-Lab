@@ -7,11 +7,15 @@ export type BrainHemisphereManifest = {
 };
 
 export type BrainMeshManifest = {
+  source?: string;
+  atlas_source?: string;
   surface: "fsaverage5";
   vertex_count: number;
   left_vertex_count: number;
   right_vertex_count: number;
   ordering: "left-then-right";
+  ordering_rule?: string;
+  coordinate_units?: "millimeters";
   atlas: "desikan-killiany";
   gltf: Record<HemisphereKey, string>;
   hemispheres: Record<HemisphereKey, BrainHemisphereManifest>;
@@ -49,6 +53,12 @@ export function validateBrainManifest(value: unknown): BrainMeshManifest {
   }
   if (manifest.ordering !== "left-then-right") {
     throw new Error("Brain mesh manifest ordering must be left-then-right");
+  }
+  if (manifest.ordering_rule !== undefined && manifest.ordering_rule !== "left source vertex order, then right source vertex order") {
+    throw new Error("Brain mesh manifest ordering rule is invalid");
+  }
+  if (manifest.coordinate_units !== undefined && manifest.coordinate_units !== "millimeters") {
+    throw new Error("Brain mesh manifest coordinate units must be millimeters");
   }
   if (!isPositiveInteger(manifest.left_vertex_count) || !isPositiveInteger(manifest.right_vertex_count)) {
     throw new Error("Brain mesh manifest hemisphere vertex counts must be positive integers");
