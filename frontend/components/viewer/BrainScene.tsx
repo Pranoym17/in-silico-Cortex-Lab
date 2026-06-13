@@ -1,6 +1,6 @@
 "use client";
 
-import { OrbitControls, useGLTF } from "@react-three/drei";
+import { Bounds, Center, OrbitControls, useGLTF } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Component, ReactNode, Suspense, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
@@ -21,7 +21,6 @@ type HemisphereMeshProps = {
   colors: Float32Array;
   hemisphere: HemisphereKey;
   path: string;
-  position: [number, number, number];
 };
 
 export function BrainScene({
@@ -54,28 +53,22 @@ export function BrainScene({
     <div className="brain-scene" aria-label="3D brain activation viewer">
       <WebGLErrorBoundary>
         <Suspense fallback={<div className="brain-loading">Loading brain mesh</div>}>
-          <Canvas camera={{ position: [0, 0.5, 5.25], fov: 42 }}>
+          <Canvas camera={{ position: [0, -180, 70], fov: 42 }}>
             <color attach="background" args={["#101114"]} />
             <ambientLight intensity={0.85} />
             <directionalLight position={[2, 4, 5]} intensity={1.4} />
             <directionalLight position={[-4, -2, 3]} intensity={0.45} />
-            {showLeft ? (
-              <HemisphereMesh
-                colors={leftColors}
-                hemisphere="left"
-                path={manifest.hemispheres.left.path}
-                position={showRight ? [-0.72, 0, 0] : [0, 0, 0]}
-              />
-            ) : null}
-            {showRight ? (
-              <HemisphereMesh
-                colors={rightColors}
-                hemisphere="right"
-                path={manifest.hemispheres.right.path}
-                position={showLeft ? [0.72, 0, 0] : [0, 0, 0]}
-              />
-            ) : null}
-            <OrbitControls enableDamping makeDefault maxDistance={8} minDistance={2.1} />
+            <Bounds fit clip observe margin={1.75}>
+              <Center>
+                {showLeft ? (
+                  <HemisphereMesh colors={leftColors} hemisphere="left" path={manifest.hemispheres.left.path} />
+                ) : null}
+                {showRight ? (
+                  <HemisphereMesh colors={rightColors} hemisphere="right" path={manifest.hemispheres.right.path} />
+                ) : null}
+              </Center>
+            </Bounds>
+            <OrbitControls enableDamping makeDefault maxDistance={500} minDistance={10} />
           </Canvas>
         </Suspense>
       </WebGLErrorBoundary>
@@ -109,7 +102,7 @@ function BrainSceneFallback({ reason }: { reason: string }) {
   );
 }
 
-function HemisphereMesh({ colors, hemisphere, path, position }: HemisphereMeshProps) {
+function HemisphereMesh({ colors, hemisphere, path }: HemisphereMeshProps) {
   const gltf = useGLTF(path);
   const sourceMesh = useMemo(() => findFirstMesh(gltf.scene), [gltf.scene]);
   const geometry = useMemo(() => sourceMesh?.geometry.clone() ?? null, [sourceMesh]);
@@ -140,7 +133,7 @@ function HemisphereMesh({ colors, hemisphere, path, position }: HemisphereMeshPr
   }
 
   return (
-    <mesh geometry={geometry} name={`${hemisphere}-hemisphere`} position={position}>
+    <mesh geometry={geometry} name={`${hemisphere}-hemisphere`}>
       <meshStandardMaterial roughness={0.82} metalness={0.03} vertexColors />
     </mesh>
   );

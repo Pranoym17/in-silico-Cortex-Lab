@@ -614,7 +614,8 @@ button:disabled {
 
 .brain-scene {
   position: relative;
-  min-height: calc(100vh - 130px);
+  min-height: 0;
+  height: 100%;
 }
 
 .brain-loading {
