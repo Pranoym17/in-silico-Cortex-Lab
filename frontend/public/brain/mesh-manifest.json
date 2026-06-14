@@ -1,6 +1,6 @@
 {
   "atlas": "desikan-killiany",
-  "atlas_source": "unknown-placeholder",
+  "atlas_source": "freesurfer-fsaverage-aparc-nearest-to-nilearn-fsaverage5",
   "coordinate_units": "millimeters",
   "gltf": {
     "left": "/brain/fsaverage5_left.gltf",
