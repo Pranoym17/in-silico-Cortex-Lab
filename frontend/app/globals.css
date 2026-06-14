@@ -643,6 +643,26 @@ button:disabled {
   color: var(--muted);
 }
 
+.brain-hover-tooltip {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  gap: 3px;
+  max-width: min(280px, calc(100% - 28px));
+  pointer-events: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(16, 17, 20, 0.92);
+  color: var(--foreground);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  font-size: 13px;
+}
+
+.brain-hover-tooltip span {
+  color: var(--muted);
+}
+
 .viewer-sidebar {
   align-self: start;
 }
@@ -663,6 +683,21 @@ button:disabled {
 
 .viewer-section h3 {
   margin: 0;
+}
+
+.viewer-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.viewer-section-header h3 {
+  margin: 0;
+}
+
+.viewer-section-header button {
+  padding: 6px 10px;
 }
 
 .viewer-stat-grid {

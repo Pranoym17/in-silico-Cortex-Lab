@@ -1,12 +1,17 @@
 "use client";
 
 import { Bounds, Center, OrbitControls, useGLTF } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, ThreeEvent } from "@react-three/fiber";
 import { Component, ReactNode, Suspense, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import { BrainMeshManifest, HemisphereKey } from "@/lib/brainAssets";
 import { ActivationDomain, buildHemisphereVertexColors } from "@/lib/brainActivation";
 import { DecodedActivationChunk } from "@/lib/sse";
+
+export type BrainPointerPosition = {
+  x: number;
+  y: number;
+};
 
 type BrainSceneProps = {
   manifest: BrainMeshManifest;
@@ -15,11 +20,16 @@ type BrainSceneProps = {
   showLeft?: boolean;
   showRight?: boolean;
   colorDomain?: ActivationDomain | null;
+  onVertexClick?: (vertexIndex: number) => void;
+  onVertexHover?: (vertexIndex: number | null, position: BrainPointerPosition | null) => void;
 };
 
 type HemisphereMeshProps = {
   colors: Float32Array;
   hemisphere: HemisphereKey;
+  manifest: BrainMeshManifest;
+  onVertexClick?: (vertexIndex: number) => void;
+  onVertexHover?: (vertexIndex: number | null, position: BrainPointerPosition | null) => void;
   path: string;
 };
 
@@ -29,7 +39,9 @@ export function BrainScene({
   frameIndex = 0,
   showLeft = true,
   showRight = true,
-  colorDomain = null
+  colorDomain = null,
+  onVertexClick,
+  onVertexHover
 }: BrainSceneProps) {
   const leftColors = useMemo(
     () => buildHemisphereVertexColors(chunk, manifest, "left", frameIndex, colorDomain),
@@ -61,10 +73,24 @@ export function BrainScene({
             <Bounds fit clip observe margin={1.75}>
               <Center>
                 {showLeft ? (
-                  <HemisphereMesh colors={leftColors} hemisphere="left" path={manifest.hemispheres.left.path} />
+                  <HemisphereMesh
+                    colors={leftColors}
+                    hemisphere="left"
+                    manifest={manifest}
+                    onVertexClick={onVertexClick}
+                    onVertexHover={onVertexHover}
+                    path={manifest.hemispheres.left.path}
+                  />
                 ) : null}
                 {showRight ? (
-                  <HemisphereMesh colors={rightColors} hemisphere="right" path={manifest.hemispheres.right.path} />
+                  <HemisphereMesh
+                    colors={rightColors}
+                    hemisphere="right"
+                    manifest={manifest}
+                    onVertexClick={onVertexClick}
+                    onVertexHover={onVertexHover}
+                    path={manifest.hemispheres.right.path}
+                  />
                 ) : null}
               </Center>
             </Bounds>
@@ -102,10 +128,11 @@ function BrainSceneFallback({ reason }: { reason: string }) {
   );
 }
 
-function HemisphereMesh({ colors, hemisphere, path }: HemisphereMeshProps) {
+function HemisphereMesh({ colors, hemisphere, manifest, onVertexClick, onVertexHover, path }: HemisphereMeshProps) {
   const gltf = useGLTF(path);
   const sourceMesh = useMemo(() => findFirstMesh(gltf.scene), [gltf.scene]);
   const geometry = useMemo(() => sourceMesh?.geometry.clone() ?? null, [sourceMesh]);
+  const vertexStart = manifest.hemispheres[hemisphere].vertex_start;
 
   useEffect(() => {
     if (!geometry) {
@@ -133,10 +160,76 @@ function HemisphereMesh({ colors, hemisphere, path }: HemisphereMeshProps) {
   }
 
   return (
-    <mesh geometry={geometry} name={`${hemisphere}-hemisphere`}>
+    <mesh
+      geometry={geometry}
+      name={`${hemisphere}-hemisphere`}
+      onClick={(event) => {
+        const vertexIndex = getGlobalVertexIndexFromPointerEvent(event, vertexStart);
+        if (vertexIndex === null) {
+          return;
+        }
+        event.stopPropagation();
+        onVertexClick?.(vertexIndex);
+      }}
+      onPointerMove={(event) => {
+        const vertexIndex = getGlobalVertexIndexFromPointerEvent(event, vertexStart);
+        if (vertexIndex === null) {
+          onVertexHover?.(null, null);
+          return;
+        }
+        event.stopPropagation();
+        onVertexHover?.(vertexIndex, { x: event.nativeEvent.offsetX, y: event.nativeEvent.offsetY });
+      }}
+      onPointerOut={() => onVertexHover?.(null, null)}
+    >
       <meshStandardMaterial roughness={0.82} metalness={0.03} vertexColors />
     </mesh>
   );
+}
+
+function getGlobalVertexIndexFromPointerEvent(
+  event: ThreeEvent<PointerEvent | MouseEvent>,
+  vertexStart: number
+): number | null {
+  const face = event.face;
+  const mesh = event.object;
+  if (!face || !(mesh instanceof THREE.Mesh) || !(mesh.geometry instanceof THREE.BufferGeometry)) {
+    return null;
+  }
+
+  const localPoint = mesh.worldToLocal(event.point.clone());
+  const localVertexIndex = getClosestFaceVertexIndex(mesh.geometry, face, localPoint);
+  return localVertexIndex === null ? null : vertexStart + localVertexIndex;
+}
+
+function getClosestFaceVertexIndex(
+  geometry: THREE.BufferGeometry,
+  face: THREE.Face,
+  localPoint: THREE.Vector3
+): number | null {
+  const position = geometry.getAttribute("position");
+  if (!position) {
+    return null;
+  }
+
+  const candidates = [face.a, face.b, face.c];
+  let closestIndex: number | null = null;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  const candidatePosition = new THREE.Vector3();
+
+  for (const candidate of candidates) {
+    if (candidate < 0 || candidate >= position.count) {
+      continue;
+    }
+    candidatePosition.fromBufferAttribute(position, candidate);
+    const distance = candidatePosition.distanceToSquared(localPoint);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = candidate;
+    }
+  }
+
+  return closestIndex;
 }
 
 function findFirstMesh(object: THREE.Object3D): THREE.Mesh<THREE.BufferGeometry> | null {
