@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { BrainMeshManifest, DesikanKillianyAtlas } from "./brainAssets";
 import {
+  compareTopConditions,
+  getRegionConditionSummaries,
   getHemisphereForVertex,
   getRegionActivationStats,
   getRegionForVertex,
   getRegionLabels,
+  getRegionMetadata,
+  getRegionPeak,
   getRegionTimecourse,
   getRegionVertices
 } from "./brainRegions";
@@ -65,6 +69,10 @@ function chunk(values: number[], timestepStart = 0, timestepCount = 1): DecodedA
   };
 }
 
+function blockChunk(blockId: string, values: number[], timestepStart = 0, timestepCount = 1): DecodedActivationChunk {
+  return { ...chunk(values, timestepStart, timestepCount), block_id: blockId };
+}
+
 describe("brainRegions", () => {
   it("maps global vertex indices to hemispheres", () => {
     expect(getHemisphereForVertex(0, manifest)).toBe("left");
@@ -109,5 +117,39 @@ describe("brainRegions", () => {
       { timestep: 5, mean: 4, vertexCount: 3 },
       { timestep: 6, mean: 7, vertexCount: 3 }
     ]);
+  });
+
+  it("finds the peak absolute region response", () => {
+    expect(
+      getRegionPeak([
+        { timestep: 0, mean: 0.2, vertexCount: 3 },
+        { timestep: 1, mean: -0.8, vertexCount: 3 },
+        { timestep: 2, mean: 0.5, vertexCount: 3 }
+      ])
+    ).toEqual({ timestep: 1, value: -0.8 });
+  });
+
+  it("returns atlas metadata for known and unknown labels", () => {
+    expect(getRegionMetadata("Left-precentral").knownFunction).toContain("motor");
+    expect(getRegionMetadata("Right-madeup").atlasDescription).toContain("Desikan-Killiany");
+  });
+
+  it("summarizes and compares region activation by streamed block", () => {
+    const summaries = getRegionConditionSummaries("Right-A", atlas, manifest, [
+      blockChunk("block_a", [0, 1, 2, 4, 8, 6, 0, 1, 3, 6, 9, 12], 0, 2),
+      blockChunk("block_b", [0, 1, -2, -4, 8, -6], 2, 1)
+    ]);
+
+    expect(summaries).toEqual([
+      { condition: "Condition 1", blockId: "block_a", mean: 5.5, peak: 7, samples: 2 },
+      { condition: "Condition 2", blockId: "block_b", mean: -4, peak: -4, samples: 1 }
+    ]);
+    expect(compareTopConditions(summaries)).toEqual({
+      conditionA: "Condition 1",
+      conditionB: "Condition 2",
+      meanDifference: 9.5,
+      peakDifference: 11,
+      dominantCondition: "Condition 1"
+    });
   });
 });

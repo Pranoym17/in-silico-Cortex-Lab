@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import {
   ActivationDomain,
+  getActivationFrame,
   getActivationDomain,
   getActivationStats,
   getChunkForTimestep,
@@ -19,7 +20,17 @@ import {
   getStreamedTimestepCount,
   validateActivationChunkAgainstManifest
 } from "@/lib/brainActivation";
-import { BrainRegionInfo, getRegionForVertex } from "@/lib/brainRegions";
+import {
+  BrainRegionInfo,
+  BrainRegionTimecoursePoint,
+  compareTopConditions,
+  getRegionActivationStats,
+  getRegionConditionSummaries,
+  getRegionForVertex,
+  getRegionMetadata,
+  getRegionPeak,
+  getRegionTimecourse
+} from "@/lib/brainRegions";
 import { streamJobEvents } from "@/lib/sse";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
@@ -27,6 +38,8 @@ import { useViewerStore } from "@/store/viewerStore";
 import { AppShell, ErrorPanel, StatusBadge } from "@/components/ui/AppShell";
 
 type ConnectionStatus = "idle" | "connecting" | "connected" | "disconnected";
+const MAX_SELECTED_REGIONS = 4;
+const REGION_COLORS = ["#8fb8ff", "#ff9f7c", "#93d8a3", "#d7a3ff"];
 
 export function ResultsViewer({ jobId }: { jobId: string }) {
   const accessToken = useAuthStore((state) => state.accessToken);
@@ -59,6 +72,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [hoveredVertex, setHoveredVertex] = useState<number | null>(null);
   const [hoverPosition, setHoverPosition] = useState<BrainPointerPosition | null>(null);
   const [selectedVertex, setSelectedVertex] = useState<number | null>(null);
+  const [selectedRegionLabels, setSelectedRegionLabels] = useState<string[]>([]);
   const latestChunk = getLatestActivationChunk(chunks);
   const streamedTimesteps = getStreamedTimestepCount(chunks);
   const maxSelectableTimestep = Math.max(0, streamedTimesteps - 1);
@@ -82,10 +96,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   );
   const renderableChunk = selectedValidation.valid ? selectedChunk ?? latestChunk : null;
   const selectedFrame = useMemo(
-    () => (renderableChunk ? renderableChunk.activations.slice(
-      selectedFrameIndex * renderableChunk.vertex_count,
-      selectedFrameIndex * renderableChunk.vertex_count + renderableChunk.vertex_count
-    ) : null),
+    () => (renderableChunk ? getActivationFrame(renderableChunk, selectedFrameIndex) : null),
     [renderableChunk, selectedFrameIndex]
   );
   const hoveredRegion = useMemo(
@@ -96,6 +107,42 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     () => getVertexRegionSnapshot(selectedVertex, atlas, manifest, selectedFrame),
     [atlas, manifest, selectedFrame, selectedVertex]
   );
+  const primaryRegionLabel = selectedRegion?.label ?? selectedRegionLabels[0] ?? null;
+  const primaryRegionStats = useMemo(
+    () =>
+      primaryRegionLabel && atlas && manifest
+        ? getRegionActivationStats(primaryRegionLabel, atlas, manifest, selectedChunk ?? latestChunk, selectedFrameIndex)
+        : null,
+    [atlas, latestChunk, manifest, primaryRegionLabel, selectedChunk, selectedFrameIndex]
+  );
+  const primaryRegionTimecourse = useMemo(
+    () => (primaryRegionLabel && atlas && manifest ? getRegionTimecourse(primaryRegionLabel, atlas, manifest, chunks) : []),
+    [atlas, chunks, manifest, primaryRegionLabel]
+  );
+  const primaryRegionPeak = useMemo(() => getRegionPeak(primaryRegionTimecourse), [primaryRegionTimecourse]);
+  const primaryRegionMetadata = useMemo(
+    () => (primaryRegionLabel ? getRegionMetadata(primaryRegionLabel) : null),
+    [primaryRegionLabel]
+  );
+  const selectedRegionTimecourses = useMemo(
+    () =>
+      atlas && manifest
+        ? selectedRegionLabels.map((label, index) => ({
+            label,
+            color: REGION_COLORS[index % REGION_COLORS.length],
+            points: getRegionTimecourse(label, atlas, manifest, chunks)
+          }))
+        : [],
+    [atlas, chunks, manifest, selectedRegionLabels]
+  );
+  const conditionSummaries = useMemo(
+    () =>
+      primaryRegionLabel && atlas && manifest
+        ? getRegionConditionSummaries(primaryRegionLabel, atlas, manifest, chunks)
+        : [],
+    [atlas, chunks, manifest, primaryRegionLabel]
+  );
+  const conditionComparison = useMemo(() => compareTopConditions(conditionSummaries), [conditionSummaries]);
   const manualDomainInvalid = useManualDomain && manualDomain === null;
   const shouldReconnect =
     Boolean(accessToken) && connectionStatus === "disconnected" && status !== "complete" && status !== "failed";
@@ -159,6 +206,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     setHoveredVertex(null);
     setHoverPosition(null);
     setSelectedVertex(null);
+    setSelectedRegionLabels([]);
   }, [jobId, resetJob]);
 
   useEffect(() => {
@@ -265,6 +313,30 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     }
   }
 
+  function selectVertex(vertexIndex: number) {
+    setSelectedVertex(vertexIndex);
+    if (!atlas || !manifest) {
+      return;
+    }
+
+    const region = getRegionForVertex(atlas, manifest, vertexIndex);
+    if (!region) {
+      return;
+    }
+
+    setSelectedRegionLabels((labels) => {
+      const withoutDuplicate = labels.filter((label) => label !== region.label);
+      return [region.label, ...withoutDuplicate].slice(0, MAX_SELECTED_REGIONS);
+    });
+  }
+
+  function removeSelectedRegion(label: string) {
+    setSelectedRegionLabels((labels) => labels.filter((current) => current !== label));
+    if (selectedRegion?.label === label) {
+      setSelectedVertex(null);
+    }
+  }
+
   return (
     <AppShell
       title="Viewer"
@@ -289,7 +361,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               chunk={renderableChunk}
               frameIndex={selectedFrameIndex}
               manifest={manifest}
-              onVertexClick={(vertexIndex) => setSelectedVertex(vertexIndex)}
+              onVertexClick={selectVertex}
               onVertexHover={(vertexIndex, position) => {
                 setHoveredVertex(vertexIndex);
                 setHoverPosition(position);
@@ -441,32 +513,155 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           {!selectedValidation.valid ? <ErrorPanel message={selectedValidation.message ?? "Activation mesh validation failed."} /> : null}
           <div className="viewer-section">
             <div className="viewer-section-header">
-              <h3>Selected Region</h3>
-              <button disabled={!selectedRegion} onClick={() => setSelectedVertex(null)} type="button">
-                Clear
+              <h3>Region</h3>
+              <button
+                disabled={selectedRegionLabels.length === 0}
+                onClick={() => {
+                  setSelectedRegionLabels([]);
+                  setSelectedVertex(null);
+                }}
+                type="button"
+              >
+                Clear all
               </button>
             </div>
-            {selectedRegion ? (
-              <div className="viewer-stat-grid">
-                <div>
-                  <span>Region</span>
-                  <strong>{selectedRegion.label}</strong>
-                </div>
-                <div>
-                  <span>Hemisphere</span>
-                  <strong>{formatHemisphere(selectedRegion.hemisphere)}</strong>
-                </div>
-                <div>
-                  <span>Vertex</span>
-                  <strong>{selectedRegion.vertexIndex}</strong>
-                </div>
-                <div>
-                  <span>Activation</span>
-                  <strong>{formatActivationValue(selectedRegion.activationValue)}</strong>
-                </div>
+            {selectedRegionLabels.length > 0 ? (
+              <div className="region-chip-row">
+                {selectedRegionLabels.map((label, index) => (
+                  <button
+                    className={label === primaryRegionLabel ? "region-chip active" : "region-chip"}
+                    key={label}
+                    onClick={() => setSelectedRegionLabels((labels) => [label, ...labels.filter((item) => item !== label)])}
+                    style={{ borderColor: REGION_COLORS[index % REGION_COLORS.length] }}
+                    type="button"
+                  >
+                    <span>{label}</span>
+                    <span aria-label={`Remove ${label}`} onClick={(event) => {
+                      event.stopPropagation();
+                      removeSelectedRegion(label);
+                    }}>
+                      x
+                    </span>
+                  </button>
+                ))}
               </div>
             ) : (
-              <p>Click a cortical region to pin it.</p>
+              <p>Click a cortical region to pin it. Up to {MAX_SELECTED_REGIONS} regions can be compared.</p>
+            )}
+            {primaryRegionLabel && primaryRegionStats && primaryRegionMetadata ? (
+              <>
+                <div className="viewer-stat-grid">
+                  <div>
+                    <span>Region</span>
+                    <strong>{primaryRegionLabel}</strong>
+                  </div>
+                  <div>
+                    <span>Hemisphere</span>
+                    <strong>{formatHemisphere(primaryRegionStats.hemisphere)}</strong>
+                  </div>
+                  <div>
+                    <span>Current</span>
+                    <strong>{selectedRegion ? formatActivationValue(selectedRegion.activationValue) : formatStatValue(primaryRegionStats.mean)}</strong>
+                  </div>
+                  <div>
+                    <span>Mean</span>
+                    <strong>{formatStatValue(primaryRegionStats.mean)}</strong>
+                  </div>
+                  <div>
+                    <span>Min / Max</span>
+                    <strong>
+                      {formatStatValue(primaryRegionStats.min)} / {formatStatValue(primaryRegionStats.max)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Peak timestep</span>
+                    <strong>
+                      {primaryRegionPeak.timestep === null
+                        ? "none"
+                        : `${primaryRegionPeak.timestep} (${formatStatValue(primaryRegionPeak.value)})`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Vertices</span>
+                    <strong>{primaryRegionStats.vertexCount}</strong>
+                  </div>
+                  <div>
+                    <span>Atlas</span>
+                    <strong>Desikan-Killiany</strong>
+                  </div>
+                </div>
+                <div className="region-metadata">
+                  <strong>Known function</strong>
+                  <p>{primaryRegionMetadata.knownFunction}</p>
+                  <strong>Atlas description</strong>
+                  <p>{primaryRegionMetadata.atlasDescription}</p>
+                  <strong>Notes</strong>
+                  <p>{primaryRegionMetadata.notes}</p>
+                </div>
+              </>
+            ) : null}
+          </div>
+          <div className="viewer-section">
+            <h3>Timecourse</h3>
+            {selectedRegionTimecourses.length > 0 ? (
+              <>
+                <RegionTimecourseChart
+                  currentTimestep={selectedTimestep}
+                  series={selectedRegionTimecourses}
+                />
+                <div className="region-chart-legend">
+                  {selectedRegionTimecourses.map((series) => (
+                    <span key={series.label}>
+                      <i style={{ background: series.color }} />
+                      {series.label}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p>Select a region to plot its mean activation over time.</p>
+            )}
+          </div>
+          <div className="viewer-section">
+            <h3>Condition Comparison</h3>
+            {conditionSummaries.length > 0 ? (
+              <>
+                <div className="viewer-stat-grid">
+                  {conditionSummaries.slice(0, 4).map((summary) => (
+                    <div key={summary.blockId}>
+                      <span>{summary.condition}</span>
+                      <strong>{formatStatValue(summary.mean)}</strong>
+                      <span>peak {formatStatValue(summary.peak)}</span>
+                    </div>
+                  ))}
+                </div>
+                {conditionComparison ? (
+                  <div className="viewer-stat-grid">
+                    <div>
+                      <span>Mean difference</span>
+                      <strong>{formatStatValue(conditionComparison.meanDifference)}</strong>
+                    </div>
+                    <div>
+                      <span>Peak difference</span>
+                      <strong>{formatStatValue(conditionComparison.peakDifference)}</strong>
+                    </div>
+                    <div>
+                      <span>Dominant</span>
+                      <strong>{conditionComparison.dominantCondition}</strong>
+                    </div>
+                    <div>
+                      <span>Compared</span>
+                      <strong>
+                        {conditionComparison.conditionA} vs {conditionComparison.conditionB}
+                      </strong>
+                    </div>
+                  </div>
+                ) : (
+                  <p>Run at least two blocks to compare conditions.</p>
+                )}
+              </>
+            ) : (
+              <p>Select a region after streamed data arrives to aggregate block responses.</p>
             )}
           </div>
           <div className="viewer-section">
@@ -558,6 +753,60 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   );
 }
 
+function RegionTimecourseChart({
+  currentTimestep,
+  series
+}: {
+  currentTimestep: number;
+  series: readonly { label: string; color: string; points: readonly BrainRegionTimecoursePoint[] }[];
+}) {
+  const allPoints = series.flatMap((item) => item.points);
+  if (allPoints.length === 0) {
+    return <div className="region-chart empty">Waiting for region timecourse data.</div>;
+  }
+
+  const minTimestep = Math.min(...allPoints.map((point) => point.timestep));
+  const maxTimestep = Math.max(...allPoints.map((point) => point.timestep));
+  const minValue = Math.min(...allPoints.map((point) => point.mean), 0);
+  const maxValue = Math.max(...allPoints.map((point) => point.mean), 0);
+  const valuePadding = Math.max(0.05, (maxValue - minValue) * 0.08);
+  const yMin = minValue - valuePadding;
+  const yMax = maxValue + valuePadding;
+  const x = (timestep: number) => scaleValue(timestep, minTimestep, maxTimestep, 24, 376);
+  const y = (value: number) => scaleValue(value, yMin, yMax, 136, 16);
+  const markerX = x(currentTimestep);
+
+  return (
+    <svg className="region-chart" role="img" viewBox="0 0 400 152">
+      <line className="region-chart-axis" x1="24" x2="376" y1={y(0)} y2={y(0)} />
+      <line className="region-chart-marker" x1={markerX} x2={markerX} y1="12" y2="140" />
+      {series.map((item) => (
+        <polyline
+          fill="none"
+          key={item.label}
+          points={item.points.map((point) => `${x(point.timestep)},${y(point.mean)}`).join(" ")}
+          stroke={item.color}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2.5"
+        />
+      ))}
+      <text x="24" y="148">
+        {minTimestep}
+      </text>
+      <text textAnchor="end" x="376" y="148">
+        {maxTimestep}
+      </text>
+      <text x="28" y="14">
+        {formatStatValue(yMax)}
+      </text>
+      <text x="28" y="134">
+        {formatStatValue(yMin)}
+      </text>
+    </svg>
+  );
+}
+
 function parseManualDomain(minValue: string, maxValue: string): ActivationDomain | null {
   const min = Number(minValue);
   const max = Number(maxValue);
@@ -603,8 +852,21 @@ function getVertexRegionSnapshot(
   };
 }
 
+function scaleValue(value: number, inputMin: number, inputMax: number, outputMin: number, outputMax: number) {
+  if (inputMin === inputMax) {
+    return (outputMin + outputMax) / 2;
+  }
+  return outputMin + ((value - inputMin) / (inputMax - inputMin)) * (outputMax - outputMin);
+}
+
 function formatHemisphere(hemisphere: string) {
-  return hemisphere === "left" ? "Left hemisphere" : "Right hemisphere";
+  if (hemisphere === "left") {
+    return "Left hemisphere";
+  }
+  if (hemisphere === "right") {
+    return "Right hemisphere";
+  }
+  return "Bilateral";
 }
 
 function formatActivationValue(value: number | null) {

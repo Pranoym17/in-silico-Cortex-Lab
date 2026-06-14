@@ -700,6 +700,103 @@ button:disabled {
   padding: 6px 10px;
 }
 
+.region-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.region-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 9px;
+  font-size: 13px;
+}
+
+.region-chip.active {
+  background: #1b2028;
+}
+
+.region-chip span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.region-chip span:last-child {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.region-metadata {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #111319;
+}
+
+.region-metadata strong {
+  font-size: 13px;
+}
+
+.region-metadata p {
+  margin: 0;
+}
+
+.region-chart {
+  width: 100%;
+  min-height: 152px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #101114;
+}
+
+.region-chart.empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.region-chart text {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.region-chart-axis {
+  stroke: #3a404b;
+  stroke-width: 1;
+}
+
+.region-chart-marker {
+  stroke: #eef0f4;
+  stroke-dasharray: 4 4;
+  stroke-opacity: 0.55;
+  stroke-width: 1;
+}
+
+.region-chart-legend {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.region-chart-legend span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.region-chart-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
 .viewer-stat-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
