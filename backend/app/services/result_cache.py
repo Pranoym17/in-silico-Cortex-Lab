@@ -1,10 +1,13 @@
 from typing import Any
+import logging
 
 import redis
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.config import get_settings
 from app.models.result import Result
+
+logger = logging.getLogger(__name__)
 
 
 class CachedResult(BaseModel):
@@ -34,14 +37,19 @@ def get_cached_result(content_hash: str) -> CachedResult | None:
         return None
 
     cache_key = cache_key_for_content_hash(content_hash)
-    raw_value = _redis_client().get(cache_key)
+    try:
+        raw_value = _redis_client().get(cache_key)
+    except Exception as exc:
+        logger.warning("Result cache lookup failed; continuing without cache", extra={"cache_key": cache_key}, exc_info=exc)
+        return None
+
     if raw_value is None:
         return None
 
     try:
         return CachedResult.model_validate_json(raw_value)
     except (ValidationError, ValueError, TypeError):
-        _redis_client().delete(cache_key)
+        delete_cached_result(content_hash)
         return None
 
 
@@ -61,11 +69,23 @@ def set_cached_result(content_hash: str, result: Result) -> None:
         model_version=result.model_version,
         metadata_json=result.metadata_json,
     )
-    _redis_client().setex(
-        cache_key_for_content_hash(content_hash),
-        get_settings().result_cache_ttl_seconds,
-        cached.model_dump_json(),
-    )
+    cache_key = cache_key_for_content_hash(content_hash)
+    try:
+        _redis_client().setex(
+            cache_key,
+            get_settings().result_cache_ttl_seconds,
+            cached.model_dump_json(),
+        )
+    except Exception as exc:
+        logger.warning("Result cache write failed; result remains available from S3", extra={"cache_key": cache_key}, exc_info=exc)
+
+
+def delete_cached_result(content_hash: str) -> None:
+    cache_key = cache_key_for_content_hash(content_hash)
+    try:
+        _redis_client().delete(cache_key)
+    except Exception as exc:
+        logger.warning("Result cache delete failed", extra={"cache_key": cache_key}, exc_info=exc)
 
 
 def cached_result_to_metadata(cached: CachedResult) -> dict[str, Any]:

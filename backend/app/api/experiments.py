@@ -20,7 +20,8 @@ from app.services.experiments import (
 )
 from app.services.job_dispatch import dispatch_inference_job
 from app.services.jobs import create_job_from_experiment, list_jobs_for_experiment
-from app.services.result_cache import get_cached_result
+from app.services.result_cache import delete_cached_result, get_cached_result
+from app.services.result_storage import ResultStorageError, result_artifact_exists
 from app.services.job_processing import complete_job_from_cached_result
 
 router = APIRouter()
@@ -168,4 +169,15 @@ def get_run_cache_hit(run_spec: dict):
     if not isinstance(content_hash, str) or not content_hash.strip():
         return None
 
-    return get_cached_result(content_hash)
+    cached = get_cached_result(content_hash)
+    if cached is None:
+        return None
+
+    try:
+        if result_artifact_exists(cached.s3_key):
+            return cached
+    except ResultStorageError:
+        return None
+
+    delete_cached_result(content_hash)
+    return None

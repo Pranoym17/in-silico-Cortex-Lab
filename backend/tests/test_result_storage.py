@@ -9,6 +9,7 @@ from app.services.result_storage import (
     ActivationMatrixAssembler,
     ResultStorageError,
     create_result_download_url,
+    result_artifact_exists,
     store_job_result,
 )
 
@@ -78,6 +79,37 @@ def test_create_result_download_url_uses_configured_bucket_and_expiry(monkeypatc
         "ExpiresIn": 120,
         "HttpMethod": "GET",
     }
+    result_storage.get_settings.cache_clear()
+
+
+def test_result_artifact_exists_checks_s3(monkeypatch):
+    class FakeS3Client:
+        def head_object(self, **kwargs):
+            return {"ResponseMetadata": {"HTTPStatusCode": 200}}
+
+    monkeypatch.setattr(result_storage, "_s3_client", lambda: FakeS3Client())
+    result_storage.get_settings.cache_clear()
+    monkeypatch.setenv("S3_BUCKET_NAME", "cortexlab-results")
+
+    assert result_artifact_exists("results/job-1/activations.npz") is True
+    result_storage.get_settings.cache_clear()
+
+
+def test_result_artifact_exists_returns_false_for_missing_s3_object(monkeypatch):
+    from botocore.exceptions import ClientError
+
+    class FakeS3Client:
+        def head_object(self, **kwargs):
+            raise ClientError(
+                {"Error": {"Code": "NoSuchKey"}, "ResponseMetadata": {"HTTPStatusCode": 404}},
+                "HeadObject",
+            )
+
+    monkeypatch.setattr(result_storage, "_s3_client", lambda: FakeS3Client())
+    result_storage.get_settings.cache_clear()
+    monkeypatch.setenv("S3_BUCKET_NAME", "cortexlab-results")
+
+    assert result_artifact_exists("results/missing/activations.npz") is False
     result_storage.get_settings.cache_clear()
 
 

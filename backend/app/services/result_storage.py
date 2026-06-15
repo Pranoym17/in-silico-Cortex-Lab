@@ -3,6 +3,7 @@ from typing import Any
 
 import boto3
 import numpy as np
+from botocore.exceptions import ClientError
 from numpy.typing import NDArray
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +45,20 @@ def create_result_download_url(s3_key: str) -> str:
         ExpiresIn=settings.result_download_expires_seconds,
         HttpMethod="GET",
     )
+
+
+def result_artifact_exists(s3_key: str) -> bool:
+    try:
+        _s3_client().head_object(Bucket=get_settings().s3_bucket_name, Key=s3_key)
+        return True
+    except ClientError as exc:
+        status_code = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        error_code = exc.response.get("Error", {}).get("Code")
+        if status_code == 404 or error_code in {"404", "NoSuchKey", "NotFound"}:
+            return False
+        raise ResultStorageError(f"Failed to check result artifact: {exc}") from exc
+    except Exception as exc:
+        raise ResultStorageError(f"Failed to check result artifact: {exc}") from exc
 
 
 class ActivationMatrixAssembler:

@@ -22,6 +22,17 @@ class FakeRedis:
         self.values.pop(key, None)
 
 
+class FailingRedis:
+    def get(self, key):
+        raise ConnectionError("redis down")
+
+    def setex(self, key, ttl, value):
+        raise ConnectionError("redis down")
+
+    def delete(self, key):
+        raise ConnectionError("redis down")
+
+
 def test_cache_key_for_content_hash():
     assert cache_key_for_content_hash(" sha256:abc ") == "tribe:v2:sha256:abc"
 
@@ -66,3 +77,31 @@ def test_get_cached_result_deletes_corrupt_cache(monkeypatch):
 
     assert cached is None
     assert fake_redis.deleted == ["tribe:v2:sha256:bad"]
+
+
+def test_get_cached_result_treats_redis_down_as_cache_miss(monkeypatch):
+    monkeypatch.setattr("app.services.result_cache._redis_client", lambda: FailingRedis())
+
+    assert get_cached_result("sha256:any") is None
+
+
+def test_set_cached_result_treats_redis_down_as_nonfatal(monkeypatch):
+    result_cache.get_settings.cache_clear()
+    monkeypatch.setenv("RESULT_CACHE_ENABLED", "true")
+    monkeypatch.setattr("app.services.result_cache._redis_client", lambda: FailingRedis())
+
+    result = SimpleNamespace(
+        s3_key="results/job-1/activations.npz",
+        format="npz",
+        dtype="float32",
+        shape=[4, 20484],
+        vertex_count=20484,
+        timestep_count=4,
+        sample_rate_hz=2.0,
+        model_name="tribev2",
+        model_version="v2",
+        metadata_json={"surface": "fsaverage5"},
+    )
+
+    set_cached_result("sha256:abc", result)
+    result_cache.get_settings.cache_clear()
