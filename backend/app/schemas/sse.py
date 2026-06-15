@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.models.job import JobStatus
+from app.services.error_codes import JobErrorCode
 
 
 ActivationEncoding = Literal["base64-msgpack"]
@@ -42,7 +43,7 @@ class CompleteEvent(BaseModel):
 
 class ErrorEvent(BaseModel):
     job_id: str
-    code: str
+    code: JobErrorCode
     message: str
     retryable: bool
     last_timestep: int | None = Field(default=None, ge=0)
