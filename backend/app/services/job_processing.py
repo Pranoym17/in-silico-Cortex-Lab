@@ -344,6 +344,8 @@ async def process_modal_inference_job(
     app_name: str,
     function_name: str,
     environment_name: str | None = None,
+    timeout_seconds: int | None = None,
+    max_attempts: int = 1,
 ) -> Job:
     broker = broker or get_job_event_broker()
     job = await get_job_for_processing(session, job_id)
@@ -392,6 +394,8 @@ async def process_modal_inference_job(
             function_name=function_name,
             environment_name=environment_name,
             spec=modal_spec,
+            timeout_seconds=timeout_seconds,
+            max_attempts=max_attempts,
         ):
             event_type = event.get("type")
 
@@ -557,6 +561,8 @@ async def process_configured_inference_job(
             app_name=settings.modal_app_name,
             function_name=settings.modal_function_name,
             environment_name=settings.modal_environment_name,
+            timeout_seconds=settings.modal_call_timeout_seconds,
+            max_attempts=settings.modal_call_max_attempts,
         )
     raise ValueError(f"Unsupported inference provider: {settings.inference_provider}")
 

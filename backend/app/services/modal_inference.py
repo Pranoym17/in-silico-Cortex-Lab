@@ -47,6 +47,8 @@ async def stream_deployed_modal_events(
     function_name: str,
     spec: dict[str, Any],
     environment_name: str | None = None,
+    timeout_seconds: int | None = None,
+    max_attempts: int = 1,
 ) -> AsyncIterator[dict[str, Any]]:
     try:
         import modal
@@ -55,31 +57,69 @@ async def stream_deployed_modal_events(
             "Modal provider selected, but the modal package is not installed in the backend environment."
         ) from exc
 
-    try:
-        function = modal.Function.from_name(app_name, function_name, environment_name=environment_name)
-        remote_gen_aio = getattr(function.remote_gen, "aio", None)
-        if callable(remote_gen_aio):
-            stream = remote_gen_aio(spec)
-            async for event in stream:
-                yield validate_modal_event(event)
+    attempts = max(1, max_attempts)
+    for attempt in range(1, attempts + 1):
+        yielded_chunk = False
+        try:
+            function = modal.Function.from_name(app_name, function_name, environment_name=environment_name)
+            async for event in _stream_modal_function_events(function, spec, timeout_seconds=timeout_seconds):
+                if event.get("type") == "chunk":
+                    yielded_chunk = True
+                yield event
             return
-
-        stream = function.remote_gen(spec)
-        if hasattr(stream, "__aiter__"):
-            async for event in stream:
-                yield validate_modal_event(event)
-            return
-
-        events = await asyncio.to_thread(list, stream)
-        for event in events:
-            yield validate_modal_event(event)
-    except ModalInferenceError:
-        raise
-    except Exception as exc:
-        raise ModalInferenceError(f"Modal inference call failed: {exc}") from exc
+        except Exception as exc:
+            if attempt < attempts and not yielded_chunk and is_retryable_modal_exception(exc):
+                continue
+            if isinstance(exc, ModalInferenceError):
+                raise
+            raise ModalInferenceError(f"Modal inference call failed: {exc}") from exc
 
 
 def validate_modal_event(event: Any) -> dict[str, Any]:
     if not isinstance(event, dict):
         raise ModalInferenceError(f"Modal yielded unsupported event type: {type(event).__name__}")
     return event
+
+
+async def _stream_modal_function_events(function: Any, spec: dict[str, Any], *, timeout_seconds: int | None):
+    remote_gen_aio = getattr(function.remote_gen, "aio", None)
+    if callable(remote_gen_aio):
+        async for event in _iterate_async_stream(remote_gen_aio(spec), timeout_seconds=timeout_seconds):
+            yield validate_modal_event(event)
+        return
+
+    stream = function.remote_gen(spec)
+    if hasattr(stream, "__aiter__"):
+        async for event in _iterate_async_stream(stream, timeout_seconds=timeout_seconds):
+            yield validate_modal_event(event)
+        return
+
+    try:
+        if timeout_seconds is None:
+            events = await asyncio.to_thread(list, stream)
+        else:
+            events = await asyncio.wait_for(asyncio.to_thread(list, stream), timeout=timeout_seconds)
+    except TimeoutError as exc:
+        raise ModalInferenceError(f"Modal inference timed out after {timeout_seconds} seconds.") from exc
+    for event in events:
+        yield validate_modal_event(event)
+
+
+async def _iterate_async_stream(stream: Any, *, timeout_seconds: int | None):
+    iterator = stream.__aiter__()
+    while True:
+        try:
+            if timeout_seconds is None:
+                event = await iterator.__anext__()
+            else:
+                event = await asyncio.wait_for(iterator.__anext__(), timeout=timeout_seconds)
+        except StopAsyncIteration:
+            return
+        except TimeoutError as exc:
+            raise ModalInferenceError(f"Modal inference timed out after {timeout_seconds} seconds.") from exc
+        yield event
+
+
+def is_retryable_modal_exception(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(token in message for token in ("timeout", "timed out", "temporarily unavailable", "connection", "503", "502", "504"))

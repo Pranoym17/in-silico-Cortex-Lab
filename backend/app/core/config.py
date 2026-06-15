@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     modal_app_name: str = "cortex-lab-tribe-inference"
     modal_function_name: str = "run"
     modal_environment_name: str | None = None
+    modal_call_timeout_seconds: int = 300
+    modal_call_max_attempts: int = 2
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

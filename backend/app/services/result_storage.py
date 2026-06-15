@@ -137,15 +137,21 @@ async def store_job_result(
     result_metadata = metadata or {}
     payload = serialize_activation_npz(matrix, sample_rate_hz=sample_rate_hz, metadata=result_metadata)
 
-    try:
-        _s3_client().put_object(
-            Bucket=get_settings().s3_bucket_name,
-            Key=s3_key,
-            Body=payload,
-            ContentType="application/octet-stream",
-        )
-    except Exception as exc:
-        raise ResultStorageError(f"Failed to store result artifact: {exc}") from exc
+    last_error: Exception | None = None
+    for _attempt in range(2):
+        try:
+            _s3_client().put_object(
+                Bucket=get_settings().s3_bucket_name,
+                Key=s3_key,
+                Body=payload,
+                ContentType="application/octet-stream",
+            )
+            last_error = None
+            break
+        except Exception as exc:
+            last_error = exc
+    if last_error is not None:
+        raise ResultStorageError(f"Failed to store result artifact: {last_error}") from last_error
 
     result = Result(
         job_id=job.id,

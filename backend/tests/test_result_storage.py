@@ -161,3 +161,35 @@ async def test_store_job_result_writes_npz_and_result_row(monkeypatch):
     assert result.model_version == "test"
     assert result.metadata_json == {"surface": "fsaverage5"}
     result_storage.get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_store_job_result_retries_transient_s3_put_failure(monkeypatch):
+    attempts = {"count": 0}
+
+    class FakeS3Client:
+        def put_object(self, **kwargs):
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise RuntimeError("temporarily unavailable")
+
+    job = SimpleNamespace(id=uuid4(), experiment_id=uuid4(), owner_id=uuid4())
+    session = SimpleNamespace(added=[], add=lambda result: session.added.append(result), flush=lambda: None)
+
+    async def fake_flush():
+        return None
+
+    session.flush = fake_flush
+    monkeypatch.setattr(result_storage, "_s3_client", lambda: FakeS3Client())
+    result_storage.get_settings.cache_clear()
+    monkeypatch.setenv("S3_BUCKET_NAME", "cortexlab-results")
+
+    await store_job_result(
+        session,
+        job,
+        np.array([[1.0, 2.0]], dtype=np.float32),
+        sample_rate_hz=2,
+    )
+
+    assert attempts["count"] == 2
+    result_storage.get_settings.cache_clear()

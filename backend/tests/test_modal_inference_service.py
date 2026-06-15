@@ -126,3 +126,59 @@ async def test_stream_deployed_modal_events_accepts_async_remote_generator(monke
     ]
 
     assert events == [{"type": "warming", "job_id": "job-1"}]
+
+
+@pytest.mark.asyncio
+async def test_stream_deployed_modal_events_retries_transient_failure_before_chunks(monkeypatch):
+    attempts = {"count": 0}
+
+    class FakeFunction:
+        async def remote_gen(self, spec):
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise RuntimeError("connection temporarily unavailable")
+            yield {"type": "warming", "job_id": spec["job_id"]}
+
+    fake_modal = SimpleNamespace(
+        Function=SimpleNamespace(from_name=lambda *args, **kwargs: FakeFunction()),
+    )
+    monkeypatch.setitem(sys.modules, "modal", fake_modal)
+
+    events = [
+        event
+        async for event in stream_deployed_modal_events(
+            app_name="app",
+            function_name="run_real",
+            spec={"job_id": "job-1"},
+            max_attempts=2,
+        )
+    ]
+
+    assert attempts["count"] == 2
+    assert events == [{"type": "warming", "job_id": "job-1"}]
+
+
+@pytest.mark.asyncio
+async def test_stream_deployed_modal_events_maps_async_timeout(monkeypatch):
+    class FakeFunction:
+        async def remote_gen(self, spec):
+            import asyncio
+
+            await asyncio.sleep(0.05)
+            yield {"type": "warming", "job_id": spec["job_id"]}
+
+    fake_modal = SimpleNamespace(
+        Function=SimpleNamespace(from_name=lambda *args, **kwargs: FakeFunction()),
+    )
+    monkeypatch.setitem(sys.modules, "modal", fake_modal)
+
+    with pytest.raises(ModalInferenceError, match="timed out"):
+        [
+            event
+            async for event in stream_deployed_modal_events(
+                app_name="app",
+                function_name="run_real",
+                spec={"job_id": "job-1"},
+                timeout_seconds=0.001,
+            )
+        ]
