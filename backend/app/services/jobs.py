@@ -1,4 +1,5 @@
 from typing import Any
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -9,9 +10,11 @@ from app.models.block import Block
 from app.models.experiment import ExperimentStatus
 from app.models.job import Job, JobStatus
 from app.models.user import User
+from app.schemas.sse import ErrorEvent
 from app.schemas.run import RunExperimentRequest, RunSettings
 from app.services.blocks import list_blocks
 from app.services.experiments import get_owned_experiment
+from app.services.sse_broker import JobEventBroker, get_job_event_broker
 
 
 def _required_payload_string(block: Block, key: str, label: str) -> str:
@@ -99,6 +102,36 @@ async def get_owned_job(session: AsyncSession, owner: User, job_id: UUID) -> Job
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    return job
+
+
+async def cancel_owned_job(
+    session: AsyncSession,
+    owner: User,
+    job_id: UUID,
+    broker: JobEventBroker | None = None,
+) -> Job:
+    broker = broker or get_job_event_broker()
+    job = await get_owned_job(session, owner, job_id)
+    if job.status in {JobStatus.complete, JobStatus.failed, JobStatus.cancelled}:
+        return job
+
+    job.status = JobStatus.cancelled
+    job.error_code = "cancelled"
+    job.error_message = "Job was cancelled by the user."
+    job.completed_at = datetime.now(UTC)
+    await session.commit()
+    await session.refresh(job)
+    await broker.publish(
+        job.id,
+        "error",
+        ErrorEvent(
+            job_id=str(job.id),
+            code="cancelled",
+            message="Job was cancelled by the user.",
+            retryable=False,
+        ).model_dump(mode="json"),
+    )
     return job
 
 

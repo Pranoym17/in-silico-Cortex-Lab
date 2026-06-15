@@ -3,7 +3,7 @@ import { decodeActivationChunk, DecodedActivationChunk, JobStreamEvent } from ".
 
 type ViewerState = {
   jobId: string | null;
-  status: "idle" | "queued" | "warming" | "running" | "complete" | "failed";
+  status: "idle" | "queued" | "warming" | "running" | "complete" | "failed" | "cancelled";
   timestep: number;
   completedBlocks: number;
   totalBlocks: number;
@@ -89,7 +89,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
       return {
         ...base,
         jobId: event.data.job_id,
-        status: "failed",
+        status: event.data.code === "cancelled" ? "cancelled" : "failed",
         error: event.data.message
       };
     })

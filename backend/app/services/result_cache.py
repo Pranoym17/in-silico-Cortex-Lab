@@ -40,15 +40,19 @@ def get_cached_result(content_hash: str) -> CachedResult | None:
     try:
         raw_value = _redis_client().get(cache_key)
     except Exception as exc:
-        logger.warning("Result cache lookup failed; continuing without cache", extra={"cache_key": cache_key}, exc_info=exc)
+        logger.warning("cache_lookup_error", extra={"cache_key": cache_key}, exc_info=exc)
         return None
 
     if raw_value is None:
+        logger.info("cache_lookup_miss", extra={"cache_key": cache_key})
         return None
 
     try:
-        return CachedResult.model_validate_json(raw_value)
+        cached = CachedResult.model_validate_json(raw_value)
+        logger.info("cache_lookup_hit", extra={"cache_key": cache_key, "s3_key": cached.s3_key})
+        return cached
     except (ValidationError, ValueError, TypeError):
+        logger.warning("cache_corrupt", extra={"cache_key": cache_key})
         delete_cached_result(content_hash)
         return None
 
@@ -77,7 +81,7 @@ def set_cached_result(content_hash: str, result: Result) -> None:
             cached.model_dump_json(),
         )
     except Exception as exc:
-        logger.warning("Result cache write failed; result remains available from S3", extra={"cache_key": cache_key}, exc_info=exc)
+        logger.warning("cache_write_error", extra={"cache_key": cache_key}, exc_info=exc)
 
 
 def delete_cached_result(content_hash: str) -> None:

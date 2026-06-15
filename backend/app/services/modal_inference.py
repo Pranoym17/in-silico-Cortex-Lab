@@ -1,11 +1,15 @@
 import base64
 import asyncio
+import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
 import msgpack
 
 from app.schemas.sse import ChunkEnvelope
+
+logger = logging.getLogger(__name__)
 
 
 class ModalInferenceError(RuntimeError):
@@ -60,14 +64,19 @@ async def stream_deployed_modal_events(
     attempts = max(1, max_attempts)
     for attempt in range(1, attempts + 1):
         yielded_chunk = False
+        started_at = time.monotonic()
+        job_id = spec.get("job_id")
+        logger.info("modal_call_start", extra={"job_id": str(job_id) if job_id else None, "provider": "modal", "attempt": attempt})
         try:
             function = modal.Function.from_name(app_name, function_name, environment_name=environment_name)
             async for event in _stream_modal_function_events(function, spec, timeout_seconds=timeout_seconds):
                 if event.get("type") == "chunk":
                     yielded_chunk = True
                 yield event
+            logger.info("modal_call_end", extra={"job_id": str(job_id) if job_id else None, "provider": "modal", "attempt": attempt, "duration_ms": int((time.monotonic() - started_at) * 1000)})
             return
         except Exception as exc:
+            logger.warning("modal_call_error", extra={"job_id": str(job_id) if job_id else None, "provider": "modal", "attempt": attempt, "duration_ms": int((time.monotonic() - started_at) * 1000)}, exc_info=exc)
             if attempt < attempts and not yielded_chunk and is_retryable_modal_exception(exc):
                 continue
             if isinstance(exc, ModalInferenceError):

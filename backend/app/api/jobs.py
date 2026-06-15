@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.schemas.job import JobResponse
 from app.schemas.result import ResultDownloadResponse, ResultResponse
-from app.services.jobs import get_owned_job
+from app.services.jobs import cancel_owned_job, get_owned_job
 from app.services.result_storage import create_result_download_url
 from app.services.results import get_result_for_owned_job
 from app.services.sse_broker import JobEventBroker, get_job_event_broker
@@ -35,6 +35,16 @@ async def get_job_result_route(
     session: AsyncSession = Depends(get_db),
 ):
     return await get_result_for_owned_job(session, user, job_id)
+
+
+@router.post("/{job_id}/cancel", response_model=JobResponse)
+async def cancel_job_route(
+    job_id: UUID,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+    broker: JobEventBroker = Depends(get_job_event_broker),
+):
+    return await cancel_owned_job(session, user, job_id, broker)
 
 
 @router.get("/{job_id}/result/download", response_model=ResultDownloadResponse)

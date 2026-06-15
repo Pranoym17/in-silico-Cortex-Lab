@@ -143,6 +143,8 @@ Statuses:
 - `failed`: terminal failure before or during inference.
 - `cancelled`: user cancelled the job.
 
+Cancellation is a Cortex job-state operation. `POST /api/jobs/{job_id}/cancel` marks the job `cancelled`, emits a terminal SSE error event with code `cancelled`, and stops backend publishing once the worker observes the state. It does not yet force-kill an in-flight Modal function call; hard Modal cancellation is deferred until the provider exposes a clean cancellation handle in this integration.
+
 Failure classes:
 
 - `upload_failed`: S3 upload failed before inference starts. UI returns user to builder and marks the affected block.

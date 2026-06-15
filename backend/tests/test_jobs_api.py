@@ -159,6 +159,35 @@ async def test_get_job_result(auth_user, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_cancel_job_marks_job_cancelled_and_publishes_sse(auth_user, monkeypatch):
+    job = make_job(auth_user.id, status=JobStatus.running)
+
+    async def fake_cancel_owned_job(session, owner, requested_job_id, broker):
+        assert owner.id == auth_user.id
+        assert requested_job_id == job.id
+        assert broker is not None
+        job.status = JobStatus.cancelled
+        return job
+
+    class FakeBroker:
+        pass
+
+    monkeypatch.setattr("app.api.jobs.cancel_owned_job", fake_cancel_owned_job)
+    app.dependency_overrides[get_job_event_broker] = lambda: FakeBroker()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/jobs/{job.id}/cancel",
+                headers={"Authorization": f"Bearer {make_token()}"},
+            )
+    finally:
+        app.dependency_overrides.pop(get_job_event_broker, None)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
 async def test_get_job_result_download(auth_user, monkeypatch):
     job_id = uuid4()
     result = make_result(auth_user.id, job_id=job_id)

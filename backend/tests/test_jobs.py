@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from app.models.block import BlockType
 from app.models.experiment import ExperimentStatus
 from app.models.job import JobStatus
-from app.services.jobs import block_to_run_spec, create_job_from_experiment
+from app.services.jobs import block_to_run_spec, cancel_owned_job, create_job_from_experiment
 
 
 def make_block(block_type: BlockType, **overrides):
@@ -141,3 +141,55 @@ async def test_create_job_from_experiment_rejects_archived_experiment(monkeypatc
 
     assert exc.value.status_code == 409
     assert exc.value.detail == "Archived experiments cannot be run"
+
+
+@pytest.mark.asyncio
+async def test_cancel_owned_job_marks_job_cancelled_and_publishes_sse(monkeypatch):
+    owner = SimpleNamespace(id=uuid4())
+    job = SimpleNamespace(
+        id=uuid4(),
+        owner_id=owner.id,
+        status=JobStatus.running,
+        error_code=None,
+        error_message=None,
+        completed_at=None,
+    )
+    published = []
+
+    async def fake_get_owned_job(session, requested_owner, requested_job_id):
+        assert requested_owner is owner
+        assert requested_job_id == job.id
+        return job
+
+    class FakeSession:
+        async def commit(self):
+            return None
+
+        async def refresh(self, value):
+            return None
+
+    class FakeBroker:
+        async def publish(self, job_id, event, data):
+            published.append((job_id, event, data))
+
+    monkeypatch.setattr("app.services.jobs.get_owned_job", fake_get_owned_job)
+
+    cancelled = await cancel_owned_job(FakeSession(), owner, job.id, FakeBroker())
+
+    assert cancelled is job
+    assert job.status == JobStatus.cancelled
+    assert job.error_code == "cancelled"
+    assert job.error_message == "Job was cancelled by the user."
+    assert published == [
+        (
+            job.id,
+            "error",
+            {
+                "job_id": str(job.id),
+                "code": "cancelled",
+                "message": "Job was cancelled by the user.",
+                "retryable": False,
+                "last_timestep": None,
+            },
+        )
+    ]

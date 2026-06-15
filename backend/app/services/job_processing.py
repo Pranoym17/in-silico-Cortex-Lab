@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+import logging
+import time
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -15,6 +17,7 @@ from app.services.result_cache import CachedResult, cached_result_to_metadata, s
 from app.services.result_storage import ActivationMatrixAssembler, ResultStorageError, store_job_result
 from app.services.sse_broker import JobEventBroker, get_job_event_broker
 
+logger = logging.getLogger(__name__)
 
 TERMINAL_STATUSES = {JobStatus.complete, JobStatus.failed, JobStatus.cancelled}
 FAKE_VERTEX_COUNT = 16
@@ -104,6 +107,11 @@ async def mark_job_failed(
     return job
 
 
+async def job_was_cancelled(session: AsyncSession, job: Job) -> bool:
+    await session.refresh(job)
+    return job.status == JobStatus.cancelled
+
+
 async def publish_job_error(
     broker: JobEventBroker,
     job: Job,
@@ -162,6 +170,7 @@ async def complete_job_from_cached_result(
     if job.status in TERMINAL_STATUSES:
         return job
 
+    logger.info("job_started", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "fake"})
     await broker.publish(
         job.id,
         "queued",
@@ -207,6 +216,7 @@ async def process_fake_inference_job(
     if job.status in TERMINAL_STATUSES:
         return job
 
+    logger.info("job_started", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "fake"})
     await broker.publish(
         job.id,
         "queued",
@@ -216,6 +226,7 @@ async def process_fake_inference_job(
     try:
         run_request = RunExperimentRequest.model_validate(job.run_spec)
     except ValidationError as exc:
+        logger.info("job_validation_failed", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "fake", "error_code": "validation_failed"})
         failed_job = await mark_job_failed(
             session,
             job,
@@ -233,6 +244,8 @@ async def process_fake_inference_job(
             ).model_dump(mode="json"),
         )
         return failed_job
+    logger.info("job_validation_passed", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "modal"})
+    logger.info("job_validation_passed", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "fake"})
 
     job.status = JobStatus.warming
     await session.commit()
@@ -267,6 +280,9 @@ async def process_fake_inference_job(
     sample_rate_hz = run_request.settings.target_sample_rate_hz
     result_assembler = ActivationMatrixAssembler()
     for chunk_index, block in enumerate(run_request.blocks):
+        if await job_was_cancelled(session, job):
+            logger.info("job_cancelled_observed", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "fake"})
+            return job
         chunk = fake_activation_chunk(
             job_id=str(job.id),
             block_id=block.id,
@@ -292,6 +308,8 @@ async def process_fake_inference_job(
         )
 
     try:
+        if await job_was_cancelled(session, job):
+            return job
         result = await store_job_result(
             session,
             job,
@@ -307,6 +325,7 @@ async def process_fake_inference_job(
         )
     except Exception as exc:
         code = classify_inference_exception(exc, chunk_seen=True)
+        logger.exception("job_result_storage_failed", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "fake", "error_code": code})
         failed_job = await mark_job_failed(session, job, error_code=code, error_message=str(exc))
         await publish_job_error(
             broker,
@@ -333,6 +352,7 @@ async def process_fake_inference_job(
             vertex_count=FAKE_VERTEX_COUNT,
         ).model_dump(mode="json"),
     )
+    logger.info("job_completed", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "fake", "duration_ms": int((datetime.now(UTC) - started_at).total_seconds() * 1000)})
     return job
 
 
@@ -352,6 +372,8 @@ async def process_modal_inference_job(
 
     if job.status in TERMINAL_STATUSES:
         return job
+
+    started_monotonic = time.monotonic()
 
     await broker.publish(
         job.id,
@@ -389,6 +411,7 @@ async def process_modal_inference_job(
     result_assembler = ActivationMatrixAssembler()
 
     try:
+        logger.info("modal_call_started", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "modal", "attempt": 1})
         async for event in stream_deployed_modal_events(
             app_name=app_name,
             function_name=function_name,
@@ -398,6 +421,9 @@ async def process_modal_inference_job(
             max_attempts=max_attempts,
         ):
             event_type = event.get("type")
+            if await job_was_cancelled(session, job):
+                logger.info("job_cancelled_observed", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "modal"})
+                return job
 
             if event_type == "warming":
                 job.status = JobStatus.warming
@@ -453,6 +479,8 @@ async def process_modal_inference_job(
                 continue
 
             if event_type == "complete":
+                if await job_was_cancelled(session, job):
+                    return job
                 completed_timesteps = int(event.get("timesteps") or completed_timesteps)
                 vertex_count = int(event.get("vertex_count") or vertex_count)
                 result = await store_job_result(
@@ -487,11 +515,14 @@ async def process_modal_inference_job(
                         vertex_count=vertex_count,
                     ).model_dump(mode="json"),
                 )
+                logger.info("modal_call_completed", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "modal", "duration_ms": int((time.monotonic() - started_monotonic) * 1000)})
+                logger.info("job_completed", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "modal", "duration_ms": int((time.monotonic() - started_monotonic) * 1000)})
                 return job
 
             if event_type == "error":
                 code = normalize_job_error_code(str(event.get("code") or "internal_error"))
                 message = str(event.get("message") or "Modal inference failed.")
+                logger.info("modal_call_failed", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "modal", "error_code": code, "duration_ms": int((time.monotonic() - started_monotonic) * 1000)})
                 failed_job = await mark_job_failed(
                     session,
                     job,
@@ -506,12 +537,14 @@ async def process_modal_inference_job(
                     retryable=bool(event.get("retryable", is_retryable_job_error(code))),
                     last_timestep=event.get("last_timestep"),
                 )
+                logger.info("sse_error_emitted", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "modal", "error_code": code})
                 return failed_job
 
             raise ModalInferenceError(f"Unsupported Modal event type: {event_type}")
     except Exception as exc:
         code = classify_inference_exception(exc, chunk_seen=chunk_seen)
         message = str(exc)
+        logger.exception("modal_call_failed", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "modal", "error_code": code, "duration_ms": int((time.monotonic() - started_monotonic) * 1000)})
         failed_job = await mark_job_failed(session, job, error_code=code, error_message=message)
         user_message = user_facing_inference_failure(exc, chunk_seen=chunk_seen)
         await publish_job_error(
@@ -521,6 +554,7 @@ async def process_modal_inference_job(
             message=user_message,
             last_timestep=completed_timesteps - 1 if completed_timesteps > 0 else None,
         )
+        logger.info("sse_error_emitted", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "modal", "error_code": code})
         return failed_job
 
     failed_job = await mark_job_failed(

@@ -110,6 +110,22 @@ export type RunExperimentResponse = {
   user_id?: string | null;
 };
 
+export type JobStatus = "queued" | "warming" | "running" | "streaming" | "complete" | "failed" | "cancelled";
+
+export type Job = {
+  id: string;
+  experiment_id: string;
+  owner_id: string;
+  status: JobStatus;
+  run_spec: Record<string, unknown>;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ResultMetadata = {
   id: string;
   job_id: string;
@@ -253,4 +269,8 @@ export function getJobResult(jobId: string, token?: string | null) {
 
 export function getJobResultDownload(jobId: string, token?: string | null) {
   return apiJson<ResultDownload>(`/api/jobs/${jobId}/result/download`, token);
+}
+
+export function cancelJob(jobId: string, token?: string | null) {
+  return apiJson<Job>(`/api/jobs/${jobId}/cancel`, token, { method: "POST" });
 }

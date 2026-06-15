@@ -14,6 +14,7 @@ JobErrorCode = Literal[
     "internal_error",
     "model_access_required",
     "tribe_access_denied",
+    "cancelled",
 ]
 
 KNOWN_JOB_ERROR_CODES: frozenset[str] = frozenset(
@@ -28,6 +29,7 @@ KNOWN_JOB_ERROR_CODES: frozenset[str] = frozenset(
         "internal_error",
         "model_access_required",
         "tribe_access_denied",
+        "cancelled",
     }
 )
 
@@ -37,6 +39,7 @@ NON_RETRYABLE_JOB_ERROR_CODES: frozenset[str] = frozenset(
         "model_access_required",
         "tribe_access_denied",
         "modal_oom",
+        "cancelled",
     }
 )
 

@@ -87,4 +87,23 @@ describe("viewerStore", () => {
     expect(useViewerStore.getState().status).toBe("failed");
     expect(useViewerStore.getState().error).toBe("Run specification failed validation.");
   });
+
+  it("marks cancelled error events as cancelled", () => {
+    resetStore();
+
+    useViewerStore.getState().handleStreamEvent({
+      id: 11,
+      event: "error",
+      data: {
+        job_id: "job_1",
+        code: "cancelled",
+        message: "Job was cancelled by the user.",
+        retryable: false,
+        last_timestep: null
+      }
+    });
+
+    expect(useViewerStore.getState().status).toBe("cancelled");
+    expect(useViewerStore.getState().error).toBe("Job was cancelled by the user.");
+  });
 });

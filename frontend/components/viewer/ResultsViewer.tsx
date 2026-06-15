@@ -7,7 +7,8 @@ import {
   getJobResult,
   getJobResultDownload,
   ResultMetadata,
-  ApiError
+  ApiError,
+  cancelJob
 } from "@/lib/api";
 import {
   ActivationDomain,
@@ -61,6 +62,8 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [assetError, setAssetError] = useState<string | null>(null);
   const [result, setResult] = useState<ResultMetadata | null>(null);
   const [resultError, setResultError] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [isDownloadingResult, setIsDownloadingResult] = useState(false);
   const [selectedTimestep, setSelectedTimestep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -145,7 +148,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const conditionComparison = useMemo(() => compareTopConditions(conditionSummaries), [conditionSummaries]);
   const manualDomainInvalid = useManualDomain && manualDomain === null;
   const shouldReconnect =
-    Boolean(accessToken) && connectionStatus === "disconnected" && status !== "complete" && status !== "failed";
+    Boolean(accessToken) && connectionStatus === "disconnected" && !isTerminalViewerStatus(status);
   const reconnectDelaySeconds = Math.min(30, 2 ** Math.min(connectAttempt, 5));
 
   useEffect(() => {
@@ -203,6 +206,8 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     setIsPlaying(true);
     setResult(null);
     setResultError(null);
+    setCancelError(null);
+    setIsCancelling(false);
     setHoveredVertex(null);
     setHoverPosition(null);
     setSelectedVertex(null);
@@ -313,6 +318,23 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     }
   }
 
+  async function cancelRunningJob() {
+    if (!accessToken) {
+      setCancelError("Sign in again to cancel this job.");
+      return;
+    }
+
+    setIsCancelling(true);
+    setCancelError(null);
+    try {
+      await cancelJob(jobId, accessToken);
+    } catch (caught) {
+      setCancelError(caught instanceof Error ? caught.message : "Job cancellation failed");
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
   function selectVertex(vertexIndex: number) {
     setSelectedVertex(vertexIndex);
     if (!atlas || !manifest) {
@@ -344,7 +366,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
       width="full"
       actions={
         <div className="viewer-header-actions">
-          <StatusBadge tone={status === "complete" ? "good" : status === "failed" ? "bad" : status === "warming" ? "warn" : "neutral"}>
+          <StatusBadge tone={status === "complete" ? "good" : status === "failed" ? "bad" : status === "cancelled" || status === "warming" ? "warn" : "neutral"}>
             {status}
           </StatusBadge>
           <StatusBadge tone={connectionStatus === "connected" ? "good" : connectionStatus === "disconnected" ? "warn" : "neutral"}>
@@ -426,6 +448,13 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 }}
               >
                 Live
+              </button>
+              <button
+                disabled={isCancelling || isTerminalViewerStatus(status)}
+                onClick={cancelRunningJob}
+                type="button"
+              >
+                {isCancelling ? "Cancelling" : "Cancel"}
               </button>
             </div>
             <div className="viewer-control-row">
@@ -741,8 +770,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           {error ? <ErrorPanel message={error} /> : null}
           {streamError ? <ErrorPanel message={streamError} /> : null}
           {resultError ? <ErrorPanel message={resultError} /> : null}
+          {cancelError ? <ErrorPanel message={cancelError} /> : null}
           {shouldReconnect ? <p>Reconnecting in {reconnectDelaySeconds}s.</p> : null}
-          {accessToken && connectionStatus === "disconnected" && status !== "complete" && status !== "failed" ? (
+          {accessToken && connectionStatus === "disconnected" && !isTerminalViewerStatus(status) ? (
             <button type="button" onClick={() => setConnectAttempt((value) => value + 1)}>
               Reconnect
             </button>
@@ -811,6 +841,10 @@ function parseManualDomain(minValue: string, maxValue: string): ActivationDomain
   const min = Number(minValue);
   const max = Number(maxValue);
   return Number.isFinite(min) && Number.isFinite(max) && min < max ? [min, max] : null;
+}
+
+function isTerminalViewerStatus(status: string) {
+  return status === "complete" || status === "failed" || status === "cancelled";
 }
 
 function formatDomainValue(value: number) {

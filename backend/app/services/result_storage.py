@@ -1,4 +1,6 @@
 from io import BytesIO
+import logging
+import time
 from typing import Any
 
 import boto3
@@ -10,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models.job import Job
 from app.models.result import Result
+
+logger = logging.getLogger(__name__)
 
 
 class ResultStorageError(RuntimeError):
@@ -138,7 +142,9 @@ async def store_job_result(
     payload = serialize_activation_npz(matrix, sample_rate_hz=sample_rate_hz, metadata=result_metadata)
 
     last_error: Exception | None = None
-    for _attempt in range(2):
+    started_at = time.monotonic()
+    logger.info("s3_result_save_start", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "s3_key": s3_key})
+    for attempt in range(1, 3):
         try:
             _s3_client().put_object(
                 Bucket=get_settings().s3_bucket_name,
@@ -150,8 +156,10 @@ async def store_job_result(
             break
         except Exception as exc:
             last_error = exc
+            logger.warning("s3_result_save_error", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "s3_key": s3_key, "attempt": attempt}, exc_info=exc)
     if last_error is not None:
         raise ResultStorageError(f"Failed to store result artifact: {last_error}") from last_error
+    logger.info("s3_result_save_end", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "s3_key": s3_key, "duration_ms": int((time.monotonic() - started_at) * 1000)})
 
     result = Result(
         job_id=job.id,
@@ -170,4 +178,5 @@ async def store_job_result(
     )
     session.add(result)
     await session.flush()
+    logger.info("db_result_row_created", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "s3_key": s3_key})
     return result

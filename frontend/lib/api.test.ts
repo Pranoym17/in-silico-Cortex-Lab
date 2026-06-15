@@ -3,6 +3,7 @@ import {
   ApiError,
   apiFetch,
   apiJson,
+  cancelJob,
   createBlock,
   createExperiment,
   createUploadIntent,
@@ -156,5 +157,18 @@ describe("result helpers", () => {
 
     expect(fetchMock.mock.calls[0][0]).toContain("/api/jobs/job_1/result/download");
     expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
+  });
+});
+
+describe("cancelJob", () => {
+  it("posts to the job cancel endpoint", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: "job_1", status: "cancelled" }), { status: 200 })
+    );
+
+    await cancelJob("job_1", "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/jobs/job_1/cancel");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
   });
 });
