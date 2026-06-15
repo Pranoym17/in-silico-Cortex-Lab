@@ -8,6 +8,7 @@ import pytest
 
 from app.models.job import JobStatus
 from app.services.result_cache import CachedResult
+from app.services.result_storage import ResultStorageError
 from app.services.job_processing import FAKE_VERTEX_COUNT
 from app.services.job_processing import (
     JobProcessingError,
@@ -439,6 +440,113 @@ async def test_process_modal_inference_job_preserves_model_access_errors(monkeyp
         "message": "Model access is required for meta-llama/Llama-3.2-3B.",
         "retryable": False,
         "last_timestep": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_process_modal_inference_job_normalizes_unknown_modal_error_codes(monkeypatch):
+    job = make_job()
+    session = FakeSession(job)
+    broker = FakeBroker()
+
+    async def fake_stream_deployed_modal_events(**kwargs):
+        yield {
+            "type": "error",
+            "job_id": str(job.id),
+            "code": "modal_error",
+            "message": "Modal inference failed.",
+            "retryable": True,
+        }
+
+    monkeypatch.setattr("app.services.job_processing.stream_deployed_modal_events", fake_stream_deployed_modal_events)
+
+    await process_modal_inference_job(
+        session,
+        job.id,
+        broker,
+        app_name="cortex-lab-tribe-inference",
+        function_name="run_real",
+    )
+
+    assert job.error_code == "internal_error"
+    assert broker.events[-1][2]["code"] == "internal_error"
+
+
+@pytest.mark.asyncio
+async def test_process_modal_inference_job_maps_oom_errors(monkeypatch):
+    job = make_job()
+    session = FakeSession(job)
+    broker = FakeBroker()
+
+    async def fake_stream_deployed_modal_events(**kwargs):
+        if False:
+            yield
+        raise RuntimeError("CUDA out of memory")
+
+    monkeypatch.setattr("app.services.job_processing.stream_deployed_modal_events", fake_stream_deployed_modal_events)
+
+    await process_modal_inference_job(
+        session,
+        job.id,
+        broker,
+        app_name="cortex-lab-tribe-inference",
+        function_name="run_real",
+    )
+
+    assert job.error_code == "modal_oom"
+    assert broker.events[-1][2] == {
+        "job_id": str(job.id),
+        "code": "modal_oom",
+        "message": "Modal ran out of memory while running inference.",
+        "retryable": False,
+        "last_timestep": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_process_modal_inference_job_maps_result_storage_failure(monkeypatch):
+    job = make_job()
+    session = FakeSession(job)
+    broker = FakeBroker()
+
+    async def fake_stream_deployed_modal_events(**kwargs):
+        block_id = kwargs["spec"]["blocks"][0]["id"]
+        yield {
+            "type": "chunk",
+            "job_id": str(job.id),
+            "block_id": block_id,
+            "chunk_index": 0,
+            "timestep_start": 0,
+            "timestep_count": 1,
+            "sample_rate_hz": 2,
+            "vertex_count": 2,
+            "dtype": "float32",
+            "shape": [1, 2],
+            "activations": b"\x00\x00\x00\x00\x00\x00\x80?",
+        }
+        yield {"type": "complete", "job_id": str(job.id), "status": "complete", "timesteps": 1, "vertex_count": 2}
+
+    async def fake_store_job_result(*args, **kwargs):
+        raise ResultStorageError("S3 put_object failed")
+
+    monkeypatch.setattr("app.services.job_processing.stream_deployed_modal_events", fake_stream_deployed_modal_events)
+    monkeypatch.setattr("app.services.job_processing.store_job_result", fake_store_job_result)
+
+    await process_modal_inference_job(
+        session,
+        job.id,
+        broker,
+        app_name="cortex-lab-tribe-inference",
+        function_name="run_real",
+    )
+
+    assert job.error_code == "result_storage_failed"
+    assert broker.events[-1][2] == {
+        "job_id": str(job.id),
+        "code": "result_storage_failed",
+        "message": "Inference finished, but the result artifact could not be saved.",
+        "retryable": True,
+        "last_timestep": 0,
     }
 
 

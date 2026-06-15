@@ -9,9 +9,10 @@ from app.models.job import Job, JobStatus
 from app.schemas.run import RunExperimentRequest
 from app.schemas.sse import CompleteEvent, ErrorEvent, ProgressEvent, QueuedEvent, WarmingEvent
 from app.services.activation_events import fake_activation_chunk
+from app.services.error_codes import JobErrorCode, is_retryable_job_error, normalize_job_error_code
 from app.services.modal_inference import ModalInferenceError, encode_modal_chunk_event, stream_deployed_modal_events
 from app.services.result_cache import CachedResult, cached_result_to_metadata, set_cached_result
-from app.services.result_storage import ActivationMatrixAssembler, store_job_result
+from app.services.result_storage import ActivationMatrixAssembler, ResultStorageError, store_job_result
 from app.services.sse_broker import JobEventBroker, get_job_event_broker
 
 
@@ -25,7 +26,33 @@ class JobProcessingError(RuntimeError):
     pass
 
 
+def classify_inference_exception(exc: Exception, *, chunk_seen: bool) -> JobErrorCode:
+    if isinstance(exc, ResultStorageError):
+        return "result_storage_failed"
+
+    message = str(exc).lower()
+    if "timeout" in message or "timed out" in message or "deadline" in message:
+        return "timeout"
+    if "out of memory" in message or "oom" in message or "cuda memory" in message:
+        return "modal_oom"
+    if "model_access_required" in message:
+        return "model_access_required"
+    if "tribe_access_denied" in message:
+        return "tribe_access_denied"
+    if chunk_seen:
+        return "partial_failure"
+    return "internal_error"
+
+
 def user_facing_inference_failure(exc: Exception, *, chunk_seen: bool) -> str:
+    classified = classify_inference_exception(exc, chunk_seen=chunk_seen)
+    if classified == "timeout":
+        return "Inference timed out before completing."
+    if classified == "modal_oom":
+        return "Modal ran out of memory while running inference."
+    if classified == "result_storage_failed":
+        return "Inference finished, but the result artifact could not be saved."
+
     if chunk_seen:
         return "Inference failed after streaming partial results."
 
@@ -75,6 +102,29 @@ async def mark_job_failed(
     await session.commit()
     await session.refresh(job)
     return job
+
+
+async def publish_job_error(
+    broker: JobEventBroker,
+    job: Job,
+    *,
+    code: str | None,
+    message: str,
+    retryable: bool | None = None,
+    last_timestep: int | None = None,
+) -> None:
+    normalized_code = normalize_job_error_code(code)
+    await broker.publish(
+        job.id,
+        "error",
+        ErrorEvent(
+            job_id=str(job.id),
+            code=normalized_code,
+            message=message,
+            retryable=is_retryable_job_error(normalized_code) if retryable is None else retryable,
+            last_timestep=last_timestep,
+        ).model_dump(mode="json"),
+    )
 
 
 async def create_result_row_from_cache(session: AsyncSession, job: Job, cached: CachedResult):
@@ -241,19 +291,31 @@ async def process_fake_inference_job(
             ).model_dump(mode="json"),
         )
 
-    result = await store_job_result(
-        session,
-        job,
-        result_assembler.assemble(),
-        sample_rate_hz=result_assembler.sample_rate_hz,
-        model_name="fake",
-        model_version="dev",
-        metadata={
-            "provider": "fake",
-            "surface": run_request.settings.surface,
-            "atlas": run_request.settings.atlas,
-        },
-    )
+    try:
+        result = await store_job_result(
+            session,
+            job,
+            result_assembler.assemble(),
+            sample_rate_hz=result_assembler.sample_rate_hz,
+            model_name="fake",
+            model_version="dev",
+            metadata={
+                "provider": "fake",
+                "surface": run_request.settings.surface,
+                "atlas": run_request.settings.atlas,
+            },
+        )
+    except Exception as exc:
+        code = classify_inference_exception(exc, chunk_seen=True)
+        failed_job = await mark_job_failed(session, job, error_code=code, error_message=str(exc))
+        await publish_job_error(
+            broker,
+            job,
+            code=code,
+            message=user_facing_inference_failure(exc, chunk_seen=True),
+            last_timestep=completed_timesteps - 1 if completed_timesteps > 0 else None,
+        )
+        return failed_job
     if len(run_request.blocks) == 1 and run_request.blocks[0].type == "text":
         set_cached_result(run_request.blocks[0].content_hash, result)
     job.status = JobStatus.complete
@@ -424,7 +486,7 @@ async def process_modal_inference_job(
                 return job
 
             if event_type == "error":
-                code = str(event.get("code") or "modal_error")
+                code = normalize_job_error_code(str(event.get("code") or "internal_error"))
                 message = str(event.get("message") or "Modal inference failed.")
                 failed_job = await mark_job_failed(
                     session,
@@ -432,35 +494,28 @@ async def process_modal_inference_job(
                     error_code=code,
                     error_message=message,
                 )
-                await broker.publish(
-                    job.id,
-                    "error",
-                    ErrorEvent(
-                        job_id=str(job.id),
-                        code=code,
-                        message=message,
-                        retryable=bool(event.get("retryable", True)),
-                        last_timestep=event.get("last_timestep"),
-                    ).model_dump(mode="json"),
+                await publish_job_error(
+                    broker,
+                    job,
+                    code=code,
+                    message=message,
+                    retryable=bool(event.get("retryable", is_retryable_job_error(code))),
+                    last_timestep=event.get("last_timestep"),
                 )
                 return failed_job
 
             raise ModalInferenceError(f"Unsupported Modal event type: {event_type}")
     except Exception as exc:
-        code = "partial_failure" if chunk_seen else "internal_error"
+        code = classify_inference_exception(exc, chunk_seen=chunk_seen)
         message = str(exc)
         failed_job = await mark_job_failed(session, job, error_code=code, error_message=message)
         user_message = user_facing_inference_failure(exc, chunk_seen=chunk_seen)
-        await broker.publish(
-            job.id,
-            "error",
-            ErrorEvent(
-                job_id=str(job.id),
-                code=code,
-                message=user_message,
-                retryable=True,
-                last_timestep=completed_timesteps - 1 if completed_timesteps > 0 else None,
-            ).model_dump(mode="json"),
+        await publish_job_error(
+            broker,
+            job,
+            code=code,
+            message=user_message,
+            last_timestep=completed_timesteps - 1 if completed_timesteps > 0 else None,
         )
         return failed_job
 
