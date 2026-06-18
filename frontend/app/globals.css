@@ -649,6 +649,9 @@ button:disabled {
   display: grid;
   gap: 3px;
   max-width: min(280px, calc(100% - 28px));
+  max-height: min(180px, calc(100% - 28px));
+  overflow: hidden;
+  overflow-wrap: anywhere;
   pointer-events: none;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
@@ -1058,5 +1061,21 @@ pre {
 
   .viewer-bottom-timeline {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .viewer-canvas-panel,
+  .brain-scene {
+    min-height: 340px;
+  }
+
+  .viewer-stat-grid,
+  .viewer-domain-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .region-chart {
+    min-height: 132px;
   }
 }
