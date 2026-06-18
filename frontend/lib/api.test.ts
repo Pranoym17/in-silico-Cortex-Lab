@@ -38,6 +38,16 @@ describe("apiJson", () => {
       new ApiError(401, { detail: "Authentication required" })
     );
   });
+
+  it("uses structured detail messages from API errors", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: { code: "upload_failed", message: "Upload setup failed." } }), { status: 503 })
+    );
+
+    await expect(apiJson("/api/uploads/presign")).rejects.toMatchObject(
+      new ApiError(503, { detail: { code: "upload_failed", message: "Upload setup failed." } })
+    );
+  });
 });
 
 describe("createExperiment", () => {

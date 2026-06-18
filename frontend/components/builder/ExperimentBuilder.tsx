@@ -34,6 +34,7 @@ import {
 import {
   buildUploadedStimulusMetadata,
   createUploadIntentInput,
+  formatUploadError,
   uploadFileToIntent,
   validateUploadFile
 } from "@/lib/mediaUpload";
@@ -362,7 +363,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
       selectBlock(updatedBlock.id);
       setLastSavedAt(updatedBlock.updated_at);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to upload stimulus file");
+      setError(formatUploadError(caught));
       throw caught;
     } finally {
       setIsMutating(false);

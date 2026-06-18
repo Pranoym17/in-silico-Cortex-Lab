@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { StimulusBlock } from "@/lib/api";
-import { bytesToHex, createUploadIntentInput, validateUploadFile } from "./mediaUpload";
+import { bytesToHex, createUploadIntentInput, formatUploadError, validateUploadFile } from "./mediaUpload";
 
 function makeBlock(overrides: Partial<StimulusBlock> = {}): StimulusBlock {
   return {
@@ -40,5 +40,9 @@ describe("mediaUpload", () => {
     expect(() => validateUploadFile("image", new File(["x"], "face.gif", { type: "image/gif" }))).toThrow(
       "Image uploads must be PNG, JPEG, or WebP."
     );
+  });
+
+  it("formats upload failures with retry guidance", () => {
+    expect(formatUploadError(new Error("Upload failed with status 403"))).toContain("Retry the upload");
   });
 });

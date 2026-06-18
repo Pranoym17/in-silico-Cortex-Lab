@@ -11,6 +11,9 @@ type ViewerState = {
   lastEventId: number | null;
   resultS3Key: string | null;
   error: string | null;
+  errorCode: string | null;
+  errorRetryable: boolean;
+  errorLastTimestep: number | null;
   resetJob: (jobId: string) => void;
   setTimestep: (timestep: number) => void;
   handleStreamEvent: (event: JobStreamEvent) => void;
@@ -26,6 +29,9 @@ export const useViewerStore = create<ViewerState>((set) => ({
   lastEventId: null,
   resultS3Key: null,
   error: null,
+  errorCode: null,
+  errorRetryable: false,
+  errorLastTimestep: null,
   resetJob: (jobId) =>
     set({
       jobId,
@@ -36,7 +42,10 @@ export const useViewerStore = create<ViewerState>((set) => ({
       chunks: [],
       lastEventId: null,
       resultS3Key: null,
-      error: null
+      error: null,
+      errorCode: null,
+      errorRetryable: false,
+      errorLastTimestep: null
     }),
   setTimestep: (timestep) => set({ timestep }),
   handleStreamEvent: (event) =>
@@ -44,11 +53,11 @@ export const useViewerStore = create<ViewerState>((set) => ({
       const base = { lastEventId: event.id ?? state.lastEventId };
 
       if (event.event === "queued") {
-        return { ...base, jobId: event.data.job_id, status: "queued", error: null };
+        return { ...base, jobId: event.data.job_id, status: "queued", error: null, errorCode: null, errorRetryable: false, errorLastTimestep: null };
       }
 
       if (event.event === "warming") {
-        return { ...base, jobId: event.data.job_id, status: "warming", error: null };
+        return { ...base, jobId: event.data.job_id, status: "warming", error: null, errorCode: null, errorRetryable: false, errorLastTimestep: null };
       }
 
       if (event.event === "progress") {
@@ -59,7 +68,10 @@ export const useViewerStore = create<ViewerState>((set) => ({
           completedBlocks: event.data.completed_blocks,
           totalBlocks: event.data.total_blocks,
           timestep: event.data.completed_timesteps,
-          error: null
+          error: null,
+          errorCode: null,
+          errorRetryable: false,
+          errorLastTimestep: null
         };
       }
 
@@ -71,7 +83,10 @@ export const useViewerStore = create<ViewerState>((set) => ({
           status: state.status === "complete" ? "complete" : "running",
           chunks: [...state.chunks, chunk],
           timestep: Math.max(state.timestep, chunk.timestep_start + chunk.timestep_count),
-          error: null
+          error: null,
+          errorCode: null,
+          errorRetryable: false,
+          errorLastTimestep: null
         };
       }
 
@@ -82,7 +97,10 @@ export const useViewerStore = create<ViewerState>((set) => ({
           status: "complete",
           resultS3Key: event.data.result_s3_key,
           timestep: event.data.timesteps,
-          error: null
+          error: null,
+          errorCode: null,
+          errorRetryable: false,
+          errorLastTimestep: null
         };
       }
 
@@ -90,7 +108,10 @@ export const useViewerStore = create<ViewerState>((set) => ({
         ...base,
         jobId: event.data.job_id,
         status: event.data.code === "cancelled" ? "cancelled" : "failed",
-        error: event.data.message
+        error: event.data.message,
+        errorCode: event.data.code,
+        errorRetryable: event.data.retryable,
+        errorLastTimestep: event.data.last_timestep
       };
     })
 }));

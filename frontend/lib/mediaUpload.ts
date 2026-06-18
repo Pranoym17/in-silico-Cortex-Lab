@@ -1,4 +1,5 @@
 import { CreateUploadIntentInput, StimulusBlock, UploadIntent } from "./api";
+import { formatUploadError as formatJobUploadError } from "./jobErrors";
 import { AUDIO_MIME_TYPES, IMAGE_MIME_TYPES } from "./stimulusMetadata";
 
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -70,6 +71,10 @@ export async function uploadFileToIntent(file: File, intent: UploadIntent) {
   if (!response.ok) {
     throw new Error(`Upload failed with status ${response.status}`);
   }
+}
+
+export function formatUploadError(caught: unknown): string {
+  return formatJobUploadError(caught);
 }
 
 export async function readImageDimensions(file: File) {

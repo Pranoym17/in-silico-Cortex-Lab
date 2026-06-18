@@ -86,6 +86,30 @@ describe("viewerStore", () => {
 
     expect(useViewerStore.getState().status).toBe("failed");
     expect(useViewerStore.getState().error).toBe("Run specification failed validation.");
+    expect(useViewerStore.getState().errorCode).toBe("validation_failed");
+    expect(useViewerStore.getState().errorRetryable).toBe(false);
+    expect(useViewerStore.getState().errorLastTimestep).toBeNull();
+  });
+
+  it("preserves retryable error metadata for viewer UX", () => {
+    resetStore();
+
+    useViewerStore.getState().handleStreamEvent({
+      id: 12,
+      event: "error",
+      data: {
+        job_id: "job_1",
+        code: "timeout",
+        message: "Task timed out.",
+        retryable: true,
+        last_timestep: 4
+      }
+    });
+
+    expect(useViewerStore.getState().status).toBe("failed");
+    expect(useViewerStore.getState().errorCode).toBe("timeout");
+    expect(useViewerStore.getState().errorRetryable).toBe(true);
+    expect(useViewerStore.getState().errorLastTimestep).toBe(4);
   });
 
   it("marks cancelled error events as cancelled", () => {

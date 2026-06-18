@@ -40,6 +40,7 @@ import {
 } from "@/lib/brainRegions";
 import { streamJobEvents } from "@/lib/sse";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { getJobErrorCopy } from "@/lib/jobErrors";
 import { useAuthStore } from "@/store/authStore";
 import { useViewerStore } from "@/store/viewerStore";
 import { AppShell, ErrorPanel, StatusBadge } from "@/components/ui/AppShell";
@@ -59,6 +60,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const lastEventId = useViewerStore((state) => state.lastEventId);
   const resultS3Key = useViewerStore((state) => state.resultS3Key);
   const error = useViewerStore((state) => state.error);
+  const errorCode = useViewerStore((state) => state.errorCode);
+  const errorRetryable = useViewerStore((state) => state.errorRetryable);
+  const errorLastTimestep = useViewerStore((state) => state.errorLastTimestep);
   const resetJob = useViewerStore((state) => state.resetJob);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("idle");
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -156,6 +160,8 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     [chunks, manifest, primaryRegionLabel, regionAtlas]
   );
   const conditionComparison = useMemo(() => compareTopConditions(conditionSummaries), [conditionSummaries]);
+  const jobErrorCopy = useMemo(() => getJobErrorCopy(errorCode, error, errorRetryable), [error, errorCode, errorRetryable]);
+  const resultSaveFailed = errorCode === "result_storage_failed";
   const manualDomainInvalid = useManualDomain && manualDomain === null;
   const shouldReconnect =
     Boolean(accessToken) && connectionStatus === "disconnected" && !isTerminalViewerStatus(status);
@@ -391,6 +397,12 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     if (selectedRegion?.label === label) {
       setSelectedVertex(null);
     }
+  }
+
+  function retryViewerStream() {
+    setStreamError(null);
+    setConnectAttempt((value) => value + 1);
+    setConnectionStatus("disconnected");
   }
 
   return (
@@ -761,7 +773,12 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 <strong>{result?.model_name ?? "none"}</strong>
               </div>
             </div>
-            <button disabled={!result || isDownloadingResult} onClick={downloadResult} type="button">
+            {resultSaveFailed ? (
+              <div className="partial-result-banner">
+                Streamed frames are still visible, but saving the NPZ artifact failed. Rerun the job to create a downloadable result.
+              </div>
+            ) : null}
+            <button disabled={!result || isDownloadingResult || resultSaveFailed} onClick={downloadResult} type="button">
               {isDownloadingResult ? "Preparing" : "Download NPZ"}
             </button>
           </div>
@@ -811,12 +828,13 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           {status === "failed" && chunks.length > 0 ? (
             <div className="partial-result-banner">
               Partial result is still available. The stream failed after receiving {chunks.length} chunk
-              {chunks.length === 1 ? "" : "s"}.
+              {chunks.length === 1 ? "" : "s"}
+              {errorLastTimestep !== null ? ` through timestep ${errorLastTimestep}` : ""}.
             </div>
           ) : null}
           {assetError ? <ErrorPanel message={assetError} /> : null}
-          {error ? <ErrorPanel message={error} /> : null}
-          {streamError ? <ErrorPanel message={streamError} /> : null}
+          {error ? <ErrorPanel message={jobErrorCopy.message} onRetry={jobErrorCopy.retryLabel ? retryViewerStream : undefined} /> : null}
+          {streamError ? <ErrorPanel message={streamError} onRetry={retryViewerStream} /> : null}
           {resultError ? <ErrorPanel message={resultError} /> : null}
           {cancelError ? <ErrorPanel message={cancelError} /> : null}
           {shouldReconnect ? <p>Reconnecting in {reconnectDelaySeconds}s.</p> : null}

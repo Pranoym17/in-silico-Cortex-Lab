@@ -1,7 +1,7 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type ApiErrorBody = {
-  detail?: string;
+  detail?: string | { code?: string; message?: string };
 };
 
 export class ApiError extends Error {
@@ -9,15 +9,28 @@ export class ApiError extends Error {
   body: ApiErrorBody | unknown;
 
   constructor(status: number, body: ApiErrorBody | unknown) {
-    const message =
-      body && typeof body === "object" && "detail" in body && typeof body.detail === "string"
-        ? body.detail
-        : `Request failed with status ${status}`;
+    const message = getApiErrorMessage(status, body);
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.body = body;
   }
+}
+
+function getApiErrorMessage(status: number, body: ApiErrorBody | unknown) {
+  if (!body || typeof body !== "object" || !("detail" in body)) {
+    return `Request failed with status ${status}`;
+  }
+
+  if (typeof body.detail === "string") {
+    return body.detail;
+  }
+
+  if (body.detail && typeof body.detail === "object" && "message" in body.detail && typeof body.detail.message === "string") {
+    return body.detail.message;
+  }
+
+  return `Request failed with status ${status}`;
 }
 
 export type ExperimentStatus = "draft" | "ready" | "archived";

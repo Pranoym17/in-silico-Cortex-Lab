@@ -111,3 +111,32 @@ async def test_presign_upload_rejects_oversized_image(auth_user):
         )
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_presign_upload_maps_service_failure(auth_user, monkeypatch):
+    def fail_create_upload_intent(owner, data):
+        raise RuntimeError("raw aws stack trace")
+
+    monkeypatch.setattr("app.api.uploads.create_upload_intent", fail_create_upload_intent)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/uploads/presign",
+            headers={"Authorization": f"Bearer {make_token()}"},
+            json={
+                "experiment_id": str(uuid4()),
+                "kind": "image",
+                "filename": "face.png",
+                "mime_type": "image/png",
+                "size_bytes": 512000,
+            },
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": {
+            "code": "upload_failed",
+            "message": "Upload setup failed. Check S3 configuration and retry.",
+        }
+    }
