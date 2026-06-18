@@ -27,6 +27,14 @@ export type BrainMeshManifest = {
 
 export type DesikanKillianyAtlas = Record<string, string>;
 
+export type BrainAtlasValidation = {
+  valid: boolean;
+  message: string | null;
+};
+
+export const FSAVERAGE5_TOTAL_VERTEX_COUNT = 20484;
+export const FSAVERAGE5_HEMISPHERE_VERTEX_COUNT = 10242;
+
 export async function loadBrainManifest(fetcher: typeof fetch = fetch): Promise<BrainMeshManifest> {
   const response = await fetcher("/brain/mesh-manifest.json");
   if (!response.ok) {
@@ -76,6 +84,15 @@ export function validateBrainManifest(value: unknown): BrainMeshManifest {
   if (manifest.total_vertex_count !== manifest.vertex_count) {
     throw new Error("Brain mesh manifest total_vertex_count must match vertex_count");
   }
+  if (manifest.total_vertex_count !== FSAVERAGE5_TOTAL_VERTEX_COUNT) {
+    throw new Error(`Brain mesh manifest total vertex count must be ${FSAVERAGE5_TOTAL_VERTEX_COUNT}`);
+  }
+  if (
+    manifest.left_vertex_count !== FSAVERAGE5_HEMISPHERE_VERTEX_COUNT ||
+    manifest.right_vertex_count !== FSAVERAGE5_HEMISPHERE_VERTEX_COUNT
+  ) {
+    throw new Error(`Brain mesh manifest fsaverage5 hemispheres must each have ${FSAVERAGE5_HEMISPHERE_VERTEX_COUNT} vertices`);
+  }
   if (!isRecord(manifest.gltf) || typeof manifest.gltf.left !== "string" || typeof manifest.gltf.right !== "string") {
     throw new Error("Brain mesh manifest must include left and right GLTF paths");
   }
@@ -100,6 +117,53 @@ export function validateBrainAtlas(value: unknown): DesikanKillianyAtlas {
   }
 
   return value as DesikanKillianyAtlas;
+}
+
+export function validateAtlasForManifest(
+  atlas: DesikanKillianyAtlas | null,
+  manifest: BrainMeshManifest | null
+): BrainAtlasValidation {
+  if (!manifest) {
+    return { valid: false, message: "Brain mesh manifest is unavailable." };
+  }
+  if (!atlas) {
+    return { valid: false, message: "Atlas unavailable." };
+  }
+  if (manifest.atlas_source === undefined || manifest.atlas_source === "unknown-placeholder") {
+    return { valid: false, message: "Atlas unavailable: manifest atlas source is not scientifically verified." };
+  }
+  if (manifest.total_vertex_count !== FSAVERAGE5_TOTAL_VERTEX_COUNT) {
+    return {
+      valid: false,
+      message: `Atlas unavailable: mesh has ${manifest.total_vertex_count} vertices, expected ${FSAVERAGE5_TOTAL_VERTEX_COUNT}.`
+    };
+  }
+  if (manifest.hemispheres.left.vertex_start !== 0 || manifest.hemispheres.left.vertex_count !== FSAVERAGE5_HEMISPHERE_VERTEX_COUNT) {
+    return { valid: false, message: "Atlas unavailable: left hemisphere range must be 0..10241." };
+  }
+  if (
+    manifest.hemispheres.right.vertex_start !== FSAVERAGE5_HEMISPHERE_VERTEX_COUNT ||
+    manifest.hemispheres.right.vertex_count !== FSAVERAGE5_HEMISPHERE_VERTEX_COUNT
+  ) {
+    return { valid: false, message: "Atlas unavailable: right hemisphere range must be 10242..20483." };
+  }
+
+  const atlasVertexCount = Object.keys(atlas).length;
+  if (atlasVertexCount !== manifest.total_vertex_count) {
+    return {
+      valid: false,
+      message: `Atlas unavailable: atlas has ${atlasVertexCount} vertices, expected ${manifest.total_vertex_count}.`
+    };
+  }
+  if (!Object.prototype.hasOwnProperty.call(atlas, "0")) {
+    return { valid: false, message: "Atlas unavailable: vertex 0 is missing." };
+  }
+  const lastVertex = String(manifest.total_vertex_count - 1);
+  if (!Object.prototype.hasOwnProperty.call(atlas, lastVertex)) {
+    return { valid: false, message: `Atlas unavailable: vertex ${lastVertex} is missing.` };
+  }
+
+  return { valid: true, message: null };
 }
 
 function validateHemisphere(

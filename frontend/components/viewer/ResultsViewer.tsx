@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BrainPointerPosition, BrainScene } from "./BrainScene";
-import { BrainMeshManifest, DesikanKillianyAtlas, loadBrainAtlas, loadBrainManifest } from "@/lib/brainAssets";
+import {
+  BrainMeshManifest,
+  DesikanKillianyAtlas,
+  loadBrainAtlas,
+  loadBrainManifest,
+  validateAtlasForManifest
+} from "@/lib/brainAssets";
 import {
   getJobResult,
   getJobResultDownload,
@@ -93,6 +99,10 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     () => getActivationStats(selectedChunk ?? latestChunk, selectedFrameIndex),
     [latestChunk, selectedChunk, selectedFrameIndex]
   );
+  const atlasValidation = useMemo(() => validateAtlasForManifest(atlas, manifest), [atlas, manifest]);
+  const regionAtlas = atlasValidation.valid ? atlas : null;
+  const regionModeEnabled = Boolean(regionAtlas && manifest);
+  const showAtlasUnavailable = Boolean(manifest) && !regionModeEnabled;
   const selectedValidation = useMemo(
     () => validateActivationChunkAgainstManifest(selectedChunk ?? latestChunk, manifest),
     [latestChunk, manifest, selectedChunk]
@@ -103,24 +113,24 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     [renderableChunk, selectedFrameIndex]
   );
   const hoveredRegion = useMemo(
-    () => getVertexRegionSnapshot(hoveredVertex, atlas, manifest, selectedFrame),
-    [atlas, hoveredVertex, manifest, selectedFrame]
+    () => getVertexRegionSnapshot(hoveredVertex, regionAtlas, manifest, selectedFrame),
+    [hoveredVertex, manifest, regionAtlas, selectedFrame]
   );
   const selectedRegion = useMemo(
-    () => getVertexRegionSnapshot(selectedVertex, atlas, manifest, selectedFrame),
-    [atlas, manifest, selectedFrame, selectedVertex]
+    () => getVertexRegionSnapshot(selectedVertex, regionAtlas, manifest, selectedFrame),
+    [manifest, regionAtlas, selectedFrame, selectedVertex]
   );
   const primaryRegionLabel = selectedRegion?.label ?? selectedRegionLabels[0] ?? null;
   const primaryRegionStats = useMemo(
     () =>
-      primaryRegionLabel && atlas && manifest
-        ? getRegionActivationStats(primaryRegionLabel, atlas, manifest, selectedChunk ?? latestChunk, selectedFrameIndex)
+      primaryRegionLabel && regionAtlas && manifest
+        ? getRegionActivationStats(primaryRegionLabel, regionAtlas, manifest, selectedChunk ?? latestChunk, selectedFrameIndex)
         : null,
-    [atlas, latestChunk, manifest, primaryRegionLabel, selectedChunk, selectedFrameIndex]
+    [latestChunk, manifest, primaryRegionLabel, regionAtlas, selectedChunk, selectedFrameIndex]
   );
   const primaryRegionTimecourse = useMemo(
-    () => (primaryRegionLabel && atlas && manifest ? getRegionTimecourse(primaryRegionLabel, atlas, manifest, chunks) : []),
-    [atlas, chunks, manifest, primaryRegionLabel]
+    () => (primaryRegionLabel && regionAtlas && manifest ? getRegionTimecourse(primaryRegionLabel, regionAtlas, manifest, chunks) : []),
+    [chunks, manifest, primaryRegionLabel, regionAtlas]
   );
   const primaryRegionPeak = useMemo(() => getRegionPeak(primaryRegionTimecourse), [primaryRegionTimecourse]);
   const primaryRegionMetadata = useMemo(
@@ -129,21 +139,21 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   );
   const selectedRegionTimecourses = useMemo(
     () =>
-      atlas && manifest
+      regionAtlas && manifest
         ? selectedRegionLabels.map((label, index) => ({
             label,
             color: REGION_COLORS[index % REGION_COLORS.length],
-            points: getRegionTimecourse(label, atlas, manifest, chunks)
+            points: getRegionTimecourse(label, regionAtlas, manifest, chunks)
           }))
         : [],
-    [atlas, chunks, manifest, selectedRegionLabels]
+    [chunks, manifest, regionAtlas, selectedRegionLabels]
   );
   const conditionSummaries = useMemo(
     () =>
-      primaryRegionLabel && atlas && manifest
-        ? getRegionConditionSummaries(primaryRegionLabel, atlas, manifest, chunks)
+      primaryRegionLabel && regionAtlas && manifest
+        ? getRegionConditionSummaries(primaryRegionLabel, regionAtlas, manifest, chunks)
         : [],
-    [atlas, chunks, manifest, primaryRegionLabel]
+    [chunks, manifest, primaryRegionLabel, regionAtlas]
   );
   const conditionComparison = useMemo(() => compareTopConditions(conditionSummaries), [conditionSummaries]);
   const manualDomainInvalid = useManualDomain && manualDomain === null;
@@ -179,17 +189,28 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([loadBrainManifest(), loadBrainAtlas()])
-      .then(([loadedManifest, loadedAtlas]) => {
+    loadBrainManifest()
+      .then((loadedManifest) => {
         if (!cancelled) {
           setManifest(loadedManifest);
-          setAtlas(loadedAtlas);
           setAssetError(null);
         }
       })
       .catch((caught) => {
         if (!cancelled) {
           setAssetError(caught instanceof Error ? caught.message : "Brain mesh assets failed to load");
+        }
+      });
+
+    loadBrainAtlas()
+      .then((loadedAtlas) => {
+        if (!cancelled) {
+          setAtlas(loadedAtlas);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAtlas(null);
         }
       });
 
@@ -213,6 +234,16 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     setSelectedVertex(null);
     setSelectedRegionLabels([]);
   }, [jobId, resetJob]);
+
+  useEffect(() => {
+    if (regionModeEnabled) {
+      return;
+    }
+    setHoveredVertex(null);
+    setHoverPosition(null);
+    setSelectedVertex(null);
+    setSelectedRegionLabels([]);
+  }, [regionModeEnabled]);
 
   useEffect(() => {
     if (!accessToken || status !== "complete") {
@@ -336,12 +367,15 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   }
 
   function selectVertex(vertexIndex: number) {
+    if (!regionModeEnabled) {
+      return;
+    }
     setSelectedVertex(vertexIndex);
-    if (!atlas || !manifest) {
+    if (!regionAtlas || !manifest) {
       return;
     }
 
-    const region = getRegionForVertex(atlas, manifest, vertexIndex);
+    const region = getRegionForVertex(regionAtlas, manifest, vertexIndex);
     if (!region) {
       return;
     }
@@ -385,6 +419,11 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               manifest={manifest}
               onVertexClick={selectVertex}
               onVertexHover={(vertexIndex, position) => {
+                if (!regionModeEnabled) {
+                  setHoveredVertex(null);
+                  setHoverPosition(null);
+                  return;
+                }
                 setHoveredVertex(vertexIndex);
                 setHoverPosition(position);
               }}
@@ -540,11 +579,14 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
             </div>
           </div>
           {!selectedValidation.valid ? <ErrorPanel message={selectedValidation.message ?? "Activation mesh validation failed."} /> : null}
+          {showAtlasUnavailable ? (
+            <ErrorPanel message={atlasValidation.message ?? "Atlas unavailable. Region hover, selection, charts, and condition comparison are disabled."} />
+          ) : null}
           <div className="viewer-section">
             <div className="viewer-section-header">
               <h3>Region</h3>
               <button
-                disabled={selectedRegionLabels.length === 0}
+                disabled={!regionModeEnabled || selectedRegionLabels.length === 0}
                 onClick={() => {
                   setSelectedRegionLabels([]);
                   setSelectedVertex(null);
@@ -554,7 +596,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 Clear all
               </button>
             </div>
-            {selectedRegionLabels.length > 0 ? (
+            {showAtlasUnavailable ? (
+              <p>Atlas unavailable. Activation rendering remains available, but region interaction is disabled.</p>
+            ) : selectedRegionLabels.length > 0 ? (
               <div className="region-chip-row">
                 {selectedRegionLabels.map((label, index) => (
                   <button
@@ -632,7 +676,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           </div>
           <div className="viewer-section">
             <h3>Timecourse</h3>
-            {selectedRegionTimecourses.length > 0 ? (
+            {showAtlasUnavailable ? (
+              <p>Atlas unavailable. Region timecourses are disabled.</p>
+            ) : selectedRegionTimecourses.length > 0 ? (
               <>
                 <RegionTimecourseChart
                   currentTimestep={selectedTimestep}
@@ -653,7 +699,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           </div>
           <div className="viewer-section">
             <h3>Condition Comparison</h3>
-            {conditionSummaries.length > 0 ? (
+            {showAtlasUnavailable ? (
+              <p>Atlas unavailable. Condition comparison by region is disabled.</p>
+            ) : conditionSummaries.length > 0 ? (
               <>
                 <div className="viewer-stat-grid">
                   {conditionSummaries.slice(0, 4).map((summary) => (

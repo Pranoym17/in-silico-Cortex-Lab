@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { loadBrainAtlas, loadBrainManifest, validateBrainAtlas, validateBrainManifest } from "./brainAssets";
+import {
+  FSAVERAGE5_TOTAL_VERTEX_COUNT,
+  loadBrainAtlas,
+  loadBrainManifest,
+  validateAtlasForManifest,
+  validateBrainAtlas,
+  validateBrainManifest
+} from "./brainAssets";
 
 const manifest = {
   surface: "fsaverage5",
@@ -12,6 +19,7 @@ const manifest = {
   ordering_rule: "left source vertex order, then right source vertex order",
   coordinate_units: "millimeters",
   atlas: "desikan-killiany",
+  atlas_source: "freesurfer-fsaverage-aparc-nearest-to-nilearn-fsaverage5",
   gltf: {
     left: "/brain/fsaverage5_left.gltf",
     right: "/brain/fsaverage5_right.gltf"
@@ -84,6 +92,58 @@ describe("brain asset validation", () => {
       "Brain atlas must map numeric vertex indices to region names"
     );
   });
+
+  it("validates a complete atlas against the mesh manifest", () => {
+    const atlas = makeAtlas();
+
+    expect(validateAtlasForManifest(atlas, validateBrainManifest(manifest))).toEqual({ valid: true, message: null });
+  });
+
+  it("rejects missing or placeholder atlas sources for region interaction", () => {
+    const atlas = makeAtlas();
+
+    expect(validateAtlasForManifest(null, validateBrainManifest(manifest))).toEqual({
+      valid: false,
+      message: "Atlas unavailable."
+    });
+    expect(
+      validateAtlasForManifest(atlas, validateBrainManifest({ ...manifest, atlas_source: "unknown-placeholder" }))
+    ).toEqual({
+      valid: false,
+      message: "Atlas unavailable: manifest atlas source is not scientifically verified."
+    });
+  });
+
+  it("rejects atlas count mismatches", () => {
+    const atlas = makeAtlas();
+    const missingLast = { ...atlas };
+    delete missingLast[String(FSAVERAGE5_TOTAL_VERTEX_COUNT - 1)];
+
+    expect(validateAtlasForManifest({ "0": "Left-A" }, validateBrainManifest(manifest))).toEqual({
+      valid: false,
+      message: "Atlas unavailable: atlas has 1 vertices, expected 20484."
+    });
+    expect(validateAtlasForManifest(missingLast, validateBrainManifest(manifest))).toEqual({
+      valid: false,
+      message: "Atlas unavailable: atlas has 20483 vertices, expected 20484."
+    });
+  });
+
+  it("rejects missing atlas endpoint vertices", () => {
+    const missingFirst = { ...makeAtlas(), [String(FSAVERAGE5_TOTAL_VERTEX_COUNT)]: "Out-of-range" };
+    delete missingFirst["0"];
+    const missingLast = { ...makeAtlas(), [String(FSAVERAGE5_TOTAL_VERTEX_COUNT)]: "Out-of-range" };
+    delete missingLast[String(FSAVERAGE5_TOTAL_VERTEX_COUNT - 1)];
+
+    expect(validateAtlasForManifest(missingFirst, validateBrainManifest(manifest))).toEqual({
+      valid: false,
+      message: "Atlas unavailable: vertex 0 is missing."
+    });
+    expect(validateAtlasForManifest(missingLast, validateBrainManifest(manifest))).toEqual({
+      valid: false,
+      message: "Atlas unavailable: vertex 20483 is missing."
+    });
+  });
 });
 
 describe("brain asset loaders", () => {
@@ -102,3 +162,12 @@ describe("brain asset loaders", () => {
     expect(fetcher).toHaveBeenCalledWith("/brain/atlas-desikan-killiany.json");
   });
 });
+
+function makeAtlas() {
+  return Object.fromEntries(
+    Array.from({ length: FSAVERAGE5_TOTAL_VERTEX_COUNT }, (_value, index) => [
+      String(index),
+      index < 10242 ? "Left-A" : "Right-A"
+    ])
+  );
+}
