@@ -1,10 +1,12 @@
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.block import BlockType
+
+ContentHash = Annotated[str, Field(pattern=r"^sha256:[a-fA-F0-9]{3,}$", max_length=255)]
 
 
 class BlockBase(BaseModel):
@@ -12,7 +14,7 @@ class BlockBase(BaseModel):
     condition: str | None = Field(default=None, max_length=255)
     start_ms: int = Field(ge=0)
     duration_ms: int = Field(gt=0)
-    content_hash: str | None = Field(default=None, max_length=255)
+    content_hash: ContentHash | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -39,7 +41,7 @@ class BlockUpdate(BaseModel):
     condition: str | None = Field(default=None, max_length=255)
     start_ms: int | None = Field(default=None, ge=0)
     duration_ms: int | None = Field(default=None, gt=0)
-    content_hash: str | None = Field(default=None, max_length=255)
+    content_hash: ContentHash | None = None
     payload: dict[str, Any] | None = None
 
 
@@ -66,4 +68,3 @@ class BlockReorderItem(BaseModel):
 
 class BlockReorderRequest(BaseModel):
     blocks: list[BlockReorderItem] = Field(min_length=1, max_length=50)
-

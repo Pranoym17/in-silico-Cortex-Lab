@@ -17,7 +17,11 @@ def ensure_experiment_is_editable(experiment) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Archived experiments cannot be edited")
 
 
-def validate_block_content(block: Block) -> None:
+def _expected_upload_prefix(owner: User, experiment_id: UUID) -> str:
+    return f"uploads/{owner.id}/experiments/{experiment_id}/"
+
+
+def validate_block_content(block: Block, owner: User | None = None) -> None:
     if block.type.value == "image" and not 500 <= block.duration_ms <= 30000:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -29,6 +33,22 @@ def validate_block_content(block: Block) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="audio block duration cannot exceed 60000ms",
         )
+
+    if block.type.value in {"image", "audio"}:
+        s3_key = block.payload.get("s3_key")
+        if s3_key is not None:
+            if not isinstance(s3_key, str) or not s3_key.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"{block.type.value} blocks require a valid s3_key",
+                )
+            if owner is not None:
+                expected_prefix = _expected_upload_prefix(owner, block.experiment_id)
+                if not s3_key.startswith(expected_prefix):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="block media must reference an upload owned by this experiment",
+                    )
 
     text = block.payload.get("text") if block.type.value == "text" else None
     if isinstance(text, str) and len(text.split()) > 1024:
@@ -72,6 +92,7 @@ async def create_block(session: AsyncSession, owner: User, experiment_id: UUID, 
         content_hash=data.content_hash,
         payload=data.payload,
     )
+    validate_block_content(block, owner)
     session.add(block)
     await session.commit()
     await session.refresh(block)
@@ -94,7 +115,7 @@ async def update_block(
         setattr(block, field, value)
 
     blocks = await list_blocks(session, owner, experiment_id)
-    validate_block_content(block)
+    validate_block_content(block, owner)
     validate_timeline([to_timeline_block(item) for item in blocks])
 
     await session.commit()

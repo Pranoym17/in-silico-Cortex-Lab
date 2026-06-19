@@ -62,10 +62,16 @@ export function createUploadIntentInput(
 }
 
 export async function uploadFileToIntent(file: File, intent: UploadIntent) {
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(intent.fields)) {
+    formData.append(key, value);
+  }
+  formData.append("file", file);
+
   const response = await fetch(intent.upload_url, {
-    method: "PUT",
+    method: intent.method,
     headers: intent.headers,
-    body: file
+    body: formData
   });
 
   if (!response.ok) {

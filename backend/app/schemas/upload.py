@@ -35,8 +35,10 @@ class UploadIntentRequest(BaseModel):
 
 
 class UploadIntentResponse(BaseModel):
+    method: Literal["POST"] = "POST"
     upload_url: str
     object_key: str
     headers: dict[str, str]
+    fields: dict[str, str] = Field(default_factory=dict)
     expires_in_seconds: int
     content_hash_algorithm: Literal["sha256"] = "sha256"

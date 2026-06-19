@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Any
 from urllib.request import urlopen
 
@@ -17,6 +18,11 @@ class AuthError(Exception):
         self.message = message
 
 
+_JWKS_CACHE: dict[str, Any] | None = None
+_JWKS_CACHE_EXPIRES_AT = 0.0
+JWKS_CACHE_TTL_SECONDS = 300
+
+
 def _get_jwks_url() -> str:
     settings = get_settings()
     if not settings.supabase_url:
@@ -26,8 +32,16 @@ def _get_jwks_url() -> str:
 
 
 def _fetch_supabase_jwks() -> dict[str, Any]:
+    global _JWKS_CACHE, _JWKS_CACHE_EXPIRES_AT
+    now = time.monotonic()
+    if _JWKS_CACHE is not None and now < _JWKS_CACHE_EXPIRES_AT:
+        return _JWKS_CACHE
+
     with urlopen(_get_jwks_url(), timeout=5) as response:
-        return json.loads(response.read())
+        jwks = json.loads(response.read())
+    _JWKS_CACHE = jwks
+    _JWKS_CACHE_EXPIRES_AT = now + JWKS_CACHE_TTL_SECONDS
+    return jwks
 
 
 def _get_jwks_key(token: str) -> dict[str, Any]:
@@ -69,7 +83,9 @@ def verify_supabase_jwt(token: str) -> dict[str, Any]:
             token,
             key,
             algorithms=algorithms,
-            options={"verify_aud": False},
+            audience=settings.supabase_jwt_audience,
+            issuer=settings.supabase_jwt_issuer,
+            options={"verify_aud": settings.supabase_jwt_audience is not None},
         )
     except JWTError as exc:
         raise AuthError("Invalid authentication token") from exc

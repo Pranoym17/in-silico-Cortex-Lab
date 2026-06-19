@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -7,6 +8,7 @@ from pydantic import ValidationError
 from app.models.block import BlockType
 from app.schemas.block import BlockCreate
 from app.services.block_validation import TimelineBlock, validate_timeline
+from app.services.blocks import validate_block_content
 
 
 def test_block_create_accepts_text_payload():
@@ -66,3 +68,32 @@ def test_validate_timeline_rejects_duration_cap():
     assert exc.value.status_code == 422
     assert exc.value.detail == "experiment duration cannot exceed 300000ms"
 
+
+def test_validate_block_content_accepts_owned_upload_key():
+    owner = SimpleNamespace(id=uuid4())
+    experiment_id = uuid4()
+    block = SimpleNamespace(
+        type=BlockType.image,
+        duration_ms=1000,
+        experiment_id=experiment_id,
+        payload={"s3_key": f"uploads/{owner.id}/experiments/{experiment_id}/block/face.png"},
+    )
+
+    validate_block_content(block, owner)
+
+
+def test_validate_block_content_rejects_unowned_upload_key():
+    owner = SimpleNamespace(id=uuid4())
+    experiment_id = uuid4()
+    block = SimpleNamespace(
+        type=BlockType.audio,
+        duration_ms=1000,
+        experiment_id=experiment_id,
+        payload={"s3_key": f"uploads/{uuid4()}/experiments/{experiment_id}/block/sound.wav"},
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        validate_block_content(block, owner)
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "block media must reference an upload owned by this experiment"

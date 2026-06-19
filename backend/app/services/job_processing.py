@@ -13,7 +13,7 @@ from app.schemas.sse import CompleteEvent, ErrorEvent, ProgressEvent, QueuedEven
 from app.services.activation_events import fake_activation_chunk
 from app.services.error_codes import JobErrorCode, is_retryable_job_error, normalize_job_error_code
 from app.services.modal_inference import ModalInferenceError, encode_modal_chunk_event, stream_deployed_modal_events
-from app.services.result_cache import CachedResult, cached_result_to_metadata, set_cached_result
+from app.services.result_cache import CachedResult, cached_result_to_metadata, set_cached_result, text_result_cache_context
 from app.services.result_storage import ActivationMatrixAssembler, ResultStorageError, store_job_result
 from app.services.sse_broker import JobEventBroker, get_job_event_broker
 
@@ -110,6 +110,14 @@ async def mark_job_failed(
 async def job_was_cancelled(session: AsyncSession, job: Job) -> bool:
     await session.refresh(job)
     return job.status == JobStatus.cancelled
+
+
+async def rollback_if_cancelled_before_completion(session: AsyncSession, job: Job) -> bool:
+    if await job_was_cancelled(session, job):
+        await session.rollback()
+        await session.refresh(job)
+        return True
+    return False
 
 
 async def publish_job_error(
@@ -335,8 +343,14 @@ async def process_fake_inference_job(
             last_timestep=completed_timesteps - 1 if completed_timesteps > 0 else None,
         )
         return failed_job
+    if await rollback_if_cancelled_before_completion(session, job):
+        return job
     if len(run_request.blocks) == 1 and run_request.blocks[0].type == "text":
-        set_cached_result(run_request.blocks[0].content_hash, result)
+        set_cached_result(
+            run_request.blocks[0].content_hash,
+            result,
+            text_result_cache_context(run_request.blocks[0], run_request.settings, model_name="fake", model_version="dev"),
+        )
     job.status = JobStatus.complete
     job.completed_at = datetime.now(UTC)
     await session.commit()
@@ -498,8 +512,18 @@ async def process_modal_inference_job(
                         "atlas": run_request.settings.atlas,
                     },
                 )
+                if await rollback_if_cancelled_before_completion(session, job):
+                    return job
                 if len(run_request.blocks) == 1 and run_request.blocks[0].type == "text":
-                    set_cached_result(run_request.blocks[0].content_hash, result)
+                    set_cached_result(
+                        run_request.blocks[0].content_hash,
+                        result,
+                        text_result_cache_context(
+                            run_request.blocks[0],
+                            run_request.settings,
+                            model_name="tribev2",
+                        ),
+                    )
                 job.status = JobStatus.complete
                 job.completed_at = datetime.now(UTC)
                 await session.commit()

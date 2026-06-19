@@ -1,4 +1,5 @@
 from io import BytesIO
+import json
 import logging
 import time
 from typing import Any
@@ -65,6 +66,13 @@ def result_artifact_exists(s3_key: str) -> bool:
         raise ResultStorageError(f"Failed to check result artifact: {exc}") from exc
 
 
+def delete_result_artifact(s3_key: str) -> None:
+    try:
+        _s3_client().delete_object(Bucket=get_settings().s3_bucket_name, Key=s3_key)
+    except Exception as exc:
+        logger.warning("s3_result_cleanup_failed", extra={"s3_key": s3_key}, exc_info=exc)
+
+
 class ActivationMatrixAssembler:
     def __init__(self) -> None:
         self._chunks: list[tuple[int, NDArray[np.float32]]] = []
@@ -117,7 +125,7 @@ def serialize_activation_npz(
         buffer,
         activations=np.ascontiguousarray(matrix, dtype="<f4"),
         sample_rate_hz=np.array(sample_rate_hz if sample_rate_hz is not None else np.nan, dtype="<f4"),
-        metadata=np.array([metadata], dtype=object),
+        metadata_json=np.array(json.dumps(metadata, sort_keys=True), dtype=np.str_),
     )
     return buffer.getvalue()
 
@@ -177,6 +185,10 @@ async def store_job_result(
         metadata_json=result_metadata,
     )
     session.add(result)
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as exc:
+        delete_result_artifact(s3_key)
+        raise ResultStorageError(f"Failed to create result row: {exc}") from exc
     logger.info("db_result_row_created", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "s3_key": s3_key})
     return result

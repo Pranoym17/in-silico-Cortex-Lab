@@ -13,6 +13,7 @@ Authorization: Bearer <supabase_jwt>
 ```
 
 4. FastAPI auth middleware verifies the token with `python-jose` and `SUPABASE_JWT_SECRET`.
+   Production deployments can additionally set `SUPABASE_JWT_AUDIENCE` and `SUPABASE_JWT_ISSUER` for strict token binding.
 5. Middleware extracts `sub` as the canonical external auth user ID.
 6. Middleware looks up a local RDS `users` row by `supabase_user_id`.
 7. If missing, middleware creates the row on first login.
@@ -131,6 +132,8 @@ Audio constraints:
 - Stereo uploads are accepted but downmixed to mono before TRIBE v2.
 - Audio decode failures are validation errors before inference starts when possible.
 
+Upload intents use S3 presigned POST with `content-length-range` conditions. Media object keys are scoped to `uploads/{owner_id}/experiments/{experiment_id}/...`, and media blocks must reference an object inside that owned experiment prefix.
+
 ## Job Statuses And UI Behavior
 
 Statuses:
@@ -162,6 +165,8 @@ Failure classes:
 ### `GET /api/jobs/{job_id}/stream?from_timestep=0`
 
 Auth required unless the job belongs to a public shared experiment.
+
+Local development uses the in-memory event broker by default. Production or Celery deployments should set `SSE_EVENT_BACKEND=redis` so API and worker processes share event history and pub/sub through Redis.
 
 Use named SSE events. Each event frame is UTF-8 text. Binary activation data is encoded as base64 msgpack inside JSON, so the SSE envelope remains browser-compatible.
 

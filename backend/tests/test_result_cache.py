@@ -37,6 +37,15 @@ def test_cache_key_for_content_hash():
     assert cache_key_for_content_hash(" sha256:abc ") == "tribe:v2:sha256:abc"
 
 
+def test_cache_key_includes_run_context_when_present():
+    fast = cache_key_for_content_hash("sha256:abc", {"sample_rate_hz": 2, "model_name": "tribev2"})
+    slow = cache_key_for_content_hash("sha256:abc", {"sample_rate_hz": 1, "model_name": "tribev2"})
+
+    assert fast.startswith("tribe:v2:sha256:abc:")
+    assert slow.startswith("tribe:v2:sha256:abc:")
+    assert fast != slow
+
+
 def test_set_and_get_cached_result(monkeypatch):
     fake_redis = FakeRedis()
     result_cache.get_settings.cache_clear()

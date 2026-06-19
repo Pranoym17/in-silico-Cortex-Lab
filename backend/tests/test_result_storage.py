@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 from uuid import uuid4
+from io import BytesIO
+import json
 
 import numpy as np
 import pytest
@@ -151,6 +153,9 @@ async def test_store_job_result_writes_npz_and_result_row(monkeypatch):
     assert captured_put["Key"] == f"results/{job.id}/activations.npz"
     assert captured_put["ContentType"] == "application/octet-stream"
     assert isinstance(captured_put["Body"], bytes)
+    with np.load(BytesIO(captured_put["Body"]), allow_pickle=False) as archive:
+        assert archive["activations"].tolist() == [[1.0, 2.0], [3.0, 4.0]]
+        assert json.loads(str(archive["metadata_json"])) == {"surface": "fsaverage5"}
     assert added == [result]
     assert result.s3_key == f"results/{job.id}/activations.npz"
     assert result.shape == [2, 2]
@@ -192,4 +197,39 @@ async def test_store_job_result_retries_transient_s3_put_failure(monkeypatch):
     )
 
     assert attempts["count"] == 2
+    result_storage.get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_store_job_result_deletes_s3_object_when_result_row_fails(monkeypatch):
+    deleted = []
+
+    class FakeS3Client:
+        def put_object(self, **kwargs):
+            return None
+
+        def delete_object(self, **kwargs):
+            deleted.append(kwargs)
+
+    class FailingSession:
+        def add(self, value):
+            return None
+
+        async def flush(self):
+            raise RuntimeError("db unavailable")
+
+    job = SimpleNamespace(id=uuid4(), experiment_id=uuid4(), owner_id=uuid4())
+    monkeypatch.setattr(result_storage, "_s3_client", lambda: FakeS3Client())
+    result_storage.get_settings.cache_clear()
+    monkeypatch.setenv("S3_BUCKET_NAME", "cortexlab-results")
+
+    with pytest.raises(ResultStorageError, match="Failed to create result row"):
+        await store_job_result(
+            FailingSession(),
+            job,
+            np.array([[1.0, 2.0]], dtype=np.float32),
+            sample_rate_hz=2,
+        )
+
+    assert deleted == [{"Bucket": "cortexlab-results", "Key": f"results/{job.id}/activations.npz"}]
     result_storage.get_settings.cache_clear()

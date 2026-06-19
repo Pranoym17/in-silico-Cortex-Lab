@@ -71,6 +71,7 @@ class FakeSession:
     def __init__(self, job):
         self.job = job
         self.commits = 0
+        self.rollbacks = 0
         self.refreshed = []
         self.added = []
 
@@ -79,6 +80,9 @@ class FakeSession:
 
     async def commit(self):
         self.commits += 1
+
+    async def rollback(self):
+        self.rollbacks += 1
 
     async def refresh(self, job):
         self.refreshed.append(job)
@@ -99,7 +103,7 @@ def fake_result_storage(monkeypatch):
     monkeypatch.setattr("app.services.result_storage._s3_client", lambda: FakeS3Client())
     monkeypatch.setenv("S3_BUCKET_NAME", "test-results")
     monkeypatch.setenv("RESULTS_S3_PREFIX", "results")
-    monkeypatch.setattr("app.services.job_processing.set_cached_result", lambda content_hash, result: None)
+    monkeypatch.setattr("app.services.job_processing.set_cached_result", lambda content_hash, result, context=None: None)
     yield
 
 
@@ -548,6 +552,52 @@ async def test_process_modal_inference_job_maps_result_storage_failure(monkeypat
         "retryable": True,
         "last_timestep": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_process_modal_inference_job_rolls_back_result_if_cancelled_before_complete(monkeypatch):
+    job = make_job()
+    session = FakeSession(job)
+    broker = FakeBroker()
+
+    async def fake_stream_deployed_modal_events(**kwargs):
+        block_id = kwargs["spec"]["blocks"][0]["id"]
+        yield {
+            "type": "chunk",
+            "job_id": str(job.id),
+            "block_id": block_id,
+            "chunk_index": 0,
+            "timestep_start": 0,
+            "timestep_count": 1,
+            "sample_rate_hz": 2,
+            "vertex_count": 2,
+            "dtype": "float32",
+            "shape": [1, 2],
+            "activations": b"\x00\x00\x00\x00\x00\x00\x80?",
+        }
+        yield {"type": "complete", "job_id": str(job.id), "status": "complete", "timesteps": 1, "vertex_count": 2}
+
+    async def fake_store_job_result(*args, **kwargs):
+        job.status = JobStatus.cancelled
+        return SimpleNamespace(
+            s3_key="results/job/activations.npz",
+            model_version=None,
+        )
+
+    monkeypatch.setattr("app.services.job_processing.stream_deployed_modal_events", fake_stream_deployed_modal_events)
+    monkeypatch.setattr("app.services.job_processing.store_job_result", fake_store_job_result)
+
+    processed = await process_modal_inference_job(
+        session,
+        job.id,
+        broker,
+        app_name="cortex-lab-tribe-inference",
+        function_name="run_real",
+    )
+
+    assert processed.status == JobStatus.cancelled
+    assert session.rollbacks == 1
+    assert "complete" not in [event for _, event, _ in broker.events]
 
 
 @pytest.mark.asyncio

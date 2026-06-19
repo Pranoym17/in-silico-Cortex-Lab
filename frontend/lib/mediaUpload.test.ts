@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { StimulusBlock } from "@/lib/api";
-import { bytesToHex, createUploadIntentInput, formatUploadError, validateUploadFile } from "./mediaUpload";
+import { bytesToHex, createUploadIntentInput, formatUploadError, uploadFileToIntent, validateUploadFile } from "./mediaUpload";
 
 function makeBlock(overrides: Partial<StimulusBlock> = {}): StimulusBlock {
   return {
@@ -19,6 +19,11 @@ function makeBlock(overrides: Partial<StimulusBlock> = {}): StimulusBlock {
 }
 
 describe("mediaUpload", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("formats digest bytes as hex", () => {
     expect(bytesToHex(new Uint8Array([0, 15, 255]).buffer)).toBe("000fff");
   });
@@ -44,5 +49,31 @@ describe("mediaUpload", () => {
 
   it("formats upload failures with retry guidance", () => {
     expect(formatUploadError(new Error("Upload failed with status 403"))).toContain("Retry the upload");
+  });
+
+  it("uploads files with presigned POST fields", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await uploadFileToIntent(new File(["x"], "face.png", { type: "image/png" }), {
+      method: "POST",
+      upload_url: "https://s3.example/upload",
+      object_key: "uploads/user/experiments/exp/block/face.png",
+      headers: {},
+      fields: {
+        key: "uploads/user/experiments/exp/block/face.png",
+        "Content-Type": "image/png"
+      },
+      expires_in_seconds: 900,
+      content_hash_algorithm: "sha256"
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://s3.example/upload",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.any(FormData)
+      })
+    );
   });
 });

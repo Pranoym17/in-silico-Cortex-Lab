@@ -7,12 +7,18 @@ from app.services import uploads
 
 def test_create_upload_intent_uses_settings_credentials(monkeypatch):
     captured_client_kwargs = {}
+    captured_post_kwargs = {}
 
     def fake_client(service_name, **kwargs):
         captured_client_kwargs.update(kwargs)
         assert service_name == "s3"
 
-        return SimpleNamespace(generate_presigned_url=lambda **_: "https://s3.example/presigned")
+        return SimpleNamespace(
+            generate_presigned_post=lambda **kwargs: captured_post_kwargs.update(kwargs) or {
+                "url": "https://s3.example/presigned",
+                "fields": {"key": kwargs["Key"], "Content-Type": kwargs["Fields"]["Content-Type"]},
+            }
+        )
 
     monkeypatch.setattr("app.services.uploads.boto3.client", fake_client)
     uploads.get_settings.cache_clear()
@@ -35,6 +41,12 @@ def test_create_upload_intent_uses_settings_credentials(monkeypatch):
     )
 
     assert response.upload_url == "https://s3.example/presigned"
+    assert response.method == "POST"
+    assert response.fields["Content-Type"] == "image/png"
+    assert captured_post_kwargs["Conditions"] == [
+        ["content-length-range", 1, 10 * 1024 * 1024],
+        {"Content-Type": "image/png"},
+    ]
     assert captured_client_kwargs == {
         "region_name": "us-east-2",
         "endpoint_url": "https://s3.us-east-2.amazonaws.com",

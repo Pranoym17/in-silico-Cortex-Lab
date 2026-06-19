@@ -135,21 +135,30 @@ describe("brainRegions", () => {
   });
 
   it("summarizes and compares region activation by streamed block", () => {
-    const summaries = getRegionConditionSummaries("Right-A", atlas, manifest, [
-      blockChunk("block_a", [0, 1, 2, 4, 8, 6, 0, 1, 3, 6, 9, 12], 0, 2),
-      blockChunk("block_b", [0, 1, -2, -4, 8, -6], 2, 1)
-    ]);
+    const summaries = getRegionConditionSummaries(
+      "Right-A",
+      atlas,
+      manifest,
+      [
+        blockChunk("block_a", [0, 1, 2, 4, 8, 6, 0, 1, 3, 6, 9, 12], 0, 2),
+        blockChunk("block_b", [0, 1, -2, -4, 8, -6], 2, 1)
+      ],
+      new Map([
+        ["block_a", "Faces"],
+        ["block_b", "Objects"]
+      ])
+    );
 
     expect(summaries).toEqual([
-      { condition: "Condition 1", blockId: "block_a", mean: 5.5, peak: 7, samples: 2 },
-      { condition: "Condition 2", blockId: "block_b", mean: -4, peak: -4, samples: 1 }
+      { condition: "Faces", blockId: "block_a", mean: 5.5, peak: 7, samples: 2 },
+      { condition: "Objects", blockId: "block_b", mean: -4, peak: -4, samples: 1 }
     ]);
     expect(compareTopConditions(summaries)).toEqual({
-      conditionA: "Condition 1",
-      conditionB: "Condition 2",
+      conditionA: "Faces",
+      conditionB: "Objects",
       meanDifference: 9.5,
       peakDifference: 11,
-      dominantCondition: "Condition 1"
+      dominantCondition: "Faces"
     });
   });
 });

@@ -108,9 +108,11 @@ export type CreateUploadIntentInput = {
 };
 
 export type UploadIntent = {
+  method: "POST";
   upload_url: string;
   object_key: string;
   headers: Record<string, string>;
+  fields: Record<string, string>;
   expires_in_seconds: number;
   content_hash_algorithm: "sha256";
 };
@@ -274,6 +276,10 @@ export function runExperiment(experimentId: string, input: unknown, token?: stri
     method: "POST",
     body: JSON.stringify(input)
   });
+}
+
+export function getJob(jobId: string, token?: string | null) {
+  return apiJson<Job>(`/api/jobs/${jobId}`, token);
 }
 
 export function getJobResult(jobId: string, token?: string | null) {

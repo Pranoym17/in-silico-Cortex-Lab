@@ -1,4 +1,6 @@
 from typing import Any
+import hashlib
+import json
 import logging
 
 import redis
@@ -23,20 +25,36 @@ class CachedResult(BaseModel):
     metadata_json: dict[str, Any] = Field(default_factory=dict)
 
 
-def cache_key_for_content_hash(content_hash: str) -> str:
+def cache_key_for_content_hash(content_hash: str, context: dict[str, Any] | None = None) -> str:
     normalized = content_hash.strip()
-    return f"tribe:v2:{normalized}"
+    if not context:
+        return f"tribe:v2:{normalized}"
+    fingerprint = hashlib.sha256(
+        json.dumps(context, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()[:32]
+    return f"tribe:v2:{normalized}:{fingerprint}"
+
+
+def text_result_cache_context(block: Any, settings: Any, *, model_name: str, model_version: str | None = None) -> dict[str, Any]:
+    return {
+        "type": getattr(block, "type", None),
+        "duration_ms": getattr(block, "duration_ms", None),
+        "voice": getattr(block, "voice", None),
+        "settings": settings.model_dump(mode="json") if hasattr(settings, "model_dump") else settings,
+        "model_name": model_name,
+        "model_version": model_version,
+    }
 
 
 def _redis_client():
     return redis.Redis.from_url(get_settings().redis_url, decode_responses=True)
 
 
-def get_cached_result(content_hash: str) -> CachedResult | None:
+def get_cached_result(content_hash: str, context: dict[str, Any] | None = None) -> CachedResult | None:
     if not get_settings().result_cache_enabled:
         return None
 
-    cache_key = cache_key_for_content_hash(content_hash)
+    cache_key = cache_key_for_content_hash(content_hash, context)
     try:
         raw_value = _redis_client().get(cache_key)
     except Exception as exc:
@@ -53,11 +71,11 @@ def get_cached_result(content_hash: str) -> CachedResult | None:
         return cached
     except (ValidationError, ValueError, TypeError):
         logger.warning("cache_corrupt", extra={"cache_key": cache_key})
-        delete_cached_result(content_hash)
+        delete_cached_result(content_hash, context)
         return None
 
 
-def set_cached_result(content_hash: str, result: Result) -> None:
+def set_cached_result(content_hash: str, result: Result, context: dict[str, Any] | None = None) -> None:
     if not get_settings().result_cache_enabled:
         return
 
@@ -73,7 +91,7 @@ def set_cached_result(content_hash: str, result: Result) -> None:
         model_version=result.model_version,
         metadata_json=result.metadata_json,
     )
-    cache_key = cache_key_for_content_hash(content_hash)
+    cache_key = cache_key_for_content_hash(content_hash, context)
     try:
         _redis_client().setex(
             cache_key,
@@ -84,8 +102,8 @@ def set_cached_result(content_hash: str, result: Result) -> None:
         logger.warning("cache_write_error", extra={"cache_key": cache_key}, exc_info=exc)
 
 
-def delete_cached_result(content_hash: str) -> None:
-    cache_key = cache_key_for_content_hash(content_hash)
+def delete_cached_result(content_hash: str, context: dict[str, Any] | None = None) -> None:
+    cache_key = cache_key_for_content_hash(content_hash, context)
     try:
         _redis_client().delete(cache_key)
     except Exception as exc:

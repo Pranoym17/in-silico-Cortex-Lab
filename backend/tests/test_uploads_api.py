@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException, status
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
 
@@ -75,6 +76,13 @@ async def test_presign_upload_intent(auth_user, monkeypatch):
 
     monkeypatch.setattr("app.api.uploads.create_upload_intent", fake_create_upload_intent)
 
+    async def fake_get_owned_experiment(session, owner, requested_experiment_id):
+        assert owner.id == auth_user.id
+        assert requested_experiment_id == experiment_id
+        return SimpleNamespace(id=experiment_id, owner_id=owner.id)
+
+    monkeypatch.setattr("app.api.uploads.get_owned_experiment", fake_get_owned_experiment)
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/uploads/presign",
@@ -114,11 +122,39 @@ async def test_presign_upload_rejects_oversized_image(auth_user):
 
 
 @pytest.mark.asyncio
+async def test_presign_upload_rejects_unowned_experiment(auth_user, monkeypatch):
+    async def fake_get_owned_experiment(session, owner, requested_experiment_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found")
+
+    monkeypatch.setattr("app.api.uploads.get_owned_experiment", fake_get_owned_experiment)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/uploads/presign",
+            headers={"Authorization": f"Bearer {make_token()}"},
+            json={
+                "experiment_id": str(uuid4()),
+                "kind": "image",
+                "filename": "face.png",
+                "mime_type": "image/png",
+                "size_bytes": 512000,
+            },
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_presign_upload_maps_service_failure(auth_user, monkeypatch):
     def fail_create_upload_intent(owner, data):
         raise RuntimeError("raw aws stack trace")
 
     monkeypatch.setattr("app.api.uploads.create_upload_intent", fail_create_upload_intent)
+
+    async def fake_get_owned_experiment(session, owner, requested_experiment_id):
+        return SimpleNamespace(id=requested_experiment_id, owner_id=owner.id)
+
+    monkeypatch.setattr("app.api.uploads.get_owned_experiment", fake_get_owned_experiment)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(

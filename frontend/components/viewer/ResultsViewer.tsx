@@ -14,7 +14,9 @@ import {
   getJobResultDownload,
   ResultMetadata,
   ApiError,
-  cancelJob
+  cancelJob,
+  getJob,
+  Job
 } from "@/lib/api";
 import {
   ActivationDomain,
@@ -71,6 +73,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [atlas, setAtlas] = useState<DesikanKillianyAtlas | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [result, setResult] = useState<ResultMetadata | null>(null);
+  const [jobMetadata, setJobMetadata] = useState<Job | null>(null);
   const [resultError, setResultError] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -152,12 +155,13 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
         : [],
     [chunks, manifest, regionAtlas, selectedRegionLabels]
   );
+  const blockConditionLabels = useMemo(() => getBlockConditionLabels(jobMetadata), [jobMetadata]);
   const conditionSummaries = useMemo(
     () =>
       primaryRegionLabel && regionAtlas && manifest
-        ? getRegionConditionSummaries(primaryRegionLabel, regionAtlas, manifest, chunks)
+        ? getRegionConditionSummaries(primaryRegionLabel, regionAtlas, manifest, chunks, blockConditionLabels)
         : [],
-    [chunks, manifest, primaryRegionLabel, regionAtlas]
+    [blockConditionLabels, chunks, manifest, primaryRegionLabel, regionAtlas]
   );
   const conditionComparison = useMemo(() => compareTopConditions(conditionSummaries), [conditionSummaries]);
   const jobErrorCopy = useMemo(() => getJobErrorCopy(errorCode, error, errorRetryable), [error, errorCode, errorRetryable]);
@@ -232,6 +236,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     setSelectedTimestep(0);
     setIsPlaying(true);
     setResult(null);
+    setJobMetadata(null);
     setResultError(null);
     setCancelError(null);
     setIsCancelling(false);
@@ -240,6 +245,29 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     setSelectedVertex(null);
     setSelectedRegionLabels([]);
   }, [jobId, resetJob]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+    getJob(jobId, accessToken)
+      .then((metadata) => {
+        if (!cancelled) {
+          setJobMetadata(metadata);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setJobMetadata(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, jobId]);
 
   useEffect(() => {
     if (regionModeEnabled) {
@@ -911,6 +939,30 @@ function parseManualDomain(minValue: string, maxValue: string): ActivationDomain
 
 function isTerminalViewerStatus(status: string) {
   return status === "complete" || status === "failed" || status === "cancelled";
+}
+
+function getBlockConditionLabels(job: Job | null): Map<string, string> {
+  const labels = new Map<string, string>();
+  const blocks = job?.run_spec.blocks;
+  if (!Array.isArray(blocks)) {
+    return labels;
+  }
+
+  for (const block of blocks) {
+    if (!block || typeof block !== "object") {
+      continue;
+    }
+    const id = "id" in block && typeof block.id === "string" ? block.id : null;
+    if (!id) {
+      continue;
+    }
+    const condition = "condition" in block && typeof block.condition === "string" && block.condition.trim()
+      ? block.condition.trim()
+      : null;
+    labels.set(id, condition ?? `Block ${id.slice(0, 8)}`);
+  }
+
+  return labels;
 }
 
 function formatDomainValue(value: number) {

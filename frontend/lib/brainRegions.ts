@@ -201,7 +201,8 @@ export function getRegionConditionSummaries(
   regionLabel: string,
   atlas: DesikanKillianyAtlas,
   manifest: BrainMeshManifest,
-  chunks: readonly DecodedActivationChunk[]
+  chunks: readonly DecodedActivationChunk[],
+  blockLabels: ReadonlyMap<string, string> = new Map()
 ): BrainRegionConditionSummary[] {
   const byBlock = new Map<string, { sum: number; peak: number; samples: number }>();
 
@@ -222,7 +223,7 @@ export function getRegionConditionSummaries(
 
   return [...byBlock.entries()]
     .map(([blockId, summary], index) => ({
-      condition: `Condition ${index + 1}`,
+      condition: blockLabels.get(blockId) ?? `Block ${index + 1}`,
       blockId,
       mean: summary.samples > 0 ? summary.sum / summary.samples : 0,
       peak: summary.peak,

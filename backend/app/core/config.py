@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     environment: str = "local"
     database_url: str = "postgresql+asyncpg://cortex:cortex@localhost:5432/cortexlab"
     redis_url: str = "redis://localhost:6379/0"
+    sse_event_backend: Literal["memory", "redis"] = "memory"
     aws_region: str = "us-east-1"
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
@@ -20,6 +21,8 @@ class Settings(BaseSettings):
     sqs_queue_url: str = "http://localhost:4566/000000000000/cortexlab-jobs"
     supabase_jwt_secret: str = "replace-me"
     supabase_url: str | None = None
+    supabase_jwt_audience: str | None = None
+    supabase_jwt_issuer: str | None = None
     frontend_origin: str = "http://localhost:3000"
     job_execution_mode: Literal["background", "celery", "manual"] = "background"
     inference_provider: Literal["fake", "modal"] = "fake"

@@ -193,7 +193,7 @@ async def test_run_experiment_creates_persisted_job(auth_user, monkeypatch):
         )
 
     monkeypatch.setattr("app.api.experiments.create_job_from_experiment", fake_create_job_from_experiment)
-    monkeypatch.setattr("app.api.experiments.get_cached_result", lambda content_hash: None)
+    monkeypatch.setattr("app.api.experiments.get_cached_result", lambda content_hash, context=None: None)
     monkeypatch.setattr(
         "app.api.experiments.dispatch_inference_job",
         lambda background_tasks, dispatched_job_id: dispatched_ids.append(dispatched_job_id),
@@ -254,7 +254,7 @@ async def test_run_experiment_completes_from_cache_without_dispatch(auth_user, m
         job.status = JobStatus.complete
 
     monkeypatch.setattr("app.api.experiments.create_job_from_experiment", fake_create_job_from_experiment)
-    monkeypatch.setattr("app.api.experiments.get_cached_result", lambda content_hash: cached_result)
+    monkeypatch.setattr("app.api.experiments.get_cached_result", lambda content_hash, context=None: cached_result)
     monkeypatch.setattr("app.api.experiments.result_artifact_exists", lambda s3_key: True)
     monkeypatch.setattr("app.api.experiments.complete_job_from_cached_result", fake_complete_job_from_cached_result)
     monkeypatch.setattr(
@@ -287,29 +287,31 @@ async def test_run_experiment_completes_from_cache_without_dispatch(auth_user, m
     assert dispatched_ids == []
 
 
-def test_get_run_cache_hit_evicts_cached_result_when_s3_artifact_is_missing(monkeypatch):
+@pytest.mark.asyncio
+async def test_get_run_cache_hit_evicts_cached_result_when_s3_artifact_is_missing(monkeypatch):
     from app.api.experiments import get_run_cache_hit
 
     deleted = []
     cached_result = SimpleNamespace(s3_key="results/missing/activations.npz")
-    monkeypatch.setattr("app.api.experiments.get_cached_result", lambda content_hash: cached_result)
+    monkeypatch.setattr("app.api.experiments.get_cached_result", lambda content_hash, context=None: cached_result)
     monkeypatch.setattr("app.api.experiments.result_artifact_exists", lambda s3_key: False)
-    monkeypatch.setattr("app.api.experiments.delete_cached_result", lambda content_hash: deleted.append(content_hash))
+    monkeypatch.setattr("app.api.experiments.delete_cached_result", lambda content_hash, context=None: deleted.append(content_hash))
 
-    assert get_run_cache_hit({"blocks": [{"type": "text", "content_hash": "sha256:abc"}]}) is None
+    assert await get_run_cache_hit({"blocks": [{"type": "text", "content_hash": "sha256:abc"}]}) is None
     assert deleted == ["sha256:abc"]
 
 
-def test_get_run_cache_hit_treats_s3_check_failure_as_cache_miss(monkeypatch):
+@pytest.mark.asyncio
+async def test_get_run_cache_hit_treats_s3_check_failure_as_cache_miss(monkeypatch):
     from app.api.experiments import get_run_cache_hit
     from app.services.result_storage import ResultStorageError
 
     cached_result = SimpleNamespace(s3_key="results/job-1/activations.npz")
-    monkeypatch.setattr("app.api.experiments.get_cached_result", lambda content_hash: cached_result)
+    monkeypatch.setattr("app.api.experiments.get_cached_result", lambda content_hash, context=None: cached_result)
 
     def raise_result_storage_error(s3_key):
         raise ResultStorageError("s3 down")
 
     monkeypatch.setattr("app.api.experiments.result_artifact_exists", raise_result_storage_error)
 
-    assert get_run_cache_hit({"blocks": [{"type": "text", "content_hash": "sha256:abc"}]}) is None
+    assert await get_run_cache_hit({"blocks": [{"type": "text", "content_hash": "sha256:abc"}]}) is None

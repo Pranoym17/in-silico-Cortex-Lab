@@ -32,23 +32,26 @@ def create_upload_intent(owner: User, data: UploadIntentRequest) -> UploadIntent
     filename = _safe_filename(data.filename)
     block_part = str(data.block_id) if data.block_id else uuid4().hex
     object_key = f"uploads/{owner.id}/experiments/{data.experiment_id}/{block_part}/{filename}"
-    headers = {"Content-Type": data.mime_type}
+    max_size = 10 * 1024 * 1024 if data.kind == "image" else 100 * 1024 * 1024
 
     s3_client = _s3_client()
-    upload_url = s3_client.generate_presigned_url(
-        ClientMethod="put_object",
-        Params={
-            "Bucket": settings.s3_bucket_name,
-            "Key": object_key,
-            "ContentType": data.mime_type,
+    upload = s3_client.generate_presigned_post(
+        Bucket=settings.s3_bucket_name,
+        Key=object_key,
+        Fields={
+            "Content-Type": data.mime_type,
         },
+        Conditions=[
+            ["content-length-range", 1, max_size],
+            {"Content-Type": data.mime_type},
+        ],
         ExpiresIn=settings.s3_upload_expires_seconds,
-        HttpMethod="PUT",
     )
 
     return UploadIntentResponse(
-        upload_url=upload_url,
+        upload_url=upload["url"],
         object_key=object_key,
-        headers=headers,
+        headers={},
+        fields={key: str(value) for key, value in upload["fields"].items()},
         expires_in_seconds=settings.s3_upload_expires_seconds,
     )
