@@ -1,7 +1,6 @@
 from uuid import uuid4
 
 import numpy as np
-import pytest
 
 from app.services.ml_cognitive_states import (
     block_for_timestep,
