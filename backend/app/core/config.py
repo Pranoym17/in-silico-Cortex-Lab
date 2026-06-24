@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     modal_environment_name: str | None = None
     modal_call_timeout_seconds: int = 300
     modal_call_max_attempts: int = 2
+    optimizer_provider: Literal["fake", "anthropic"] = "fake"
+    anthropic_api_key: str | None = None
+    ml_cache_enabled: bool = True
+    ml_cache_ttl_seconds: int = 2_592_000
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
