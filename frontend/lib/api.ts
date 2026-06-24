@@ -201,6 +201,20 @@ export type CognitiveStatesResult = {
   states: CognitiveStatePoint[];
 };
 
+export type OptimizerRequest = {
+  target_region: string;
+  direction: "maximize" | "minimize";
+  generations: number;
+  candidates_per_generation: number;
+  seed_prompt?: string | null;
+};
+
+export type OptimizerStart = {
+  optimizer_job_id: string;
+  status: string;
+  stream_url: string;
+};
+
 export async function apiFetch(path: string, token?: string | null, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
 
@@ -341,4 +355,11 @@ export function runRsa(jobIdA: string, jobIdB: string, token?: string | null) {
 
 export function getCognitiveStates(jobId: string, token?: string | null) {
   return apiJson<CognitiveStatesResult>(`/api/ml/jobs/${jobId}/cognitive-states`, token);
+}
+
+export function startOptimizer(input: OptimizerRequest, token?: string | null) {
+  return apiJson<OptimizerStart>("/api/ml/optimize", token, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }

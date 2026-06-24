@@ -21,7 +21,8 @@ import {
   Job,
   listExperimentJobs,
   RsaResult,
-  runRsa
+  runRsa,
+  startOptimizer
 } from "@/lib/api";
 import {
   ActivationDomain,
@@ -46,6 +47,7 @@ import {
   getRegionTimecourse
 } from "@/lib/brainRegions";
 import { streamJobEvents } from "@/lib/sse";
+import { OptimizerCompleteEvent, OptimizerGenerationEvent, streamOptimizerEvents } from "@/lib/optimizerStream";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { getJobErrorCopy } from "@/lib/jobErrors";
 import { useAuthStore } from "@/store/authStore";
@@ -88,6 +90,13 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [rsaResult, setRsaResult] = useState<RsaResult | null>(null);
   const [rsaError, setRsaError] = useState<string | null>(null);
   const [isRunningRsa, setIsRunningRsa] = useState(false);
+  const [optimizerTarget, setOptimizerTarget] = useState("");
+  const [optimizerDirection, setOptimizerDirection] = useState<"maximize" | "minimize">("maximize");
+  const [optimizerSeed, setOptimizerSeed] = useState("");
+  const [optimizerGeneration, setOptimizerGeneration] = useState<OptimizerGenerationEvent | null>(null);
+  const [optimizerResult, setOptimizerResult] = useState<OptimizerCompleteEvent | null>(null);
+  const [optimizerError, setOptimizerError] = useState<string | null>(null);
+  const [isRunningOptimizer, setIsRunningOptimizer] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDownloadingResult, setIsDownloadingResult] = useState(false);
   const [selectedTimestep, setSelectedTimestep] = useState(0);
@@ -184,6 +193,12 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const reconnectDelaySeconds = Math.min(30, 2 ** Math.min(connectAttempt, 5));
 
   useEffect(() => {
+    if (primaryRegionLabel && !optimizerTarget.trim()) {
+      setOptimizerTarget(primaryRegionLabel);
+    }
+  }, [optimizerTarget, primaryRegionLabel]);
+
+  useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
       return;
@@ -258,6 +273,13 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     setRsaResult(null);
     setRsaError(null);
     setIsRunningRsa(false);
+    setOptimizerTarget("");
+    setOptimizerDirection("maximize");
+    setOptimizerSeed("");
+    setOptimizerGeneration(null);
+    setOptimizerResult(null);
+    setOptimizerError(null);
+    setIsRunningOptimizer(false);
     setIsCancelling(false);
     setHoveredVertex(null);
     setHoverPosition(null);
@@ -491,6 +513,47 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
       setRsaError(caught instanceof Error ? caught.message : "RSA comparison failed");
     } finally {
       setIsRunningRsa(false);
+    }
+  }
+
+  async function runStimulusOptimizer() {
+    if (!accessToken || !optimizerTarget.trim()) {
+      return;
+    }
+
+    setIsRunningOptimizer(true);
+    setOptimizerError(null);
+    setOptimizerGeneration(null);
+    setOptimizerResult(null);
+
+    try {
+      const started = await startOptimizer(
+        {
+          target_region: optimizerTarget.trim(),
+          direction: optimizerDirection,
+          generations: 5,
+          candidates_per_generation: 8,
+          seed_prompt: optimizerSeed.trim() || null
+        },
+        accessToken
+      );
+      await streamOptimizerEvents({
+        optimizerJobId: started.optimizer_job_id,
+        token: accessToken,
+        onEvent: (event) => {
+          if (event.event === "generation") {
+            setOptimizerGeneration(event.data);
+          } else if (event.event === "complete") {
+            setOptimizerResult(event.data);
+          } else if (event.event === "error") {
+            setOptimizerError(event.data.message);
+          }
+        }
+      });
+    } catch (caught) {
+      setOptimizerError(caught instanceof Error ? caught.message : "Optimizer failed");
+    } finally {
+      setIsRunningOptimizer(false);
     }
   }
 
@@ -997,6 +1060,63 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               <p>Compare this completed run with another completed run from the same experiment.</p>
             )}
             {rsaError ? <ErrorPanel message={rsaError} /> : null}
+          </div>
+          <div className="viewer-section">
+            <h3>Optimizer</h3>
+            <div className="optimizer-controls">
+              <label>
+                Target region
+                <input
+                  onChange={(event) => setOptimizerTarget(event.target.value)}
+                  placeholder="Select a region or type a target"
+                  value={optimizerTarget}
+                />
+              </label>
+              <label>
+                Direction
+                <select
+                  onChange={(event) => setOptimizerDirection(event.target.value as "maximize" | "minimize")}
+                  value={optimizerDirection}
+                >
+                  <option value="maximize">Maximize</option>
+                  <option value="minimize">Minimize</option>
+                </select>
+              </label>
+              <label>
+                Seed prompt
+                <textarea
+                  onChange={(event) => setOptimizerSeed(event.target.value)}
+                  placeholder="Optional starting idea"
+                  rows={3}
+                  value={optimizerSeed}
+                />
+              </label>
+              <button disabled={!optimizerTarget.trim() || isRunningOptimizer} onClick={runStimulusOptimizer} type="button">
+                {isRunningOptimizer ? "Optimizing" : "Run Optimizer"}
+              </button>
+            </div>
+            {optimizerGeneration ? (
+              <div className="viewer-stat-grid">
+                <div>
+                  <span>Generation</span>
+                  <strong>{optimizerGeneration.generation}</strong>
+                </div>
+                <div>
+                  <span>Best score</span>
+                  <strong>{formatStatValue(optimizerGeneration.best_score)}</strong>
+                </div>
+              </div>
+            ) : null}
+            {optimizerResult ? (
+              <div className="optimizer-result">
+                <strong>Best stimulus</strong>
+                <p>{optimizerResult.best_stimulus}</p>
+                <span>Score {formatStatValue(optimizerResult.best_score)}</span>
+              </div>
+            ) : (
+              <p>Select or type a target region to search for a text stimulus.</p>
+            )}
+            {optimizerError ? <ErrorPanel message={optimizerError} /> : null}
           </div>
           <div className="viewer-stat-grid">
             <div>

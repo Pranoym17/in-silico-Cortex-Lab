@@ -926,6 +926,47 @@ button:disabled {
   font-size: 10px;
 }
 
+.optimizer-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.optimizer-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.optimizer-controls input,
+.optimizer-controls select,
+.optimizer-controls textarea {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101114;
+  color: var(--foreground);
+  padding: 8px 10px;
+}
+
+.optimizer-result {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #425747;
+  border-radius: 8px;
+  padding: 10px;
+  background: #121d16;
+}
+
+.optimizer-result p {
+  color: var(--foreground);
+}
+
+.optimizer-result span {
+  color: var(--success);
+  font-size: 13px;
+}
+
 .viewer-stat-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

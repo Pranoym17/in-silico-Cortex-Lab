@@ -13,7 +13,8 @@ import {
   listExperimentJobs,
   reorderBlocks,
   runRsa,
-  runExperiment
+  runExperiment,
+  startOptimizer
 } from "./api";
 
 afterEach(() => {
@@ -219,5 +220,34 @@ describe("ML helpers", () => {
 
     expect(fetchMock.mock.calls[0][0]).toContain("/api/ml/jobs/job_1/cognitive-states");
     expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
+  });
+
+  it("starts an optimizer job", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ optimizer_job_id: "opt_1" }), { status: 202 })
+    );
+
+    await startOptimizer(
+      {
+        target_region: "Left Fusiform",
+        direction: "maximize",
+        generations: 3,
+        candidates_per_generation: 4,
+        seed_prompt: "faces"
+      },
+      "token-123"
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/ml/optimize");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(
+      JSON.stringify({
+        target_region: "Left Fusiform",
+        direction: "maximize",
+        generations: 3,
+        candidates_per_generation: 4,
+        seed_prompt: "faces"
+      })
+    );
   });
 });
