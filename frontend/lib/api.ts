@@ -188,6 +188,19 @@ export type RsaResult = {
   vertex_count: number;
 };
 
+export type CognitiveStatePoint = {
+  timestep: number;
+  label: string;
+  confidence: number;
+  scores: Record<string, number>;
+};
+
+export type CognitiveStatesResult = {
+  job_id: string;
+  classifier_version: string;
+  states: CognitiveStatePoint[];
+};
+
 export async function apiFetch(path: string, token?: string | null, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
 
@@ -324,4 +337,8 @@ export function runRsa(jobIdA: string, jobIdB: string, token?: string | null) {
     method: "POST",
     body: JSON.stringify({ job_id_a: jobIdA, job_id_b: jobIdB })
   });
+}
+
+export function getCognitiveStates(jobId: string, token?: string | null) {
+  return apiJson<CognitiveStatesResult>(`/api/ml/jobs/${jobId}/cognitive-states`, token);
 }

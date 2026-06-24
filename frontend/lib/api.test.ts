@@ -7,6 +7,7 @@ import {
   createBlock,
   createExperiment,
   createUploadIntent,
+  getCognitiveStates,
   getJobResult,
   getJobResultDownload,
   listExperimentJobs,
@@ -207,5 +208,16 @@ describe("ML helpers", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("/api/ml/rsa");
     expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
     expect(fetchMock.mock.calls[0][1]?.body).toBe(JSON.stringify({ job_id_a: "job_a", job_id_b: "job_b" }));
+  });
+
+  it("fetches cognitive state labels for a job", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ states: [] }), { status: 200 })
+    );
+
+    await getCognitiveStates("job_1", "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/ml/jobs/job_1/cognitive-states");
+    expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
   });
 });

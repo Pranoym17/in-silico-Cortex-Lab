@@ -800,6 +800,53 @@ button:disabled {
   border-radius: 999px;
 }
 
+.cognitive-state-timeline {
+  display: grid;
+  gap: 8px;
+}
+
+.cognitive-state-bar {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  min-height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101114;
+}
+
+.cognitive-state-bar span {
+  min-width: 3px;
+}
+
+.cognitive-state-bar i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #f4f4f0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+.cognitive-state-legend {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.cognitive-state-legend span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.cognitive-state-legend b {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
 .rsa-controls {
   display: grid;
   gap: 8px;

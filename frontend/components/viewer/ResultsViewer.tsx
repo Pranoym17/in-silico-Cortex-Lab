@@ -15,6 +15,8 @@ import {
   ResultMetadata,
   ApiError,
   cancelJob,
+  CognitiveStatesResult,
+  getCognitiveStates,
   getJob,
   Job,
   listExperimentJobs,
@@ -79,6 +81,8 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [jobMetadata, setJobMetadata] = useState<Job | null>(null);
   const [resultError, setResultError] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cognitiveStates, setCognitiveStates] = useState<CognitiveStatesResult | null>(null);
+  const [cognitiveStateError, setCognitiveStateError] = useState<string | null>(null);
   const [availableJobs, setAvailableJobs] = useState<Job[]>([]);
   const [selectedRsaJobId, setSelectedRsaJobId] = useState("");
   const [rsaResult, setRsaResult] = useState<RsaResult | null>(null);
@@ -247,6 +251,8 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     setJobMetadata(null);
     setResultError(null);
     setCancelError(null);
+    setCognitiveStates(null);
+    setCognitiveStateError(null);
     setAvailableJobs([]);
     setSelectedRsaJobId("");
     setRsaResult(null);
@@ -346,6 +352,31 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           return;
         }
         setResultError(caught instanceof Error ? caught.message : "Result metadata failed to load");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, jobId, status]);
+
+  useEffect(() => {
+    if (!accessToken || status !== "complete") {
+      return;
+    }
+
+    let cancelled = false;
+    getCognitiveStates(jobId, accessToken)
+      .then((states) => {
+        if (!cancelled) {
+          setCognitiveStates(states);
+          setCognitiveStateError(null);
+        }
+      })
+      .catch((caught) => {
+        if (!cancelled) {
+          setCognitiveStates(null);
+          setCognitiveStateError(caught instanceof Error ? caught.message : "Cognitive state labels failed to load");
+        }
       });
 
     return () => {
@@ -681,6 +712,40 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               </div>
             </div>
           </div>
+          <div className="viewer-section">
+            <h3>Cognitive State</h3>
+            {cognitiveStates && cognitiveStates.states.length > 0 ? (
+              <>
+                <CognitiveStateTimeline
+                  currentTimestep={selectedTimestep}
+                  states={cognitiveStates.states}
+                />
+                <div className="viewer-stat-grid">
+                  <div>
+                    <span>Current</span>
+                    <strong>{cognitiveStates.states[Math.min(selectedTimestep, cognitiveStates.states.length - 1)]?.label ?? "none"}</strong>
+                  </div>
+                  <div>
+                    <span>Confidence</span>
+                    <strong>
+                      {formatPercent(cognitiveStates.states[Math.min(selectedTimestep, cognitiveStates.states.length - 1)]?.confidence ?? 0)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Classifier</span>
+                    <strong>{cognitiveStates.classifier_version}</strong>
+                  </div>
+                  <div>
+                    <span>States</span>
+                    <strong>{cognitiveStates.states.length}</strong>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p>Labels appear after the saved result is available.</p>
+            )}
+            {cognitiveStateError ? <ErrorPanel message={cognitiveStateError} /> : null}
+          </div>
           {!selectedValidation.valid ? <ErrorPanel message={selectedValidation.message ?? "Activation mesh validation failed."} /> : null}
           {showAtlasUnavailable ? (
             <ErrorPanel message={atlasValidation.message ?? "Atlas unavailable. Region hover, selection, charts, and condition comparison are disabled."} />
@@ -1000,6 +1065,61 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   );
 }
 
+function CognitiveStateTimeline({
+  currentTimestep,
+  states
+}: {
+  currentTimestep: number;
+  states: readonly { timestep: number; label: string; confidence: number }[];
+}) {
+  const latestTimestep = Math.max(...states.map((state) => state.timestep), 0);
+  return (
+    <div className="cognitive-state-timeline" aria-label="Cognitive state timeline">
+      <div className="cognitive-state-bar">
+        {states.map((state) => (
+          <span
+            aria-label={`${state.label} at timestep ${state.timestep}, confidence ${formatPercent(state.confidence)}`}
+            key={state.timestep}
+            style={{
+              backgroundColor: cognitiveStateColor(state.label),
+              flexGrow: 1,
+              opacity: 0.45 + state.confidence * 0.55
+            }}
+            title={`${state.timestep}: ${state.label} (${formatPercent(state.confidence)})`}
+          />
+        ))}
+        <i style={{ left: `${latestTimestep === 0 ? 0 : (Math.min(currentTimestep, latestTimestep) / latestTimestep) * 100}%` }} />
+      </div>
+      <div className="cognitive-state-legend">
+        {uniqueLabels(states).map((label) => (
+          <span key={label}>
+            <b style={{ background: cognitiveStateColor(label) }} />
+            {label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function uniqueLabels(states: readonly { label: string }[]) {
+  return Array.from(new Set(states.map((state) => state.label))).slice(0, 6);
+}
+
+function cognitiveStateColor(label: string) {
+  const colors: Record<string, string> = {
+    "Visual - Objects": "#8fb8ff",
+    "Visual - Scenes": "#7fd0c3",
+    "Face Processing": "#ff9f7c",
+    "Language Comprehension": "#d7a3ff",
+    "Auditory - Speech": "#93d8a3",
+    "Auditory - Music": "#e7c46a",
+    Reading: "#c6dc7d",
+    "Rest / Low Activation": "#777b84"
+  };
+  return colors[label] ?? "#9da3af";
+}
+
 function RsaHeatmap({ labels, matrix, title }: { labels: string[]; matrix: number[][]; title: string }) {
   const values = matrix.flat().filter(Number.isFinite);
   const maxValue = Math.max(...values, 1);
@@ -1207,6 +1327,10 @@ function formatActivationValue(value: number | null) {
     return "Activation none";
   }
   return `Activation ${formatStatValue(value)}`;
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
 }
 
 function formatDateTime(value: string) {
