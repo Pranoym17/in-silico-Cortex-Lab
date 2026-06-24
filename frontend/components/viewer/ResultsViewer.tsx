@@ -16,7 +16,10 @@ import {
   ApiError,
   cancelJob,
   getJob,
-  Job
+  Job,
+  listExperimentJobs,
+  RsaResult,
+  runRsa
 } from "@/lib/api";
 import {
   ActivationDomain,
@@ -76,6 +79,11 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [jobMetadata, setJobMetadata] = useState<Job | null>(null);
   const [resultError, setResultError] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [availableJobs, setAvailableJobs] = useState<Job[]>([]);
+  const [selectedRsaJobId, setSelectedRsaJobId] = useState("");
+  const [rsaResult, setRsaResult] = useState<RsaResult | null>(null);
+  const [rsaError, setRsaError] = useState<string | null>(null);
+  const [isRunningRsa, setIsRunningRsa] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDownloadingResult, setIsDownloadingResult] = useState(false);
   const [selectedTimestep, setSelectedTimestep] = useState(0);
@@ -239,6 +247,11 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     setJobMetadata(null);
     setResultError(null);
     setCancelError(null);
+    setAvailableJobs([]);
+    setSelectedRsaJobId("");
+    setRsaResult(null);
+    setRsaError(null);
+    setIsRunningRsa(false);
     setIsCancelling(false);
     setHoveredVertex(null);
     setHoverPosition(null);
@@ -268,6 +281,38 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
       cancelled = true;
     };
   }, [accessToken, jobId]);
+
+  useEffect(() => {
+    if (!accessToken || !jobMetadata?.experiment_id) {
+      setAvailableJobs([]);
+      setSelectedRsaJobId("");
+      return;
+    }
+
+    let cancelled = false;
+    listExperimentJobs(jobMetadata.experiment_id, accessToken)
+      .then((jobs) => {
+        if (cancelled) {
+          return;
+        }
+        const completedJobs = jobs.filter((job) => job.status === "complete" && job.id !== jobId);
+        setAvailableJobs(completedJobs);
+        setSelectedRsaJobId((current) =>
+          completedJobs.some((job) => job.id === current) ? current : completedJobs[0]?.id ?? ""
+        );
+      })
+      .catch((caught) => {
+        if (!cancelled) {
+          setRsaError(caught instanceof Error ? caught.message : "Completed comparison jobs failed to load");
+          setAvailableJobs([]);
+          setSelectedRsaJobId("");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, jobId, jobMetadata?.experiment_id]);
 
   useEffect(() => {
     if (regionModeEnabled) {
@@ -397,6 +442,24 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
       setCancelError(caught instanceof Error ? caught.message : "Job cancellation failed");
     } finally {
       setIsCancelling(false);
+    }
+  }
+
+  async function runRsaComparison() {
+    if (!accessToken || !selectedRsaJobId) {
+      return;
+    }
+
+    setIsRunningRsa(true);
+    setRsaError(null);
+    try {
+      const comparison = await runRsa(jobId, selectedRsaJobId, accessToken);
+      setRsaResult(comparison);
+    } catch (caught) {
+      setRsaResult(null);
+      setRsaError(caught instanceof Error ? caught.message : "RSA comparison failed");
+    } finally {
+      setIsRunningRsa(false);
     }
   }
 
@@ -810,6 +873,66 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               {isDownloadingResult ? "Preparing" : "Download NPZ"}
             </button>
           </div>
+          <div className="viewer-section">
+            <h3>RSA</h3>
+            <div className="rsa-controls">
+              <label>
+                Compare with
+                <select
+                  disabled={availableJobs.length === 0 || status !== "complete"}
+                  onChange={(event) => setSelectedRsaJobId(event.target.value)}
+                  value={selectedRsaJobId}
+                >
+                  {availableJobs.length === 0 ? <option value="">No completed comparison jobs</option> : null}
+                  {availableJobs.map((job) => (
+                    <option key={job.id} value={job.id}>
+                      {job.id.slice(0, 8)} · {formatDateTime(job.completed_at ?? job.updated_at)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                disabled={!selectedRsaJobId || status !== "complete" || isRunningRsa}
+                onClick={runRsaComparison}
+                type="button"
+              >
+                {isRunningRsa ? "Comparing" : "Run RSA"}
+              </button>
+            </div>
+            {rsaResult ? (
+              <>
+                <div className="viewer-stat-grid">
+                  <div>
+                    <span>RSA score</span>
+                    <strong>{formatStatValue(rsaResult.rsa_score)}</strong>
+                  </div>
+                  <div>
+                    <span>Blocks</span>
+                    <strong>{rsaResult.block_count}</strong>
+                  </div>
+                  <div>
+                    <span>Vertices</span>
+                    <strong>{rsaResult.vertex_count}</strong>
+                  </div>
+                  <div>
+                    <span>Compared job</span>
+                    <strong>{rsaResult.job_id_b.slice(0, 8)}</strong>
+                  </div>
+                </div>
+                <div className="rsa-grid">
+                  <RsaHeatmap title="Current RDM" labels={rsaResult.labels_a} matrix={rsaResult.rdm_a} />
+                  <RsaHeatmap title="Compared RDM" labels={rsaResult.labels_b} matrix={rsaResult.rdm_b} />
+                </div>
+                <div className="rsa-grid">
+                  <RsaScatter title="Current MDS" points={rsaResult.mds_a} />
+                  <RsaScatter title="Compared MDS" points={rsaResult.mds_b} />
+                </div>
+              </>
+            ) : (
+              <p>Compare this completed run with another completed run from the same experiment.</p>
+            )}
+            {rsaError ? <ErrorPanel message={rsaError} /> : null}
+          </div>
           <div className="viewer-stat-grid">
             <div>
               <span>Status</span>
@@ -874,6 +997,64 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
         </aside>
       </div>
     </AppShell>
+  );
+}
+
+function RsaHeatmap({ labels, matrix, title }: { labels: string[]; matrix: number[][]; title: string }) {
+  const values = matrix.flat().filter(Number.isFinite);
+  const maxValue = Math.max(...values, 1);
+
+  return (
+    <div className="rsa-panel">
+      <strong>{title}</strong>
+      <div
+        className="rsa-heatmap"
+        style={{ gridTemplateColumns: `repeat(${Math.max(1, matrix.length)}, minmax(0, 1fr))` }}
+      >
+        {matrix.flatMap((row, rowIndex) =>
+          row.map((value, columnIndex) => (
+            <span
+              aria-label={`${labels[rowIndex] ?? rowIndex} to ${labels[columnIndex] ?? columnIndex}: ${formatStatValue(value)}`}
+              key={`${rowIndex}-${columnIndex}`}
+              style={{ backgroundColor: heatmapColor(value, maxValue) }}
+              title={`${labels[rowIndex] ?? rowIndex} to ${labels[columnIndex] ?? columnIndex}: ${formatStatValue(value)}`}
+            />
+          ))
+        )}
+      </div>
+      <div className="rsa-label-row">
+        {labels.slice(0, 4).map((label, index) => (
+          <span key={`${label}-${index}`}>{label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RsaScatter({ points, title }: { points: readonly { x: number; y: number; label: string; index: number }[]; title: string }) {
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const minX = Math.min(...xs, -1);
+  const maxX = Math.max(...xs, 1);
+  const minY = Math.min(...ys, -1);
+  const maxY = Math.max(...ys, 1);
+
+  return (
+    <div className="rsa-panel">
+      <strong>{title}</strong>
+      <svg className="rsa-scatter" role="img" viewBox="0 0 220 160">
+        <line className="region-chart-axis" x1="16" x2="204" y1="80" y2="80" />
+        <line className="region-chart-axis" x1="110" x2="110" y1="14" y2="146" />
+        {points.map((point) => (
+          <g key={`${point.label}-${point.index}`}>
+            <circle cx={scaleValue(point.x, minX, maxX, 24, 196)} cy={scaleValue(point.y, minY, maxY, 136, 24)} r="4" />
+            <text x={scaleValue(point.x, minX, maxX, 24, 196) + 6} y={scaleValue(point.y, minY, maxY, 136, 24) + 4}>
+              {point.label}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
   );
 }
 
@@ -1026,4 +1207,21 @@ function formatActivationValue(value: number | null) {
     return "Activation none";
   }
   return `Activation ${formatStatValue(value)}`;
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+function heatmapColor(value: number, maxValue: number) {
+  const intensity = Math.max(0, Math.min(1, maxValue === 0 ? 0 : value / maxValue));
+  const red = Math.round(38 + intensity * 160);
+  const green = Math.round(45 + intensity * 85);
+  const blue = Math.round(58 + intensity * 20);
+  return `rgb(${red}, ${green}, ${blue})`;
 }

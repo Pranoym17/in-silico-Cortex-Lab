@@ -9,7 +9,9 @@ import {
   createUploadIntent,
   getJobResult,
   getJobResultDownload,
+  listExperimentJobs,
   reorderBlocks,
+  runRsa,
   runExperiment
 } from "./api";
 
@@ -180,5 +182,30 @@ describe("cancelJob", () => {
 
     expect(fetchMock.mock.calls[0][0]).toContain("/api/jobs/job_1/cancel");
     expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+  });
+});
+
+describe("job helpers", () => {
+  it("lists jobs for an experiment", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("[]", { status: 200 }));
+
+    await listExperimentJobs("exp_1", "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/experiments/exp_1/jobs");
+    expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
+  });
+});
+
+describe("ML helpers", () => {
+  it("posts RSA comparison job ids", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ rsa_score: 1 }), { status: 200 })
+    );
+
+    await runRsa("job_a", "job_b", "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/ml/rsa");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(JSON.stringify({ job_id_a: "job_a", job_id_b: "job_b" }));
   });
 });

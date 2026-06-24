@@ -167,6 +167,27 @@ export type ResultDownload = {
   expires_in_seconds: number;
 };
 
+export type MdsPoint = {
+  x: number;
+  y: number;
+  label: string;
+  index: number;
+};
+
+export type RsaResult = {
+  job_id_a: string;
+  job_id_b: string;
+  rsa_score: number;
+  rdm_a: number[][];
+  rdm_b: number[][];
+  labels_a: string[];
+  labels_b: string[];
+  mds_a: MdsPoint[];
+  mds_b: MdsPoint[];
+  block_count: number;
+  vertex_count: number;
+};
+
 export async function apiFetch(path: string, token?: string | null, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
 
@@ -292,4 +313,15 @@ export function getJobResultDownload(jobId: string, token?: string | null) {
 
 export function cancelJob(jobId: string, token?: string | null) {
   return apiJson<Job>(`/api/jobs/${jobId}/cancel`, token, { method: "POST" });
+}
+
+export function listExperimentJobs(experimentId: string, token?: string | null) {
+  return apiJson<Job[]>(`/api/experiments/${experimentId}/jobs`, token);
+}
+
+export function runRsa(jobIdA: string, jobIdB: string, token?: string | null) {
+  return apiJson<RsaResult>("/api/ml/rsa", token, {
+    method: "POST",
+    body: JSON.stringify({ job_id_a: jobIdA, job_id_b: jobIdB })
+  });
 }

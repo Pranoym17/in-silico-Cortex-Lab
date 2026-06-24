@@ -800,6 +800,85 @@ button:disabled {
   border-radius: 999px;
 }
 
+.rsa-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.rsa-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.rsa-controls select {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101114;
+  color: var(--foreground);
+  padding: 8px 10px;
+}
+
+.rsa-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rsa-panel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #111319;
+}
+
+.rsa-heatmap {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  aspect-ratio: 1;
+}
+
+.rsa-heatmap span {
+  min-width: 0;
+  min-height: 0;
+}
+
+.rsa-label-row {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rsa-label-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rsa-scatter {
+  width: 100%;
+  min-height: 160px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101114;
+}
+
+.rsa-scatter circle {
+  fill: var(--accent);
+}
+
+.rsa-scatter text {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
 .viewer-stat-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1071,7 +1150,8 @@ pre {
   }
 
   .viewer-stat-grid,
-  .viewer-domain-controls {
+  .viewer-domain-controls,
+  .rsa-grid {
     grid-template-columns: 1fr;
   }
 
