@@ -27,3 +27,16 @@ class RsaResponse(BaseModel):
     mds_b: list[MdsPoint]
     block_count: int
     vertex_count: int
+
+
+class CognitiveStatePoint(BaseModel):
+    timestep: int
+    label: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    scores: dict[str, float]
+
+
+class CognitiveStatesResponse(BaseModel):
+    job_id: UUID
+    classifier_version: str
+    states: list[CognitiveStatePoint]

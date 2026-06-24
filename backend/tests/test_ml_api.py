@@ -105,3 +105,44 @@ async def test_run_rsa(auth_user, monkeypatch):
     assert response.status_code == 200
     assert response.json()["rsa_score"] == 1.0
     assert response.json()["labels_a"] == ["a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_get_cognitive_states_requires_authentication():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(f"/api/ml/jobs/{uuid4()}/cognitive-states")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_cognitive_states(auth_user, monkeypatch):
+    job_id = uuid4()
+
+    async def fake_get_cognitive_states(session, owner, requested_job_id):
+        assert owner.id == auth_user.id
+        assert requested_job_id == job_id
+        return {
+            "job_id": job_id,
+            "classifier_version": "rules-v1",
+            "states": [
+                {
+                    "timestep": 0,
+                    "label": "Language Comprehension",
+                    "confidence": 0.8,
+                    "scores": {"Language Comprehension": 0.8, "Rest / Low Activation": 0.2},
+                }
+            ],
+        }
+
+    monkeypatch.setattr("app.api.ml.get_cognitive_states", fake_get_cognitive_states)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            f"/api/ml/jobs/{job_id}/cognitive-states",
+            headers={"Authorization": f"Bearer {make_token()}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["classifier_version"] == "rules-v1"
+    assert response.json()["states"][0]["label"] == "Language Comprehension"
