@@ -146,3 +146,62 @@ async def test_get_cognitive_states(auth_user, monkeypatch):
     assert response.status_code == 200
     assert response.json()["classifier_version"] == "rules-v1"
     assert response.json()["states"][0]["label"] == "Language Comprehension"
+
+
+@pytest.mark.asyncio
+async def test_start_optimizer_requires_authentication():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/ml/optimize",
+            json={"target_region": "Left Fusiform", "direction": "maximize"},
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_start_optimizer(auth_user, monkeypatch):
+    optimizer_job_id = uuid4()
+
+    def fake_start_optimizer_job(body):
+        assert body.target_region == "Left Fusiform"
+        return {
+            "optimizer_job_id": optimizer_job_id,
+            "status": "complete",
+            "stream_url": f"/api/ml/optimize/{optimizer_job_id}/stream",
+        }
+
+    monkeypatch.setattr("app.api.ml.start_optimizer_job", fake_start_optimizer_job)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/ml/optimize",
+            json={"target_region": "Left Fusiform", "direction": "maximize"},
+            headers={"Authorization": f"Bearer {make_token()}"},
+        )
+
+    assert response.status_code == 202
+    assert response.json()["optimizer_job_id"] == str(optimizer_job_id)
+
+
+@pytest.mark.asyncio
+async def test_stream_optimizer(auth_user, monkeypatch):
+    optimizer_job_id = uuid4()
+
+    class FakeRecord:
+        events = [
+            ("queued", {"optimizer_job_id": str(optimizer_job_id), "status": "queued"}),
+            ("complete", {"optimizer_job_id": str(optimizer_job_id), "status": "complete"}),
+        ]
+
+    monkeypatch.setattr("app.api.ml.get_optimizer_job", lambda requested_id: FakeRecord() if requested_id == optimizer_job_id else None)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            f"/api/ml/optimize/{optimizer_job_id}/stream",
+            headers={"Authorization": f"Bearer {make_token()}"},
+        )
+
+    assert response.status_code == 200
+    assert "event: queued" in response.text
+    assert "event: complete" in response.text
