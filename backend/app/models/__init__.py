@@ -1,6 +1,7 @@
 from app.models.block import Block, BlockType
 from app.models.experiment import Experiment, ExperimentStatus
 from app.models.job import Job, JobStatus
+from app.models.library import LibraryEntry
 from app.models.result import Result
 from app.models.user import User
 
@@ -11,6 +12,7 @@ __all__ = [
     "ExperimentStatus",
     "Job",
     "JobStatus",
+    "LibraryEntry",
     "Result",
     "User",
 ]

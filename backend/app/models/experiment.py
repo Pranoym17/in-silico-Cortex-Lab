@@ -34,4 +34,5 @@ class Experiment(TimestampMixin, Base):
     blocks = relationship("Block", back_populates="experiment", cascade="all, delete-orphan", order_by="Block.start_ms")
     jobs = relationship("Job", back_populates="experiment", cascade="all, delete-orphan")
     results = relationship("Result", back_populates="experiment", cascade="all, delete-orphan")
+    library_entry = relationship("LibraryEntry", back_populates="experiment", cascade="all, delete-orphan", uselist=False)
 

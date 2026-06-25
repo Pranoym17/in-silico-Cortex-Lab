@@ -3,7 +3,7 @@ from app import models
 
 
 def test_foundation_models_are_registered():
-    assert set(Base.metadata.tables) == {"users", "experiments", "blocks", "jobs", "results"}
+    assert set(Base.metadata.tables) == {"users", "experiments", "blocks", "jobs", "results", "library_entries"}
 
 
 def test_result_model_has_cp9_metadata_columns():
@@ -36,3 +36,19 @@ def test_expected_enums_match_contract():
         "failed",
         "cancelled",
     ]
+
+
+def test_library_entry_model_has_public_metadata_columns():
+    columns = set(Base.metadata.tables["library_entries"].columns.keys())
+
+    assert {
+        "experiment_id",
+        "owner_id",
+        "slug",
+        "title",
+        "description",
+        "tags",
+        "featured",
+        "run_count",
+        "published_at",
+    }.issubset(columns)
