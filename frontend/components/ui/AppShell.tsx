@@ -34,6 +34,7 @@ export function AppShell({ title, description, actions, children, width = "wide"
         </Link>
         <nav className="app-nav" aria-label="Primary navigation">
           <Link href="/dashboard">Experiments</Link>
+          <Link href="/library">Library</Link>
         </nav>
         <div className="app-account">
           {accessToken ? (

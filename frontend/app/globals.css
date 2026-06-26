@@ -166,7 +166,9 @@ select {
 .create-form input,
 .compact-create-form input,
 .search-input,
-.token-form input {
+.token-form input,
+.library-filter-form input,
+.library-filter-form select {
   min-width: 0;
   flex: 1;
   border: 1px solid var(--line);
@@ -174,6 +176,13 @@ select {
   background: #101114;
   color: var(--foreground);
   padding: 10px 12px;
+}
+
+.library-filter-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(120px, 180px) minmax(130px, 160px) auto;
+  gap: 8px;
+  align-items: stretch;
 }
 
 button,
@@ -201,6 +210,62 @@ button:disabled {
 .experiment-list {
   display: grid;
   gap: 10px;
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.library-card {
+  display: grid;
+  gap: 14px;
+  align-content: space-between;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: #14171d;
+}
+
+.library-card-main {
+  display: grid;
+  gap: 8px;
+}
+
+.library-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.library-card h3,
+.library-card p {
+  margin: 0;
+}
+
+.library-card p,
+.library-card-meta {
+  color: var(--muted);
+}
+
+.library-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 13px;
+}
+
+.library-card a {
+  justify-self: start;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--foreground);
+  padding: 8px 12px;
+  text-decoration: none;
 }
 
 .experiment-row {
@@ -1210,6 +1275,7 @@ pre {
 
   .stepper-row,
   .template-actions,
+  .library-filter-form,
   .builder-summary,
   .viewer-grid,
   .timeline-controls,
