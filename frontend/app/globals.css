@@ -627,6 +627,39 @@ button:disabled {
   background: #132018;
 }
 
+.publish-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #14171d;
+}
+
+.publish-panel h3,
+.publish-panel p {
+  margin: 0;
+}
+
+.publish-panel p {
+  color: var(--muted);
+}
+
+.publish-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(140px, 220px) minmax(140px, 220px) auto;
+  gap: 8px;
+}
+
+.publish-form input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101114;
+  color: var(--foreground);
+  padding: 10px 12px;
+}
+
 .metadata-grid {
   display: grid;
   gap: 8px;
@@ -1337,6 +1370,7 @@ pre {
   .library-filter-form,
   .builder-summary,
   .library-detail-summary,
+  .publish-form,
   .viewer-grid,
   .timeline-controls,
   .timeline-actions {

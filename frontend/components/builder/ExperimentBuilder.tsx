@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   CreateBlockInput,
   Experiment,
+  LibraryEntry,
   StimulusBlock,
   StimulusBlockType,
   UpdateBlockInput,
@@ -12,6 +13,7 @@ import {
   deleteBlock,
   getExperiment,
   listBlocks,
+  publishExperiment,
   reorderBlocks,
   runExperiment,
   updateBlock
@@ -90,6 +92,15 @@ function clonePayload(payload: Record<string, unknown>) {
   return JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
 }
 
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
 export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const blocks = useExperimentStore((state) => state.blocks);
   const selectedBlockId = useExperimentStore((state) => state.selectedBlockId);
@@ -103,8 +114,13 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [queuedJob, setQueuedJob] = useState<{ jobId: string; streamUrl: string } | null>(null);
+  const [publishedEntry, setPublishedEntry] = useState<LibraryEntry | null>(null);
+  const [publishTitle, setPublishTitle] = useState("");
+  const [publishSlug, setPublishSlug] = useState("");
+  const [publishTags, setPublishTags] = useState("");
 
   useEffect(() => {
     if (!accessToken) {
@@ -121,6 +137,8 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
       .then(([item, loadedBlocks]) => {
         if (isActive) {
           setExperiment(item);
+          setPublishTitle(item.name);
+          setPublishSlug(item.slug ?? slugify(item.name));
           setBlocks(loadedBlocks);
           setLastSavedAt(item.updated_at);
         }
@@ -395,9 +413,55 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     }
   }
 
+  async function handlePublishExperiment() {
+    if (!accessToken || !experiment) {
+      return;
+    }
+
+    const currentErrors = useExperimentStore.getState().validate();
+    if (currentErrors.length > 0 || blocks.length === 0) {
+      setError("Resolve builder validation errors before publishing.");
+      return;
+    }
+
+    const title = publishTitle.trim();
+    const slug = publishSlug.trim();
+    if (!title || !slug) {
+      setError("Add a title and slug before publishing.");
+      return;
+    }
+
+    setIsPublishing(true);
+    setError(null);
+
+    try {
+      const entry = await publishExperiment(
+        experimentId,
+        {
+          title,
+          slug,
+          description: experiment.description,
+          tags: publishTags
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean)
+        },
+        accessToken
+      );
+      setPublishedEntry(entry);
+      setExperiment({ ...experiment, is_public: true, slug: entry.slug });
+      setPublishSlug(entry.slug);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to publish experiment");
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId);
   const saveStatus = isMutating ? "Saving..." : lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : "Ready";
   const canRun = Boolean(accessToken) && validationErrors.length === 0 && blocks.length > 0 && !isMutating;
+  const canPublish = Boolean(accessToken) && validationErrors.length === 0 && blocks.length > 0 && !isMutating && !isPublishing;
   const summary = getBuilderSummary(blocks);
   const selectedValidationErrors = selectedBlock
     ? validationErrors.filter((item) => item.blockId === selectedBlock.id)
@@ -463,6 +527,48 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
               <a href={`/viewer/${queuedJob.jobId}`}>Open viewer</a>
             </div>
           ) : null}
+          {publishedEntry ? (
+            <div className="run-result">
+              <strong>Published to library</strong>
+              <p>{publishedEntry.title} is available as a forkable public experiment.</p>
+              <a href={`/library/${publishedEntry.slug}`}>Open library entry</a>
+            </div>
+          ) : null}
+
+          <div className="publish-panel">
+            <div>
+              <h3>Publish</h3>
+              <p>Share this validated timeline as a forkable library entry.</p>
+            </div>
+            <div className="publish-form">
+              <input
+                aria-label="Library title"
+                onChange={(event) => {
+                  setPublishTitle(event.target.value);
+                  if (!experiment?.slug) {
+                    setPublishSlug(slugify(event.target.value));
+                  }
+                }}
+                placeholder="Library title"
+                value={publishTitle}
+              />
+              <input
+                aria-label="Library slug"
+                onChange={(event) => setPublishSlug(slugify(event.target.value))}
+                placeholder="library-slug"
+                value={publishSlug}
+              />
+              <input
+                aria-label="Library tags"
+                onChange={(event) => setPublishTags(event.target.value)}
+                placeholder="vision, faces"
+                value={publishTags}
+              />
+              <button type="button" disabled={!canPublish || !publishTitle.trim() || !publishSlug.trim()} onClick={handlePublishExperiment}>
+                {isPublishing ? "Publishing..." : experiment?.is_public ? "Update" : "Publish"}
+              </button>
+            </div>
+          </div>
 
           <div className="builder-summary">
             <div>
