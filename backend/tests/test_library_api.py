@@ -9,7 +9,7 @@ from jose import jwt
 
 from app.core.config import get_settings
 from app.main import app
-from app.schemas.library import LibraryDetailResponse, LibraryListResponse, PublicLibraryExperimentBlock
+from app.schemas.library import LibraryDetailResponse, LibraryForkResponse, LibraryListResponse, PublicLibraryExperimentBlock
 
 
 def make_token() -> str:
@@ -150,3 +150,32 @@ async def test_get_library_detail_not_found(monkeypatch):
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Library entry not found"}
+
+
+@pytest.mark.asyncio
+async def test_fork_library_entry_requires_authentication():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/library/ffa-face-localizer/fork")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_fork_library_entry(auth_user, monkeypatch):
+    experiment_id = uuid4()
+
+    async def fake_fork_library_entry(session, owner, slug):
+        assert owner.id == auth_user.id
+        assert slug == "ffa-face-localizer"
+        return LibraryForkResponse(experiment_id=experiment_id)
+
+    monkeypatch.setattr("app.api.library.fork_library_entry", fake_fork_library_entry)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/library/ffa-face-localizer/fork",
+            headers={"Authorization": f"Bearer {make_token()}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"experiment_id": str(experiment_id)}
