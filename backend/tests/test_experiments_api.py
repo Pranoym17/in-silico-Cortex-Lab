@@ -59,6 +59,26 @@ def make_experiment(owner_id: UUID, **overrides):
     return SimpleNamespace(**data)
 
 
+def make_library_entry(owner_id: UUID, experiment_id: UUID, **overrides):
+    now = datetime.now(UTC)
+    data = {
+        "id": uuid4(),
+        "experiment_id": experiment_id,
+        "owner_id": owner_id,
+        "slug": "ffa-face-localizer",
+        "title": "FFA face localizer",
+        "description": "Faces versus houses",
+        "tags": ["vision", "faces"],
+        "featured": False,
+        "run_count": 0,
+        "published_at": now,
+        "created_at": now,
+        "updated_at": now,
+    }
+    data.update(overrides)
+    return SimpleNamespace(**data)
+
+
 @pytest.fixture
 def auth_user(monkeypatch):
     user = make_user()
@@ -173,6 +193,50 @@ async def test_delete_experiment_archives(auth_user, monkeypatch):
 
     assert response.status_code == 204
     assert archived_ids == [experiment_id]
+
+
+@pytest.mark.asyncio
+async def test_publish_experiment_requires_authentication():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/experiments/{uuid4()}/publish",
+            json={"title": "FFA face localizer", "slug": "ffa-face-localizer"},
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_publish_experiment(auth_user, monkeypatch):
+    experiment_id = uuid4()
+
+    async def fake_publish_experiment(session, owner, requested_experiment_id, data):
+        assert owner.id == auth_user.id
+        assert requested_experiment_id == experiment_id
+        assert data.title == "FFA face localizer"
+        assert data.slug == "ffa-face-localizer"
+        assert data.tags == ["Vision", "faces"]
+        return make_library_entry(auth_user.id, experiment_id, title=data.title, slug=data.slug, tags=["vision", "faces"])
+
+    monkeypatch.setattr("app.api.experiments.publish_experiment", fake_publish_experiment)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/experiments/{experiment_id}/publish",
+            headers={"Authorization": f"Bearer {make_token()}"},
+            json={
+                "title": "FFA face localizer",
+                "description": "Faces versus houses",
+                "slug": "ffa-face-localizer",
+                "tags": ["Vision", "faces"],
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["experiment_id"] == str(experiment_id)
+    assert body["slug"] == "ffa-face-localizer"
+    assert body["tags"] == ["vision", "faces"]
 
 
 @pytest.mark.asyncio

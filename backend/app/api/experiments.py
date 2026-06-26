@@ -10,6 +10,7 @@ from app.models.user import User
 from app.schemas.block import BlockCreate, BlockReorderRequest, BlockResponse, BlockUpdate
 from app.schemas.experiment import ExperimentCreate, ExperimentResponse, ExperimentUpdate
 from app.schemas.job import JobResponse
+from app.schemas.library import LibraryEntryResponse, LibraryPublishRequest
 from app.schemas.run import RunExperimentRequest, RunExperimentResponse
 from app.services.blocks import create_block, delete_block, list_blocks, reorder_blocks, update_block
 from app.services.experiments import (
@@ -21,6 +22,7 @@ from app.services.experiments import (
 )
 from app.services.job_dispatch import dispatch_inference_job
 from app.services.jobs import create_job_from_experiment, list_jobs_for_experiment
+from app.services.library import publish_experiment
 from app.services.result_cache import delete_cached_result, get_cached_result, text_result_cache_context
 from app.services.result_storage import ResultStorageError, result_artifact_exists
 from app.services.job_processing import complete_job_from_cached_result
@@ -72,6 +74,16 @@ async def delete_experiment_route(
 ):
     await archive_experiment(session, user, experiment_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{experiment_id}/publish", response_model=LibraryEntryResponse)
+async def publish_experiment_route(
+    experiment_id: UUID,
+    body: LibraryPublishRequest,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+):
+    return await publish_experiment(session, user, experiment_id, body)
 
 
 @router.get("/{experiment_id}/blocks", response_model=list[BlockResponse])
