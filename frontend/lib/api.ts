@@ -215,6 +215,58 @@ export type OptimizerStart = {
   stream_url: string;
 };
 
+export type LibraryPublishInput = {
+  title: string;
+  description?: string | null;
+  tags?: string[];
+  slug: string;
+};
+
+export type LibraryEntry = {
+  id: string;
+  experiment_id: string;
+  owner_id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  tags: string[];
+  featured: boolean;
+  run_count: number;
+  published_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LibraryListParams = Partial<{
+  tag: string;
+  search: string;
+  sort: "featured" | "newest" | "run_count";
+}>;
+
+export type LibraryList = {
+  items: LibraryEntry[];
+};
+
+export type PublicLibraryBlock = {
+  id: string;
+  type: StimulusBlockType | string;
+  condition: string | null;
+  start_ms: number;
+  duration_ms: number;
+  payload: Record<string, unknown>;
+};
+
+export type LibraryDetail = {
+  entry: LibraryEntry;
+  experiment_name: string;
+  experiment_description: string | null;
+  blocks: PublicLibraryBlock[];
+};
+
+export type LibraryForkResponse = {
+  experiment_id: string;
+};
+
 export async function apiFetch(path: string, token?: string | null, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
 
@@ -273,6 +325,13 @@ export function updateExperiment(id: string, input: UpdateExperimentInput, token
 export function archiveExperiment(id: string, token?: string | null) {
   return apiJson<void>(`/api/experiments/${id}`, token, {
     method: "DELETE"
+  });
+}
+
+export function publishExperiment(id: string, input: LibraryPublishInput, token?: string | null) {
+  return apiJson<LibraryEntry>(`/api/experiments/${id}/publish`, token, {
+    method: "POST",
+    body: JSON.stringify(input)
   });
 }
 
@@ -361,5 +420,28 @@ export function startOptimizer(input: OptimizerRequest, token?: string | null) {
   return apiJson<OptimizerStart>("/api/ml/optimize", token, {
     method: "POST",
     body: JSON.stringify(input)
+  });
+}
+
+export function listLibraryEntries(params: LibraryListParams = {}) {
+  const search = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value) {
+      search.set(key, value);
+    }
+  }
+
+  const query = search.toString();
+  return apiJson<LibraryList>(`/api/library${query ? `?${query}` : ""}`);
+}
+
+export function getLibraryEntry(slug: string) {
+  return apiJson<LibraryDetail>(`/api/library/${slug}`);
+}
+
+export function forkLibraryEntry(slug: string, token?: string | null) {
+  return apiJson<LibraryForkResponse>(`/api/library/${slug}/fork`, token, {
+    method: "POST"
   });
 }

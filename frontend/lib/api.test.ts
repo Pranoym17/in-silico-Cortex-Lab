@@ -7,10 +7,14 @@ import {
   createBlock,
   createExperiment,
   createUploadIntent,
+  forkLibraryEntry,
+  getLibraryEntry,
   getCognitiveStates,
   getJobResult,
   getJobResultDownload,
+  listLibraryEntries,
   listExperimentJobs,
+  publishExperiment,
   reorderBlocks,
   runRsa,
   runExperiment,
@@ -184,6 +188,69 @@ describe("cancelJob", () => {
 
     expect(fetchMock.mock.calls[0][0]).toContain("/api/jobs/job_1/cancel");
     expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+  });
+});
+
+describe("library helpers", () => {
+  it("publishes an experiment to the library", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ slug: "ffa-face-localizer" }), { status: 200 })
+    );
+
+    await publishExperiment(
+      "exp_1",
+      {
+        title: "FFA face localizer",
+        description: "Faces versus houses",
+        tags: ["vision", "faces"],
+        slug: "ffa-face-localizer"
+      },
+      "token-123"
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/experiments/exp_1/publish");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(
+      JSON.stringify({
+        title: "FFA face localizer",
+        description: "Faces versus houses",
+        tags: ["vision", "faces"],
+        slug: "ffa-face-localizer"
+      })
+    );
+  });
+
+  it("lists library entries with optional filters", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response('{"items":[]}', { status: 200 }));
+
+    await listLibraryEntries({ tag: "vision", search: "face", sort: "run_count" });
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/library?tag=vision&search=face&sort=run_count");
+    expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
+  });
+
+  it("fetches a public library detail page", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ entry: { slug: "ffa-face-localizer" }, blocks: [] }), { status: 200 })
+    );
+
+    await getLibraryEntry("ffa-face-localizer");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/library/ffa-face-localizer");
+    expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
+  });
+
+  it("forks a library entry into the signed-in user's experiments", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ experiment_id: "exp_2" }), { status: 200 })
+    );
+
+    await forkLibraryEntry("ffa-face-localizer", "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/library/ffa-face-localizer/fork");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+    const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
+    expect(headers.get("authorization")).toBe("Bearer token-123");
   });
 });
 
