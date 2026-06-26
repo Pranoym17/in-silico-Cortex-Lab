@@ -98,6 +98,155 @@ Response `202 Accepted`:
 
 Validation failures return `422` with field-level errors.
 
+## Paradigm Library Contract
+
+The library turns an owned experiment into a public, forkable template. Library entries expose metadata and block payloads, but do not transfer ownership of the original experiment.
+
+### `POST /api/experiments/{experiment_id}/publish`
+
+Auth required. The experiment must belong to the authenticated user, must not be archived, and must have at least one stimulus block.
+
+Request body:
+
+```json
+{
+  "title": "FFA face localizer",
+  "description": "Faces versus houses with short fixation gaps.",
+  "tags": ["vision", "faces"],
+  "slug": "ffa-face-localizer"
+}
+```
+
+Rules:
+
+- `slug` is lowercase URL-safe text matching `^[a-z0-9]+(?:-[a-z0-9]+)*$`.
+- Slugs are globally unique across library entries.
+- Publishing sets `experiments.is_public = true` and stores the same slug on the experiment.
+- Re-publishing the same experiment updates its existing library metadata.
+- Tags are normalized to lowercase, stripped, deduplicated, capped at 12 values, and each tag must be 64 characters or shorter.
+
+Response:
+
+```json
+{
+  "id": "entry_uuid",
+  "experiment_id": "experiment_uuid",
+  "owner_id": "user_uuid",
+  "slug": "ffa-face-localizer",
+  "title": "FFA face localizer",
+  "description": "Faces versus houses with short fixation gaps.",
+  "tags": ["vision", "faces"],
+  "featured": false,
+  "run_count": 0,
+  "published_at": "2026-06-25T00:00:00Z",
+  "created_at": "2026-06-25T00:00:00Z",
+  "updated_at": "2026-06-25T00:00:00Z"
+}
+```
+
+Conflict responses:
+
+- `409` when the experiment is archived.
+- `409` when the experiment has no blocks.
+- `409` when the requested slug is already used by a different library entry.
+
+### `GET /api/library`
+
+Public. Returns published library entries for the browse page.
+
+Query parameters:
+
+- `tag`: optional exact tag filter.
+- `search`: optional case-insensitive match against title, description, or slug.
+- `sort`: `featured`, `newest`, or `run_count`; defaults to `featured`.
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "id": "entry_uuid",
+      "experiment_id": "experiment_uuid",
+      "owner_id": "user_uuid",
+      "slug": "ffa-face-localizer",
+      "title": "FFA face localizer",
+      "description": "Faces versus houses with short fixation gaps.",
+      "tags": ["vision", "faces"],
+      "featured": true,
+      "run_count": 12,
+      "published_at": "2026-06-25T00:00:00Z",
+      "created_at": "2026-06-25T00:00:00Z",
+      "updated_at": "2026-06-25T00:00:00Z"
+    }
+  ]
+}
+```
+
+### `GET /api/library/{slug}`
+
+Public. Returns one published entry plus the source experiment name, description, and public block timeline.
+
+Response:
+
+```json
+{
+  "entry": {
+    "id": "entry_uuid",
+    "experiment_id": "experiment_uuid",
+    "owner_id": "user_uuid",
+    "slug": "ffa-face-localizer",
+    "title": "FFA face localizer",
+    "description": "Faces versus houses with short fixation gaps.",
+    "tags": ["vision", "faces"],
+    "featured": false,
+    "run_count": 0,
+    "published_at": "2026-06-25T00:00:00Z",
+    "created_at": "2026-06-25T00:00:00Z",
+    "updated_at": "2026-06-25T00:00:00Z"
+  },
+  "experiment_name": "FFA pilot",
+  "experiment_description": "Faces versus houses",
+  "blocks": [
+    {
+      "id": "block_uuid",
+      "type": "text",
+      "condition": "faces",
+      "start_ms": 0,
+      "duration_ms": 1000,
+      "payload": {
+        "text": "face"
+      }
+    }
+  ]
+}
+```
+
+### `POST /api/library/{slug}/fork`
+
+Auth required. Creates a private draft experiment owned by the authenticated user and copies the source library blocks into it.
+
+Rules:
+
+- Forked experiments use the source name with ` (Fork)` appended.
+- Forked experiments are private drafts: `is_public = false`, `status = draft`, `slug = null`.
+- Block timing, type, condition, content hash, and payload are copied.
+- The library entry `run_count` increments after a successful fork.
+
+Response:
+
+```json
+{
+  "experiment_id": "new_experiment_uuid"
+}
+```
+
+Frontend routes:
+
+- `/library`: public browse page with search, tag filter, and sort.
+- `/library/{slug}`: public detail page with timeline summary and authenticated fork action.
+- `/builder/{id}`: authenticated builder includes a publish panel for valid timelines.
+
 ## Stimulus Validation Rules
 
 Experiment-level constraints:

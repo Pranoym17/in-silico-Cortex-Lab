@@ -52,7 +52,7 @@ These details live in [technical-contracts.md](technical-contracts.md).
 - **Dashboard:** authenticated user experiment list.
 - **Builder:** dnd-kit timeline for image, text, and audio blocks.
 - **Viewer:** Three.js/R3F cortical surface, timeline scrubber, streaming updates, atlas tooltips, region spotlight, charts.
-- **Paradigm Library:** public templates that can be forked into user experiments.
+- **Paradigm Library:** published experiments with blocks and metadata that can be browsed publicly and forked into user experiments.
 - **ML Suite:** cognitive state classifier, RSA comparison, stimulus optimizer.
 
 ## Non-Goals For The First Scaffold
