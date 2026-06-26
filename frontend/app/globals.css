@@ -268,6 +268,65 @@ button:disabled {
   text-decoration: none;
 }
 
+.library-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.library-detail-actions a {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  padding: 10px 14px;
+  text-decoration: none;
+}
+
+.library-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.library-detail-summary div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #14171d;
+}
+
+.library-detail-summary span,
+.library-block-row p,
+.library-block-row > span {
+  color: var(--muted);
+}
+
+.library-detail-summary strong {
+  overflow-wrap: anywhere;
+}
+
+.library-block-list {
+  display: grid;
+  gap: 10px;
+}
+
+.library-block-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.library-block-row h3,
+.library-block-row p {
+  margin: 0;
+}
+
 .experiment-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -1277,6 +1336,7 @@ pre {
   .template-actions,
   .library-filter-form,
   .builder-summary,
+  .library-detail-summary,
   .viewer-grid,
   .timeline-controls,
   .timeline-actions {
