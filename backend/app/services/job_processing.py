@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 import logging
 import time
+from typing import Any
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -423,6 +424,7 @@ async def process_modal_inference_job(
     completed_timesteps = 0
     vertex_count = 0
     result_assembler = ActivationMatrixAssembler()
+    stimulus_metadata: list[dict[str, Any]] = []
 
     try:
         logger.info("modal_call_started", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "modal", "attempt": 1})
@@ -492,6 +494,18 @@ async def process_modal_inference_job(
                 await broker.publish(job.id, "chunk", envelope.model_dump(mode="json"))
                 continue
 
+            if event_type == "stimulus_metadata":
+                stimulus_metadata.append(
+                    {
+                        "block_id": str(event.get("block_id") or ""),
+                        "stimulus_type": str(event.get("stimulus_type") or ""),
+                        "word_timings": event.get("word_timings") if isinstance(event.get("word_timings"), list) else [],
+                        "segment_count": event.get("segment_count"),
+                        "hrf_offset_seconds": float(event.get("hrf_offset_seconds") or 0),
+                    }
+                )
+                continue
+
             if event_type == "complete":
                 if await job_was_cancelled(session, job):
                     return job
@@ -510,6 +524,8 @@ async def process_modal_inference_job(
                         "function_name": function_name,
                         "surface": run_request.settings.surface,
                         "atlas": run_request.settings.atlas,
+                        "stimuli": stimulus_metadata,
+                        "hrf_offset_seconds": 5.0,
                     },
                 )
                 if await rollback_if_cancelled_before_completion(session, job):

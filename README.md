@@ -140,7 +140,9 @@ Then deploy the app. This creates both `run` and `run_real`, but it does not run
 .\inference\.venv\Scripts\modal.exe deploy inference\tribe_inference.py
 ```
 
-Real audio/video inference uses TRIBE's official `audio_path` and `video_path` inputs. If the run spec contains S3 keys, the Modal function downloads those objects only after `TRIBE_INFERENCE_MODE=real` is enabled. Image blocks remain fake-only until we choose a scientifically acceptable conversion path, because the official TRIBE v2 card documents video/audio/text inputs rather than still images.
+Real audio/video inference uses TRIBE's official `audio_path` and `video_path` inputs. If the run spec contains S3 keys, the Modal function downloads those objects only after `TRIBE_INFERENCE_MODE=real` is enabled. Image blocks are converted into constant-frame MP4 clips for their configured duration and then use the official `video_path` pipeline. The production Modal image enforces the fsaverage5 output size of 20,484 vertices.
+
+TRIBE's current official text pipeline performs text-to-speech with gTTS and transcribes the generated audio to obtain word timings. Result metadata records those timings, the model segment count, the actual prediction sample rate derived from TRIBE's repetition time, and the documented five-second HRF offset.
 
 Check real TRIBE readiness without loading model weights or running GPU:
 

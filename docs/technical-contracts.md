@@ -438,7 +438,7 @@ modal token new
 modal deploy inference/tribe_inference.py
 ```
 
-The deployed Modal app exposes two inference entrypoints. `run` stays lightweight and fake. `run_real` uses the real TRIBE image and should only be selected for planned cloud tests:
+The deployed Modal app exposes two inference entrypoints. `run` stays lightweight and fake. `run_real` uses the real TRIBE image and should only be selected for planned cloud tests. Real image blocks are materialized as constant-frame MP4 clips and passed through TRIBE's supported video input:
 
 ```env
 MODAL_FUNCTION_NAME=run

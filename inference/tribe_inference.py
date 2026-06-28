@@ -4,6 +4,8 @@ import argparse
 import importlib.util
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 from collections.abc import Generator, Iterable
 from functools import lru_cache
@@ -28,6 +30,13 @@ FAKE_VERTEX_COUNT = 16
 FAKE_TIMESTEPS_PER_BLOCK = 1
 DEFAULT_SAMPLE_RATE_HZ = 2
 DEFAULT_REAL_CHUNK_TIMESTEPS = 4
+FSAVERAGE5_VERTEX_COUNT = 20484
+TRIBE_HRF_OFFSET_SECONDS = 5.0
+IMAGE_EXTENSIONS_BY_MIME = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+}
 AUDIO_EXTENSIONS_BY_MIME = {
     "audio/mpeg": ".mp3",
     "audio/wav": ".wav",
@@ -90,7 +99,10 @@ def _real_tribe_env() -> dict[str, str]:
         "TRIBE_INFERENCE_MODE": "real",
         "TRIBE_CACHE_FOLDER": "/cache",
         "TRIBE_CHUNK_TIMESTEPS": os.environ.get("TRIBE_CHUNK_TIMESTEPS", str(DEFAULT_REAL_CHUNK_TIMESTEPS)),
-        "TRIBE_EXPECTED_VERTEX_COUNT": os.environ.get("TRIBE_EXPECTED_VERTEX_COUNT", ""),
+        "TRIBE_EXPECTED_VERTEX_COUNT": os.environ.get(
+            "TRIBE_EXPECTED_VERTEX_COUNT",
+            str(FSAVERAGE5_VERTEX_COUNT),
+        ),
     }
 
 
@@ -246,8 +258,11 @@ def load_tribe_model():
 def check_real_tribe_config(spec: dict[str, Any] | None = None) -> dict[str, Any]:
     spec = spec or {}
     blocks = spec.get("blocks") if isinstance(spec.get("blocks"), list) else []
-    media_blocks = [block for block in blocks if isinstance(block, dict) and block.get("type") in {"audio", "video"}]
+    media_blocks = [
+        block for block in blocks if isinstance(block, dict) and block.get("type") in {"image", "audio", "video"}
+    ]
     s3_media_blocks = [block for block in media_blocks if block.get("s3_key") and not block.get("local_path")]
+    image_blocks = [block for block in blocks if isinstance(block, dict) and block.get("type") == "image"]
 
     checks = {
         "tribe_package_available": importlib.util.find_spec("tribev2") is not None,
@@ -258,6 +273,7 @@ def check_real_tribe_config(spec: dict[str, Any] | None = None) -> dict[str, Any
         "chunk_timesteps_valid": True,
         "expected_vertex_count_valid": True,
         "requires_s3_materialization": bool(s3_media_blocks),
+        "ffmpeg_available": shutil.which("ffmpeg") is not None,
     }
 
     try:
@@ -278,6 +294,8 @@ def check_real_tribe_config(spec: dict[str, Any] | None = None) -> dict[str, Any
         blockers.append("TRIBE_CHUNK_TIMESTEPS must be a positive integer")
     if not checks["expected_vertex_count_valid"]:
         blockers.append("TRIBE_EXPECTED_VERTEX_COUNT must be empty or a positive integer")
+    if image_blocks and not checks["ffmpeg_available"]:
+        blockers.append("ffmpeg is required to convert image blocks into constant-frame video")
     if checks["requires_s3_materialization"] and not checks["s3_bucket_present"]:
         blockers.append("S3_BUCKET_NAME is required for S3-backed audio/video blocks")
     if checks["requires_s3_materialization"] and not checks["aws_region_present"]:
@@ -388,6 +406,38 @@ def _materialize_media_block(
     return download_s3_object(bucket_name=bucket_name, key=s3_key, destination=destination)
 
 
+def convert_image_to_video(image_path: Path, destination: Path, *, duration_ms: int) -> Path:
+    if duration_ms <= 0:
+        raise ValueError("image block duration_ms must be positive")
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError("ffmpeg is required to convert image blocks into constant-frame video")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-loop",
+            "1",
+            "-i",
+            str(image_path),
+            "-t",
+            f"{duration_ms / 1000:.3f}",
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
+            "-r",
+            "2",
+            "-an",
+            str(destination),
+        ],
+        check=True,
+    )
+    return destination
+
+
 def _events_dataframe_for_block(model: Any, block: dict[str, Any], working_dir: Path) -> Any:
     block_type = block.get("type")
     if block_type == "text":
@@ -401,6 +451,17 @@ def _events_dataframe_for_block(model: Any, block: dict[str, Any], working_dir: 
             fallback_extension=".wav",
         )
         return model.get_events_dataframe(audio_path=str(audio_path))
+    if block_type == "image":
+        image_path = _materialize_media_block(
+            block,
+            working_dir,
+            extensions_by_mime=IMAGE_EXTENSIONS_BY_MIME,
+            fallback_extension=".png",
+        )
+        video_path = working_dir / "inputs" / f"{_safe_file_stem(block, 'image')}.mp4"
+        video_path.parent.mkdir(parents=True, exist_ok=True)
+        convert_image_to_video(image_path, video_path, duration_ms=int(block.get("duration_ms") or 0))
+        return model.get_events_dataframe(video_path=str(video_path))
     if block_type == "video":
         video_path = _materialize_media_block(
             block,
@@ -410,10 +471,39 @@ def _events_dataframe_for_block(model: Any, block: dict[str, Any], working_dir: 
         )
         return model.get_events_dataframe(video_path=str(video_path))
 
-    raise ValueError(
-        "Real TRIBE inference supports official text_path, audio_path, and video_path inputs. "
-        "Image blocks need a documented conversion decision before real TRIBE inference."
-    )
+    raise ValueError("Real TRIBE inference supports image, text, audio, and video inputs.")
+
+
+def _prediction_sample_rate_hz(model: Any, fallback: int) -> float:
+    repetition_time = getattr(getattr(model, "data", None), "TR", None)
+    if isinstance(repetition_time, (int, float)) and repetition_time > 0:
+        return 1.0 / float(repetition_time)
+    return float(fallback)
+
+
+def _timing_metadata(block: dict[str, Any], events: Any, segments: Any) -> dict[str, Any]:
+    word_timings: list[dict[str, Any]] = []
+    if hasattr(events, "to_dict"):
+        for row in events.to_dict(orient="records"):
+            event_type = str(row.get("type") or "").lower()
+            word = row.get("word") or row.get("text")
+            start = row.get("start")
+            duration = row.get("duration")
+            if "word" not in event_type or not isinstance(word, str) or not isinstance(start, (int, float)):
+                continue
+            timing = {"word": word, "start_seconds": float(start)}
+            if isinstance(duration, (int, float)):
+                timing["end_seconds"] = float(start) + float(duration)
+            word_timings.append(timing)
+
+    return {
+        "type": "stimulus_metadata",
+        "block_id": str(block.get("id") or ""),
+        "stimulus_type": str(block.get("type") or ""),
+        "word_timings": word_timings,
+        "segment_count": len(segments) if hasattr(segments, "__len__") else None,
+        "hrf_offset_seconds": TRIBE_HRF_OFFSET_SECONDS,
+    }
 
 
 def run_real_tribe_stream(
@@ -424,7 +514,7 @@ def run_real_tribe_stream(
 ) -> Generator[dict[str, Any], None, None]:
     blocks = _run_blocks(spec)
     job_id = str(spec.get("job_id") or "tribe-real")
-    sample_rate_hz = _sample_rate_hz(spec)
+    requested_sample_rate_hz = _sample_rate_hz(spec)
 
     yield {
         "type": "warming",
@@ -434,6 +524,7 @@ def run_real_tribe_stream(
     }
 
     model = model or load_tribe_model()
+    sample_rate_hz = _prediction_sample_rate_hz(model, requested_sample_rate_hz)
     chunk_timesteps = _real_chunk_timesteps()
     expected_vertex_count = _expected_vertex_count()
     completed_timesteps = 0
@@ -460,8 +551,9 @@ def run_real_tribe_stream(
         for block_index, block in enumerate(blocks):
             block_id = str(block.get("id") or f"block-{block_index}")
             events = _events_dataframe_for_block(model, block, working_dir)
-            predictions, _segments = model.predict(events=events)
+            predictions, segments = model.predict(events=events)
             activations = validate_prediction_matrix(predictions, expected_vertex_count=expected_vertex_count)
+            yield _timing_metadata(block, events, segments)
 
             vertex_count = int(activations.shape[1])
             for local_timestep_start, activation_chunk in iter_activation_chunks(

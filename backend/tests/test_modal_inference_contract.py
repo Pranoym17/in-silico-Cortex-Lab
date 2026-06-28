@@ -141,12 +141,20 @@ def test_real_tribe_stream_uses_official_text_prediction_flow():
 
     events = list(tribe_inference.run_real_tribe_stream(spec, model=model, working_dir=_working_dir("text")))
 
-    assert [event["type"] for event in events] == ["warming", "progress", "chunk", "progress", "complete"]
+    assert [event["type"] for event in events] == [
+        "warming",
+        "progress",
+        "stimulus_metadata",
+        "chunk",
+        "progress",
+        "complete",
+    ]
     assert len(model.text_paths) == 1
     assert model.text_paths[0].endswith("text-real.txt")
     assert model.predicted_events == [{"text_path": model.text_paths[0]}]
-    assert events[2]["shape"] == [2, 2]
-    assert events[2]["timestep_count"] == 2
+    assert events[2]["hrf_offset_seconds"] == 5.0
+    assert events[3]["shape"] == [2, 2]
+    assert events[3]["timestep_count"] == 2
     assert events[-1]["timesteps"] == 2
     assert events[-1]["vertex_count"] == 2
 
@@ -379,8 +387,19 @@ def test_classify_real_tribe_error_maps_generic_hf_403():
     }
 
 
-def test_real_tribe_stream_rejects_unsupported_image_blocks():
+def test_real_tribe_stream_converts_image_to_supported_video(monkeypatch):
     model = FakeTribeModel()
+    working_dir = _working_dir("image")
+    image_path = working_dir / "stimulus.png"
+    image_path.write_bytes(b"png")
+    conversions = []
+
+    def fake_convert_image_to_video(source, destination, *, duration_ms):
+        conversions.append((source, destination, duration_ms))
+        destination.write_bytes(b"mp4")
+        return destination
+
+    monkeypatch.setattr(tribe_inference, "convert_image_to_video", fake_convert_image_to_video)
     spec = {
         "blocks": [
             {
@@ -389,17 +408,42 @@ def test_real_tribe_stream_rejects_unsupported_image_blocks():
                 "start_ms": 0,
                 "duration_ms": 1000,
                 "content_hash": "sha256:abc123",
-                "s3_key": "uploads/image.png",
+                "local_path": str(image_path),
                 "mime_type": "image/png",
             }
         ]
     }
 
-    stream = tribe_inference.run_real_tribe_stream(spec, model=model, working_dir=_working_dir("image"))
-    next(stream)
-    next(stream)
-    with pytest.raises(ValueError, match="Image blocks need a documented conversion decision"):
-        next(stream)
+    events = list(tribe_inference.run_real_tribe_stream(spec, model=model, working_dir=working_dir))
+
+    assert conversions == [(image_path, working_dir / "inputs" / "image-real.mp4", 1000)]
+    assert model.video_paths == [str(working_dir / "inputs" / "image-real.mp4")]
+    assert events[3]["type"] == "chunk"
+
+
+def test_real_tribe_stream_uses_model_repetition_time_for_sample_rate():
+    model = FakeTribeModel()
+    model.data = type("FakeData", (), {"TR": 2.0})()
+    working_dir = _working_dir("sample-rate")
+    text_path = "sample rate"
+    spec = {
+        "blocks": [
+            {
+                "id": "text-rate",
+                "type": "text",
+                "start_ms": 0,
+                "duration_ms": 1000,
+                "content_hash": "sha256:abc123",
+                "text": text_path,
+            }
+        ],
+        "settings": {"target_sample_rate_hz": 2},
+    }
+
+    events = list(tribe_inference.run_real_tribe_stream(spec, model=model, working_dir=working_dir))
+    chunk = next(event for event in events if event["type"] == "chunk")
+
+    assert chunk["sample_rate_hz"] == 0.5
 
 
 def test_real_tribe_stream_uses_official_audio_path_flow():
@@ -425,7 +469,7 @@ def test_real_tribe_stream_uses_official_audio_path_flow():
 
     assert model.audio_paths == [str(audio_path)]
     assert model.predicted_events == [{"audio_path": str(audio_path)}]
-    assert events[2]["type"] == "chunk"
+    assert events[3]["type"] == "chunk"
 
 
 def test_real_tribe_stream_materializes_s3_audio(monkeypatch):
