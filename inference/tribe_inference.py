@@ -42,6 +42,7 @@ AUDIO_EXTENSIONS_BY_MIME = {
     "audio/wav": ".wav",
     "audio/mp4": ".m4a",
     "audio/x-m4a": ".m4a",
+    "audio/webm": ".webm",
 }
 VIDEO_EXTENSIONS_BY_MIME = {
     "video/mp4": ".mp4",
@@ -438,6 +439,30 @@ def convert_image_to_video(image_path: Path, destination: Path, *, duration_ms: 
     return destination
 
 
+def convert_audio_for_tribe(audio_path: Path, destination: Path) -> Path:
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError("ffmpeg is required to convert browser-recorded audio")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(audio_path),
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            str(destination),
+        ],
+        check=True,
+    )
+    return destination
+
+
 def _events_dataframe_for_block(model: Any, block: dict[str, Any], working_dir: Path) -> Any:
     block_type = block.get("type")
     if block_type == "text":
@@ -450,6 +475,9 @@ def _events_dataframe_for_block(model: Any, block: dict[str, Any], working_dir: 
             extensions_by_mime=AUDIO_EXTENSIONS_BY_MIME,
             fallback_extension=".wav",
         )
+        if audio_path.suffix.lower() not in {".wav", ".mp3", ".flac", ".ogg"}:
+            converted_path = working_dir / "inputs" / f"{_safe_file_stem(block, 'audio')}-tribe.wav"
+            audio_path = convert_audio_for_tribe(audio_path, converted_path)
         return model.get_events_dataframe(audio_path=str(audio_path))
     if block_type == "image":
         image_path = _materialize_media_block(

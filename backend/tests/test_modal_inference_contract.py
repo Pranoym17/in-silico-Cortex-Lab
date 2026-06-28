@@ -505,3 +505,38 @@ def test_real_tribe_stream_materializes_s3_audio(monkeypatch):
     assert downloads[0][1] == "uploads/audio.wav"
     assert downloads[0][2].name == "audio-s3.wav"
     assert model.audio_paths == [str(downloads[0][2])]
+
+
+def test_real_tribe_stream_converts_browser_recording(monkeypatch):
+    model = FakeTribeModel()
+    working_dir = _working_dir("webm-audio")
+    recording_path = working_dir / "recording.webm"
+    recording_path.write_bytes(b"webm")
+    conversions = []
+
+    def fake_convert_audio_for_tribe(source, destination):
+        conversions.append((source, destination))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"RIFF")
+        return destination
+
+    monkeypatch.setattr(tribe_inference, "convert_audio_for_tribe", fake_convert_audio_for_tribe)
+    spec = {
+        "blocks": [
+            {
+                "id": "recording",
+                "type": "audio",
+                "start_ms": 0,
+                "duration_ms": 1000,
+                "content_hash": "sha256:recording",
+                "local_path": str(recording_path),
+                "mime_type": "audio/webm",
+            }
+        ]
+    }
+
+    list(tribe_inference.run_real_tribe_stream(spec, model=model, working_dir=working_dir))
+
+    converted = working_dir / "inputs" / "recording-tribe.wav"
+    assert conversions == [(recording_path, converted)]
+    assert model.audio_paths == [str(converted)]

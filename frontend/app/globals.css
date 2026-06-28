@@ -1257,10 +1257,37 @@ pre {
   gap: 12px;
 }
 
+.audio-waveform {
+  width: 100%;
+  height: 72px;
+  border: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.recording-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.recording-controls span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .block-config-form label {
   display: grid;
   gap: 6px;
   color: var(--muted);
+}
+
+.block-config-form .checkbox-label {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.block-config-form .checkbox-label input {
+  width: auto;
 }
 
 .block-config-form input,

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 
 UploadKind = Literal["image", "audio"]
 ImageMimeType = Literal["image/png", "image/jpeg", "image/webp"]
-AudioMimeType = Literal["audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a"]
+AudioMimeType = Literal["audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a", "audio/webm"]
 
 
 class UploadIntentRequest(BaseModel):

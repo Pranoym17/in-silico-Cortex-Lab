@@ -1,7 +1,7 @@
 import { StimulusBlock } from "@/lib/api";
 
 export const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
-export const AUDIO_MIME_TYPES = ["audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a"] as const;
+export const AUDIO_MIME_TYPES = ["audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a", "audio/webm"] as const;
 
 export function normalizeContentHash(value: string) {
   const trimmed = value.trim();

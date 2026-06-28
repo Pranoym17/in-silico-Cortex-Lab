@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { StimulusBlock, UpdateBlockInput } from "@/lib/api";
 import { AUDIO_MIME_TYPES, IMAGE_MIME_TYPES, normalizeContentHash } from "@/lib/stimulusMetadata";
+import { estimateTextDurationMs, preferredRecordingMimeType } from "@/lib/mediaExperience";
 
 function stringifyPayload(payload: Record<string, unknown>) {
   return JSON.stringify(payload, null, 2);
@@ -44,12 +45,18 @@ export function BlockConfigPanel({
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const [localPreviewKind, setLocalPreviewKind] = useState<"image" | "audio" | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [autoTextDuration, setAutoTextDuration] = useState(true);
+  const [recordingStatus, setRecordingStatus] = useState<"idle" | "recording" | "processing">("idle");
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     return () => {
       if (localPreviewUrl) {
         URL.revokeObjectURL(localPreviewUrl);
       }
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, [localPreviewUrl]);
 
@@ -210,9 +217,10 @@ export function BlockConfigPanel({
         <img className="stimulus-preview" src={localPreviewUrl} alt={selectedFileName ?? "Selected image preview"} />
       ) : null}
       {block.type === "audio" && localPreviewUrl && localPreviewKind === "audio" ? (
-        <audio className="stimulus-audio-preview" controls src={localPreviewUrl}>
-          <track kind="captions" />
-        </audio>
+        <>
+          <AudioWaveformPreview sourceUrl={localPreviewUrl} />
+          <audio className="stimulus-audio-preview" controls src={localPreviewUrl} />
+        </>
       ) : null}
       <form className="block-config-form" onSubmit={handleSubmit}>
         <label>
@@ -265,7 +273,30 @@ export function BlockConfigPanel({
           <>
             <label>
               Text
-              <textarea onChange={(event) => setTextValue(event.target.value)} rows={5} value={textValue} />
+              <textarea
+                onChange={(event) => {
+                  const text = event.target.value;
+                  setTextValue(text);
+                  if (autoTextDuration) {
+                    setDurationMs(estimateTextDurationMs(text));
+                  }
+                }}
+                rows={5}
+                value={textValue}
+              />
+            </label>
+            <label className="checkbox-label">
+              <input
+                checked={autoTextDuration}
+                onChange={(event) => {
+                  setAutoTextDuration(event.target.checked);
+                  if (event.target.checked) {
+                    setDurationMs(estimateTextDurationMs(textValue));
+                  }
+                }}
+                type="checkbox"
+              />
+              Automatic duration at 200 WPM
             </label>
             <label>
               Voice
@@ -285,6 +316,28 @@ export function BlockConfigPanel({
               />
             </label>
             <UploadState status={uploadStatus} fileName={selectedFileName} />
+            <div className="recording-controls">
+              {recordingStatus !== "recording" ? (
+                <button
+                  disabled={isSaving || recordingStatus === "processing"}
+                  onClick={startRecording}
+                  type="button"
+                >
+                  Record microphone
+                </button>
+              ) : (
+                <button onClick={stopRecording} type="button">
+                  Stop recording
+                </button>
+              )}
+              <span aria-live="polite">
+                {recordingStatus === "recording"
+                  ? "Recording"
+                  : recordingStatus === "processing"
+                    ? "Preparing recording"
+                    : ""}
+              </span>
+            </div>
             <label>
               Library ID
               <input onChange={(event) => setLibraryId(event.target.value)} value={libraryId} />
@@ -424,6 +477,56 @@ export function BlockConfigPanel({
       </form>
     </section>
   );
+
+  async function startRecording() {
+    if (!block || block.type !== "audio" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setUploadError("Microphone recording is not supported by this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = preferredRecordingMimeType(MediaRecorder.isTypeSupported);
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      recordingStreamRef.current = stream;
+      recorderRef.current = recorder;
+      recordingChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+      recorder.onstop = async () => {
+        setRecordingStatus("processing");
+        const recordedType = recorder.mimeType.split(";")[0] || "audio/webm";
+        const extension = recordedType === "audio/mp4" ? "m4a" : "webm";
+        const file = new File(recordingChunksRef.current, `recording-${Date.now()}.${extension}`, {
+          type: recordedType
+        });
+        recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+        recorderRef.current = null;
+        try {
+          await handleUpload(file);
+        } finally {
+          setRecordingStatus("idle");
+        }
+      };
+      recorder.start(250);
+      setUploadError(null);
+      setRecordingStatus("recording");
+    } catch (caught) {
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+      setRecordingStatus("idle");
+      setUploadError(caught instanceof Error ? caught.message : "Could not access the microphone.");
+    }
+  }
+
+  function stopRecording() {
+    if (recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
+    }
+  }
 }
 
 function UploadState({ status, fileName }: { status: "idle" | "uploading" | "done" | "error"; fileName: string | null }) {
@@ -438,4 +541,49 @@ function UploadState({ status, fileName }: { status: "idle" | "uploading" | "don
       {status === "uploading" ? <div className="upload-progress" /> : null}
     </div>
   );
+}
+
+function AudioWaveformPreview({ sourceUrl }: { sourceUrl: string }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const context = new AudioContext();
+
+    fetch(sourceUrl)
+      .then((response) => response.arrayBuffer())
+      .then((buffer) => context.decodeAudioData(buffer))
+      .then((audioBuffer) => {
+        if (cancelled || !canvasRef.current) {
+          return;
+        }
+        const canvas = canvasRef.current;
+        const drawing = canvas.getContext("2d");
+        if (!drawing) {
+          return;
+        }
+        const samples = audioBuffer.getChannelData(0);
+        const width = canvas.width;
+        const height = canvas.height;
+        const bucketSize = Math.max(1, Math.floor(samples.length / width));
+        drawing.clearRect(0, 0, width, height);
+        drawing.fillStyle = "#111827";
+        for (let x = 0; x < width; x += 1) {
+          let peak = 0;
+          for (let index = x * bucketSize; index < Math.min(samples.length, (x + 1) * bucketSize); index += 1) {
+            peak = Math.max(peak, Math.abs(samples[index]));
+          }
+          const barHeight = Math.max(1, peak * height);
+          drawing.fillRect(x, (height - barHeight) / 2, 1, barHeight);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      void context.close();
+    };
+  }, [sourceUrl]);
+
+  return <canvas aria-label="Audio waveform preview" className="audio-waveform" height={72} ref={canvasRef} width={640} />;
 }

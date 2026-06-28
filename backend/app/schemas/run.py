@@ -40,7 +40,7 @@ class TextBlock(BaseStimulusBlock):
 class AudioBlock(BaseStimulusBlock):
     type: Literal["audio"]
     s3_key: str
-    mime_type: Literal["audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a"]
+    mime_type: Literal["audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a", "audio/webm"]
     channels: int = Field(ge=1, le=2)
     sample_rate_hz: int = Field(gt=0)
 
