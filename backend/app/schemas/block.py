@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -37,6 +37,10 @@ class BlockCreate(BlockBase):
     pass
 
 
+class TemplateBlock(BlockBase):
+    id: UUID | None = None
+
+
 class BlockUpdate(BaseModel):
     condition: str | None = Field(default=None, max_length=255)
     start_ms: int | None = Field(default=None, ge=0)
@@ -68,3 +72,19 @@ class BlockReorderItem(BaseModel):
 
 class BlockReorderRequest(BaseModel):
     blocks: list[BlockReorderItem] = Field(min_length=1, max_length=50)
+
+
+class TemplateApplyRequest(BaseModel):
+    mode: Literal["append", "replace"]
+    blocks: list[TemplateBlock] = Field(max_length=50)
+
+    @model_validator(mode="after")
+    def validate_append_has_blocks(self) -> "TemplateApplyRequest":
+        if self.mode == "append" and not self.blocks:
+            raise ValueError("append templates require at least one block")
+        if self.mode == "append" and any(block.id is not None for block in self.blocks):
+            raise ValueError("append templates cannot specify block IDs")
+        block_ids = [block.id for block in self.blocks if block.id is not None]
+        if len(block_ids) != len(set(block_ids)):
+            raise ValueError("template block IDs must be unique")
+        return self

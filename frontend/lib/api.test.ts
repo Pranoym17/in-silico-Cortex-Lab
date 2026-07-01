@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
+  applyExperimentTemplate,
   apiFetch,
   apiJson,
   cancelJob,
@@ -104,6 +105,22 @@ describe("block helpers", () => {
     expect(fetchMock.mock.calls[0][1]?.body).toBe(
       JSON.stringify({ blocks: [{ id: "block_1", start_ms: 1000, duration_ms: 2000 }] })
     );
+  });
+
+  it("applies a template in one authenticated request", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("[]", { status: 200 }));
+    const input = {
+      mode: "replace" as const,
+      blocks: [{ type: "text" as const, start_ms: 0, duration_ms: 1000, payload: { text: "hello" } }]
+    };
+
+    await applyExperimentTemplate("exp_1", input, "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/experiments/exp_1/blocks/apply-template");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(JSON.stringify(input));
+    const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
+    expect(headers.get("authorization")).toBe("Bearer token-123");
   });
 });
 

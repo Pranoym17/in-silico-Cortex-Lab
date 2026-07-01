@@ -201,3 +201,49 @@ async def test_reorder_blocks(auth_user, monkeypatch):
     assert response.status_code == 200
     assert response.json()[0]["start_ms"] == 2000
 
+
+@pytest.mark.asyncio
+async def test_apply_template_is_single_authenticated_api_operation(auth_user, monkeypatch):
+    experiment_id = uuid4()
+    received = []
+
+    async def fake_apply_template(session, owner, requested_experiment_id, data):
+        assert owner.id == auth_user.id
+        assert requested_experiment_id == experiment_id
+        assert data.mode == "replace"
+        assert len(data.blocks) == 1
+        received.append(data.blocks[0])
+        return [
+            make_block(
+                experiment_id,
+                type=data.blocks[0].type,
+                condition=data.blocks[0].condition,
+                duration_ms=data.blocks[0].duration_ms,
+                payload=data.blocks[0].payload,
+            )
+        ]
+
+    monkeypatch.setattr("app.api.experiments.apply_template", fake_apply_template)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/experiments/{experiment_id}/blocks/apply-template",
+            headers={"Authorization": f"Bearer {make_token()}"},
+            json={
+                "mode": "replace",
+                "blocks": [
+                    {
+                        "type": "text",
+                        "condition": "language",
+                        "start_ms": 0,
+                        "duration_ms": 5000,
+                        "content_hash": "sha256:abc123",
+                        "payload": {"text": "A complete template transaction."},
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    assert len(received) == 1
+    assert response.json()[0]["condition"] == "language"
+

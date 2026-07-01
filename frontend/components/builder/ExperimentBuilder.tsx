@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CreateBlockInput,
   Experiment,
@@ -8,6 +8,7 @@ import {
   StimulusBlock,
   StimulusBlockType,
   UpdateBlockInput,
+  applyExperimentTemplate,
   createBlock,
   createUploadIntent,
   deleteBlock,
@@ -22,11 +23,13 @@ import { useAuthStore } from "@/store/authStore";
 import { useExperimentStore } from "@/store/experimentStore";
 import { BlockConfigPanel } from "./BlockConfigPanel";
 import { BuilderTimeline } from "./BuilderTimeline";
+import { BuilderPlayback } from "./BuilderPlayback";
 import { ConditionsPanel } from "./ConditionsPanel";
 import { ParadigmLibraryPanel } from "./ParadigmLibraryPanel";
 import { AppShell, EmptyState, ErrorPanel, LoadingRows, StatusBadge } from "@/components/ui/AppShell";
 import { ParadigmTemplate } from "@/lib/paradigmTemplates";
 import {
+  DEFAULT_TIMELINE_ZOOM,
   TIMELINE_DURATION_STEP_MS,
   TIMELINE_NUDGE_MS,
   resizeBlockDuration,
@@ -42,6 +45,7 @@ import {
 } from "@/lib/mediaUpload";
 import { buildRunExperimentInput } from "@/lib/runSpec";
 import { formatDuration, getBuilderSummary } from "@/lib/builderSummary";
+import { assetBlock, getStimulusAsset } from "@/lib/stimulusCatalog";
 
 function getNextStartMs(blocks: { start_ms: number; duration_ms: number }[]) {
   return blocks.reduce((max, block) => Math.max(max, block.start_ms + block.duration_ms), 0);
@@ -49,31 +53,11 @@ function getNextStartMs(blocks: { start_ms: number; duration_ms: number }[]) {
 
 function makeDefaultBlock(type: StimulusBlockType, startMs: number): CreateBlockInput {
   if (type === "image") {
-    return {
-      type,
-      condition: "condition_a",
-      start_ms: startMs,
-      duration_ms: 2000,
-      payload: {
-        source: "library",
-        library_id: "placeholder_image",
-        display: { mode: "center" }
-      }
-    };
+    return assetBlock(getStimulusAsset("object-001"), startMs, "condition_a");
   }
 
   if (type === "audio") {
-    return {
-      type,
-      condition: "condition_a",
-      start_ms: startMs,
-      duration_ms: 10000,
-      payload: {
-        source: "placeholder",
-        filename: "audio-placeholder.wav",
-        mime_type: "audio/wav"
-      }
-    };
+    return assetBlock(getStimulusAsset("auditory-control-01"), startMs, "condition_a");
   }
 
   return {
@@ -92,6 +76,22 @@ function clonePayload(payload: Record<string, unknown>) {
   return JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
 }
 
+function cloneBlocks(blocks: StimulusBlock[]) {
+  return blocks.map((block) => ({ ...block, payload: clonePayload(block.payload) }));
+}
+
+function snapshotToCreateBlocks(blocks: StimulusBlock[]): Array<CreateBlockInput & { id: string }> {
+  return blocks.map((block) => ({
+    id: block.id,
+    type: block.type,
+    condition: block.condition,
+    start_ms: block.start_ms,
+    duration_ms: block.duration_ms,
+    content_hash: block.content_hash,
+    payload: clonePayload(block.payload)
+  }));
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -105,6 +105,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const blocks = useExperimentStore((state) => state.blocks);
   const selectedBlockId = useExperimentStore((state) => state.selectedBlockId);
   const validationErrors = useExperimentStore((state) => state.validationErrors);
+  const isDirty = useExperimentStore((state) => state.isDirty);
   const setBlocks = useExperimentStore((state) => state.setBlocks);
   const upsertBlock = useExperimentStore((state) => state.upsertBlock);
   const removeBlock = useExperimentStore((state) => state.removeBlock);
@@ -121,8 +122,53 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const [publishTitle, setPublishTitle] = useState("");
   const [publishSlug, setPublishSlug] = useState("");
   const [publishTags, setPublishTags] = useState("");
+  const [undoStack, setUndoStack] = useState<StimulusBlock[][]>([]);
+  const [redoStack, setRedoStack] = useState<StimulusBlock[][]>([]);
+  const [timelineZoom, setTimelineZoom] = useState(DEFAULT_TIMELINE_ZOOM);
+  const timelineMutationRef = useRef(false);
+
+  function rememberSnapshot(snapshot: StimulusBlock[]) {
+    setUndoStack((history) => [...history.slice(-19), cloneBlocks(snapshot)]);
+    setRedoStack([]);
+  }
+
+  async function restoreHistory(direction: "undo" | "redo") {
+    if (!accessToken || isMutating) {
+      return;
+    }
+    const source = direction === "undo" ? undoStack : redoStack;
+    const target = source[source.length - 1];
+    if (!target) {
+      return;
+    }
+    const current = cloneBlocks(blocks);
+    setIsMutating(true);
+    setError(null);
+    try {
+      const restored = await applyExperimentTemplate(
+        experimentId,
+        { mode: "replace", blocks: snapshotToCreateBlocks(target) },
+        accessToken
+      );
+      setBlocks(restored);
+      if (direction === "undo") {
+        setUndoStack((history) => history.slice(0, -1));
+        setRedoStack((history) => [...history.slice(-19), current]);
+      } else {
+        setRedoStack((history) => history.slice(0, -1));
+        setUndoStack((history) => [...history.slice(-19), current]);
+      }
+      setLastSavedAt(new Date().toISOString());
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : `Failed to ${direction}`);
+    } finally {
+      setIsMutating(false);
+    }
+  }
 
   useEffect(() => {
+    setUndoStack([]);
+    setRedoStack([]);
     if (!accessToken) {
       setExperiment(null);
       setBlocks([]);
@@ -159,11 +205,24 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     };
   }, [accessToken, experimentId, setBlocks]);
 
+  useEffect(() => {
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isMutating && !isDirty) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [isDirty, isMutating]);
+
   async function handleAddBlock(type: StimulusBlockType) {
     if (!accessToken) {
       return;
     }
 
+    const previous = cloneBlocks(blocks);
     setIsMutating(true);
     setError(null);
     setQueuedJob(null);
@@ -171,6 +230,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     try {
       const block = await createBlock(experimentId, makeDefaultBlock(type, getNextStartMs(blocks)), accessToken);
       upsertBlock(block);
+      rememberSnapshot(previous);
       selectBlock(block.id);
       setLastSavedAt(block.updated_at);
     } catch (caught) {
@@ -185,6 +245,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
       return;
     }
 
+    const previous = cloneBlocks(blocks);
     setIsMutating(true);
     setError(null);
     setQueuedJob(null);
@@ -192,6 +253,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     try {
       await deleteBlock(experimentId, blockId, accessToken);
       removeBlock(blockId);
+      rememberSnapshot(previous);
       setLastSavedAt(new Date().toISOString());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to delete block");
@@ -205,6 +267,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
       return;
     }
 
+    const previous = cloneBlocks(blocks);
     setIsMutating(true);
     setError(null);
     setQueuedJob(null);
@@ -223,6 +286,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
         accessToken
       );
       upsertBlock(duplicate);
+      rememberSnapshot(previous);
       selectBlock(duplicate.id);
       setLastSavedAt(duplicate.updated_at);
     } catch (caught) {
@@ -237,6 +301,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
       return;
     }
 
+    const previous = cloneBlocks(blocks);
     setIsMutating(true);
     setError(null);
     setQueuedJob(null);
@@ -244,6 +309,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     try {
       const block = await updateBlock(experimentId, blockId, input, accessToken);
       upsertBlock(block);
+      rememberSnapshot(previous);
       selectBlock(block.id);
       setLastSavedAt(block.updated_at);
     } catch (caught) {
@@ -258,16 +324,25 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
       return;
     }
 
+    const previous = cloneBlocks(blocks);
     setIsMutating(true);
     setError(null);
     setQueuedJob(null);
 
     try {
       const matchingBlocks = blocks.filter((block) => (block.condition?.trim() || "unlabeled") === from);
-      for (const block of matchingBlocks) {
-        const updatedBlock = await updateBlock(experimentId, block.id, { condition: to }, accessToken);
-        upsertBlock(updatedBlock);
-        setLastSavedAt(updatedBlock.updated_at);
+      if (matchingBlocks.length > 0) {
+        const renamed = blocks.map((block) =>
+          matchingBlocks.some((matching) => matching.id === block.id) ? { ...block, condition: to } : block
+        );
+        const savedBlocks = await applyExperimentTemplate(
+          experimentId,
+          { mode: "replace", blocks: snapshotToCreateBlocks(renamed) },
+          accessToken
+        );
+        setBlocks(savedBlocks);
+        rememberSnapshot(previous);
+        setLastSavedAt(new Date().toISOString());
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to rename condition");
@@ -294,30 +369,17 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     setQueuedJob(null);
 
     try {
-      if (mode === "replace") {
-        for (const block of blocks) {
-          await deleteBlock(experimentId, block.id, accessToken);
-          removeBlock(block.id);
-        }
-      }
-
-      const offset = mode === "append" ? getNextStartMs(blocks) : 0;
-      let lastCreatedId: string | null = null;
-      for (const templateBlock of template.blocks) {
-        const block = await createBlock(
-          experimentId,
-          {
-            ...templateBlock,
-            start_ms: templateBlock.start_ms + offset
-          },
-          accessToken
-        );
-        upsertBlock(block);
-        lastCreatedId = block.id;
-        setLastSavedAt(block.updated_at);
-      }
-      if (lastCreatedId) {
-        selectBlock(lastCreatedId);
+      const previous = cloneBlocks(blocks);
+      const savedBlocks = await applyExperimentTemplate(
+        experimentId,
+        { mode, blocks: template.blocks },
+        accessToken
+      );
+      setBlocks(savedBlocks);
+      rememberSnapshot(previous);
+      setLastSavedAt(new Date().toISOString());
+      if (savedBlocks.length > 0) {
+        selectBlock(savedBlocks[savedBlocks.length - 1].id);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to apply template");
@@ -327,21 +389,25 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   }
 
   async function persistTimeline(nextBlocks: typeof blocks, failureMessage: string) {
-    if (!accessToken) {
+    if (!accessToken || timelineMutationRef.current) {
       return;
     }
 
+    timelineMutationRef.current = true;
     setIsMutating(true);
     setError(null);
     setQueuedJob(null);
 
     try {
+      const previous = cloneBlocks(blocks);
       const savedBlocks = await reorderBlocks(experimentId, toReorderInput(nextBlocks), accessToken);
       setBlocks(savedBlocks);
+      rememberSnapshot(previous);
       setLastSavedAt(new Date().toISOString());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : failureMessage);
     } finally {
+      timelineMutationRef.current = false;
       setIsMutating(false);
     }
   }
@@ -354,11 +420,29 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
     await persistTimeline(resizeBlockDuration(blocks, blockId, deltaMs), "Failed to resize block");
   }
 
+  async function handleMoveBlockTo(blockId: string, startMs: number) {
+    const block = blocks.find((item) => item.id === blockId);
+    if (block) {
+      await persistTimeline(shiftBlockTiming(blocks, blockId, startMs - block.start_ms), "Failed to move block");
+    }
+  }
+
+  async function handleResizeBlockTo(blockId: string, durationMs: number) {
+    const block = blocks.find((item) => item.id === blockId);
+    if (block) {
+      await persistTimeline(
+        resizeBlockDuration(blocks, blockId, durationMs - block.duration_ms),
+        "Failed to resize block"
+      );
+    }
+  }
+
   async function handleUploadBlockFile(block: StimulusBlock, file: File) {
     if (!accessToken || (block.type !== "image" && block.type !== "audio")) {
       return;
     }
 
+    const previous = cloneBlocks(blocks);
     setIsMutating(true);
     setError(null);
     setQueuedJob(null);
@@ -382,6 +466,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
         accessToken
       );
       upsertBlock(updatedBlock);
+      rememberSnapshot(previous);
       selectBlock(updatedBlock.id);
       setLastSavedAt(updatedBlock.updated_at);
     } catch (caught) {
@@ -606,7 +691,34 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
             />
           ) : null}
 
-          <BuilderTimeline blocks={blocks} selectedBlockId={selectedBlockId} onSelectBlock={selectBlock} />
+          <div className="timeline-zoom-controls">
+            <span>Timeline zoom</span>
+            <button
+              aria-label="Zoom timeline out"
+              onClick={() => setTimelineZoom((value) => Math.max(0.02, value - 0.02))}
+              type="button"
+            >
+              -
+            </button>
+            <output>{Math.round(timelineZoom * 1000)}%</output>
+            <button
+              aria-label="Zoom timeline in"
+              onClick={() => setTimelineZoom((value) => Math.min(0.4, value + 0.02))}
+              type="button"
+            >
+              +
+            </button>
+          </div>
+          <BuilderTimeline
+            blocks={blocks}
+            onMoveBlock={handleMoveBlockTo}
+            onResizeBlock={handleResizeBlockTo}
+            onSelectBlock={selectBlock}
+            onZoomChange={setTimelineZoom}
+            selectedBlockId={selectedBlockId}
+            zoom={timelineZoom}
+          />
+          <BuilderPlayback blocks={blocks} />
 
           <div className="timeline-controls">
             <div>
@@ -618,6 +730,20 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
               </p>
             </div>
             <div className="timeline-actions">
+              <button
+                type="button"
+                disabled={undoStack.length === 0 || isMutating || !accessToken}
+                onClick={() => restoreHistory("undo")}
+              >
+                Undo
+              </button>
+              <button
+                type="button"
+                disabled={redoStack.length === 0 || isMutating || !accessToken}
+                onClick={() => restoreHistory("redo")}
+              >
+                Redo
+              </button>
               <button
                 type="button"
                 disabled={!selectedBlock || isMutating || !accessToken}

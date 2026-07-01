@@ -167,6 +167,11 @@ export type ResultDownload = {
   expires_in_seconds: number;
 };
 
+export type TemplateApplyInput = {
+  mode: "append" | "replace";
+  blocks: Array<CreateBlockInput & { id?: string }>;
+};
+
 export type MdsPoint = {
   x: number;
   y: number;
@@ -399,6 +404,13 @@ export function getJobResultDownload(jobId: string, token?: string | null) {
 
 export function cancelJob(jobId: string, token?: string | null) {
   return apiJson<Job>(`/api/jobs/${jobId}/cancel`, token, { method: "POST" });
+}
+
+export function applyExperimentTemplate(experimentId: string, input: TemplateApplyInput, token?: string | null) {
+  return apiJson<StimulusBlock[]>(`/api/experiments/${experimentId}/blocks/apply-template`, token, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export function listExperimentJobs(experimentId: string, token?: string | null) {

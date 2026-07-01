@@ -7,12 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import require_user
 from app.core.database import get_db
 from app.models.user import User
-from app.schemas.block import BlockCreate, BlockReorderRequest, BlockResponse, BlockUpdate
+from app.schemas.block import BlockCreate, BlockReorderRequest, BlockResponse, BlockUpdate, TemplateApplyRequest
 from app.schemas.experiment import ExperimentCreate, ExperimentResponse, ExperimentUpdate
 from app.schemas.job import JobResponse
 from app.schemas.library import LibraryEntryResponse, LibraryPublishRequest
 from app.schemas.run import RunExperimentRequest, RunExperimentResponse
-from app.services.blocks import create_block, delete_block, list_blocks, reorder_blocks, update_block
+from app.services.blocks import apply_template, create_block, delete_block, list_blocks, reorder_blocks, update_block
 from app.services.experiments import (
     archive_experiment,
     create_experiment,
@@ -135,6 +135,16 @@ async def reorder_blocks_route(
     session: AsyncSession = Depends(get_db),
 ):
     return await reorder_blocks(session, user, experiment_id, body)
+
+
+@router.post("/{experiment_id}/blocks/apply-template", response_model=list[BlockResponse])
+async def apply_template_route(
+    experiment_id: UUID,
+    body: TemplateApplyRequest,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+):
+    return await apply_template(session, user, experiment_id, body)
 
 
 @router.post("/{experiment_id}/run", response_model=RunExperimentResponse, status_code=status.HTTP_202_ACCEPTED)

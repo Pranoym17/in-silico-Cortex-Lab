@@ -3,7 +3,12 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { StimulusBlock, UpdateBlockInput } from "@/lib/api";
 import { AUDIO_MIME_TYPES, IMAGE_MIME_TYPES, normalizeContentHash } from "@/lib/stimulusMetadata";
-import { estimateTextDurationMs, preferredRecordingMimeType } from "@/lib/mediaExperience";
+import {
+  estimateTextDurationMs,
+  formatRecordingElapsed,
+  microphoneErrorMessage,
+  preferredRecordingMimeType
+} from "@/lib/mediaExperience";
 
 function stringifyPayload(payload: Record<string, unknown>) {
   return JSON.stringify(payload, null, 2);
@@ -33,6 +38,7 @@ export function BlockConfigPanel({
   const [libraryId, setLibraryId] = useState("");
   const [s3Key, setS3Key] = useState("");
   const [displayMode, setDisplayMode] = useState("center");
+  const [secondaryImagePath, setSecondaryImagePath] = useState("");
   const [imageMimeType, setImageMimeType] = useState("image/png");
   const [imageWidth, setImageWidth] = useState(0);
   const [imageHeight, setImageHeight] = useState(0);
@@ -47,18 +53,47 @@ export function BlockConfigPanel({
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [autoTextDuration, setAutoTextDuration] = useState(true);
   const [recordingStatus, setRecordingStatus] = useState<"idle" | "recording" | "processing">("idle");
+  const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
+  const [recordingLevel, setRecordingLevel] = useState(0);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingContextRef = useRef<AudioContext | null>(null);
+  const recordingAnimationRef = useRef<number | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingStartedAtRef = useRef(0);
+
+  function cleanupRecordingResources() {
+    if (recordingAnimationRef.current !== null) {
+      cancelAnimationFrame(recordingAnimationRef.current);
+      recordingAnimationRef.current = null;
+    }
+    if (recordingTimerRef.current !== null) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+    if (recordingContextRef.current) {
+      void recordingContextRef.current.close();
+      recordingContextRef.current = null;
+    }
+    setRecordingLevel(0);
+  }
 
   useEffect(() => {
     return () => {
       if (localPreviewUrl) {
         URL.revokeObjectURL(localPreviewUrl);
       }
-      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (recorderRef.current?.state === "recording") {
+        recorderRef.current.onstop = null;
+        recorderRef.current.stop();
+      }
+      recorderRef.current = null;
+      cleanupRecordingResources();
     };
-  }, [localPreviewUrl]);
+  }, [block?.id, localPreviewUrl]);
 
   useEffect(() => {
     if (!block) {
@@ -73,6 +108,7 @@ export function BlockConfigPanel({
       setLibraryId("");
       setS3Key("");
       setDisplayMode("center");
+      setSecondaryImagePath("");
       setImageMimeType("image/png");
       setImageWidth(0);
       setImageHeight(0);
@@ -101,6 +137,11 @@ export function BlockConfigPanel({
     setLibraryId(typeof block.payload.library_id === "string" ? block.payload.library_id : "");
     setS3Key(typeof block.payload.s3_key === "string" ? block.payload.s3_key : "");
     setDisplayMode("mode" in display && typeof display.mode === "string" ? display.mode : "center");
+    setSecondaryImagePath(
+      "secondary_public_path" in display && typeof display.secondary_public_path === "string"
+        ? display.secondary_public_path
+        : ""
+    );
     setImageMimeType(typeof block.payload.mime_type === "string" ? block.payload.mime_type : "image/png");
     setImageWidth(typeof block.payload.width === "number" ? block.payload.width : 0);
     setImageHeight(typeof block.payload.height === "number" ? block.payload.height : 0);
@@ -133,13 +174,16 @@ export function BlockConfigPanel({
         mime_type: imageMimeType,
         width: imageWidth || undefined,
         height: imageHeight || undefined,
-        display: { mode: displayMode }
+        display: {
+          mode: displayMode,
+          secondary_public_path: displayMode === "side_by_side" ? secondaryImagePath : undefined
+        }
       };
     }
 
     return {
       ...basePayload,
-      source: "placeholder",
+      source: typeof basePayload.source === "string" ? basePayload.source : "upload",
       filename,
       s3_key: s3Key,
       mime_type: audioMimeType,
@@ -209,7 +253,7 @@ export function BlockConfigPanel({
         <div>
           <h2>Selected block</h2>
           <p>
-            {block.type} · {block.condition ?? "unlabeled"}
+            {block.type} | {block.condition ?? "unlabeled"}
           </p>
         </div>
       </div>
@@ -316,28 +360,6 @@ export function BlockConfigPanel({
               />
             </label>
             <UploadState status={uploadStatus} fileName={selectedFileName} />
-            <div className="recording-controls">
-              {recordingStatus !== "recording" ? (
-                <button
-                  disabled={isSaving || recordingStatus === "processing"}
-                  onClick={startRecording}
-                  type="button"
-                >
-                  Record microphone
-                </button>
-              ) : (
-                <button onClick={stopRecording} type="button">
-                  Stop recording
-                </button>
-              )}
-              <span aria-live="polite">
-                {recordingStatus === "recording"
-                  ? "Recording"
-                  : recordingStatus === "processing"
-                    ? "Preparing recording"
-                    : ""}
-              </span>
-            </div>
             <label>
               Library ID
               <input onChange={(event) => setLibraryId(event.target.value)} value={libraryId} />
@@ -384,6 +406,16 @@ export function BlockConfigPanel({
                 <option value="side_by_side">Side by side</option>
               </select>
             </label>
+            {displayMode === "side_by_side" ? (
+              <label>
+                Second image path
+                <input
+                  onChange={(event) => setSecondaryImagePath(event.target.value)}
+                  placeholder="/stimuli/v1/scenes/house-001.png"
+                  value={secondaryImagePath}
+                />
+              </label>
+            ) : null}
           </>
         ) : null}
         {block.type === "audio" ? (
@@ -398,6 +430,38 @@ export function BlockConfigPanel({
               />
             </label>
             <UploadState status={uploadStatus} fileName={selectedFileName} />
+            <div className="recording-controls">
+              {recordingStatus !== "recording" ? (
+                <button
+                  disabled={isSaving || recordingStatus === "processing"}
+                  onClick={startRecording}
+                  type="button"
+                >
+                  Record microphone
+                </button>
+              ) : (
+                <button onClick={stopRecording} type="button">
+                  Stop recording
+                </button>
+              )}
+              <div
+                aria-label={`Microphone input level ${Math.round(recordingLevel * 100)} percent`}
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={Math.round(recordingLevel * 100)}
+                className="recording-level"
+                role="meter"
+              >
+                <span className="recording-level-fill" style={{ width: `${recordingLevel * 100}%` }} />
+              </div>
+              <span aria-live="polite" className="recording-status" role="status">
+                {recordingStatus === "recording"
+                  ? `Recording ${formatRecordingElapsed(recordingElapsedMs)}`
+                  : recordingStatus === "processing"
+                    ? "Preparing recording"
+                    : "Microphone ready"}
+              </span>
+            </div>
             <label>
               Filename
               <input onChange={(event) => setFilename(event.target.value)} value={filename} />
@@ -485,15 +549,38 @@ export function BlockConfigPanel({
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
       const mimeType = preferredRecordingMimeType(MediaRecorder.isTypeSupported);
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      recordingStreamRef.current = stream;
+      const AudioContextConstructor = window.AudioContext;
+      const audioContext = new AudioContextConstructor();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      audioContext.createMediaStreamSource(stream).connect(analyser);
+      const samples = new Uint8Array(analyser.fftSize);
+      const updateInputLevel = () => {
+        analyser.getByteTimeDomainData(samples);
+        let sumSquares = 0;
+        for (const sample of samples) {
+          const normalized = (sample - 128) / 128;
+          sumSquares += normalized * normalized;
+        }
+        setRecordingLevel(Math.min(1, Math.sqrt(sumSquares / samples.length) * 3));
+        recordingAnimationRef.current = requestAnimationFrame(updateInputLevel);
+      };
+      recordingContextRef.current = audioContext;
       recorderRef.current = recorder;
       recordingChunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           recordingChunksRef.current.push(event.data);
         }
+      };
+      recorder.onerror = () => {
+        cleanupRecordingResources();
+        recorderRef.current = null;
+        setRecordingStatus("idle");
+        setUploadError("Recording failed. Check your microphone and try again.");
       };
       recorder.onstop = async () => {
         setRecordingStatus("processing");
@@ -502,8 +589,7 @@ export function BlockConfigPanel({
         const file = new File(recordingChunksRef.current, `recording-${Date.now()}.${extension}`, {
           type: recordedType
         });
-        recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
-        recordingStreamRef.current = null;
+        cleanupRecordingResources();
         recorderRef.current = null;
         try {
           await handleUpload(file);
@@ -512,13 +598,19 @@ export function BlockConfigPanel({
         }
       };
       recorder.start(250);
+      recordingStartedAtRef.current = performance.now();
+      setRecordingElapsedMs(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingElapsedMs(performance.now() - recordingStartedAtRef.current);
+      }, 250);
+      updateInputLevel();
       setUploadError(null);
       setRecordingStatus("recording");
     } catch (caught) {
-      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
-      recordingStreamRef.current = null;
+      cleanupRecordingResources();
+      recorderRef.current = null;
       setRecordingStatus("idle");
-      setUploadError(caught instanceof Error ? caught.message : "Could not access the microphone.");
+      setUploadError(microphoneErrorMessage(caught));
     }
   }
 

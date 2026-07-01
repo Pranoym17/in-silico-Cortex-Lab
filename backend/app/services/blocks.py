@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.block import Block
 from app.models.experiment import ExperimentStatus
 from app.models.user import User
-from app.schemas.block import BlockCreate, BlockReorderRequest, BlockUpdate
+from app.schemas.block import BlockCreate, BlockReorderRequest, BlockUpdate, TemplateApplyRequest
 from app.services.block_validation import TimelineBlock, to_timeline_block, validate_timeline
 from app.services.experiments import get_owned_experiment
 
@@ -167,3 +167,64 @@ async def reorder_blocks(
     for block in blocks:
         await session.refresh(block)
     return sorted(blocks, key=lambda block: block.start_ms)
+
+
+async def apply_template(
+    session: AsyncSession,
+    owner: User,
+    experiment_id: UUID,
+    data: TemplateApplyRequest,
+) -> list[Block]:
+    experiment = await get_owned_experiment(session, owner, experiment_id)
+    ensure_experiment_is_editable(experiment)
+    existing = await list_blocks(session, owner, experiment_id)
+    existing_by_id = {block.id: block for block in existing}
+    requested_ids = {item.id for item in data.blocks if item.id is not None}
+    offset = (
+        max((block.start_ms + block.duration_ms for block in existing), default=0)
+        if data.mode == "append"
+        else 0
+    )
+    created: list[Block] = []
+    restored: list[Block] = []
+    for item in data.blocks:
+        if item.id in existing_by_id:
+            block = existing_by_id[item.id]
+            block.type = item.type
+            block.condition = item.condition
+            block.start_ms = item.start_ms
+            block.duration_ms = item.duration_ms
+            block.content_hash = item.content_hash
+            block.payload = item.payload
+            restored.append(block)
+        else:
+            created.append(
+                Block(
+                    id=item.id,
+                    experiment_id=experiment_id,
+                    type=item.type,
+                    condition=item.condition,
+                    start_ms=item.start_ms + offset,
+                    duration_ms=item.duration_ms,
+                    content_hash=item.content_hash,
+                    payload=item.payload,
+                )
+            )
+    retained = existing if data.mode == "append" else restored
+    for block in [*restored, *created]:
+        validate_block_content(block, owner)
+    validate_timeline([to_timeline_block(block) for block in [*retained, *created]])
+
+    try:
+        if data.mode == "replace":
+            for block in existing:
+                if block.id not in requested_ids:
+                    await session.delete(block)
+        session.add_all(created)
+        await session.commit()
+        for block in [*restored, *created]:
+            await session.refresh(block)
+    except Exception:
+        await session.rollback()
+        raise
+    return sorted([*retained, *created], key=lambda block: block.start_ms)
