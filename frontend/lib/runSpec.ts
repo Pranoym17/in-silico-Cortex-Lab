@@ -28,6 +28,7 @@ export type AudioRunBlock = RunBlock & {
   mime_type: string;
   channels: number;
   sample_rate_hz: number;
+  source_duration_ms?: number;
 };
 
 export type RunExperimentInput = {
@@ -88,7 +89,8 @@ export function toRunBlock(block: StimulusBlock): ImageRunBlock | TextRunBlock |
       s3_key: requireString(block.payload.s3_key, "Audio blocks need an S3 object key before running."),
       mime_type: requireString(block.payload.mime_type, "Audio blocks need a MIME type before running."),
       channels: typeof block.payload.channels === "number" ? block.payload.channels : 1,
-      sample_rate_hz: typeof block.payload.sample_rate_hz === "number" ? block.payload.sample_rate_hz : 16000
+      sample_rate_hz: typeof block.payload.sample_rate_hz === "number" ? block.payload.sample_rate_hz : 16000,
+      source_duration_ms: typeof block.payload.duration_ms === "number" ? block.payload.duration_ms : undefined
     };
   }
 
@@ -96,7 +98,10 @@ export function toRunBlock(block: StimulusBlock): ImageRunBlock | TextRunBlock |
     ...base,
     type: "text",
     text: requireString(block.payload.text, "Text blocks need stimulus text before running."),
-    voice: typeof block.payload.voice === "string" && block.payload.voice.trim() ? block.payload.voice : "kokoro_default"
+    voice:
+      typeof block.payload.voice === "string" && block.payload.voice.trim()
+        ? block.payload.voice
+        : "tribe_official_gtts"
   };
 }
 

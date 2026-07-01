@@ -50,3 +50,25 @@ def test_run_request_rejects_overlapping_blocks():
             }
         )
 
+
+def test_run_request_rejects_audio_duration_mismatch():
+    with pytest.raises(ValidationError, match="must match"):
+        RunExperimentRequest.model_validate(
+            {
+                "blocks": [
+                    {
+                        "id": "audio-1",
+                        "type": "audio",
+                        "start_ms": 0,
+                        "duration_ms": 10_000,
+                        "source_duration_ms": 2_000,
+                        "content_hash": "sha256:abc123",
+                        "s3_key": "uploads/audio.wav",
+                        "mime_type": "audio/wav",
+                        "channels": 1,
+                        "sample_rate_hz": 16_000,
+                    }
+                ]
+            }
+        )
+

@@ -83,7 +83,7 @@ function makeDefaultBlock(type: StimulusBlockType, startMs: number): CreateBlock
     duration_ms: 5000,
     payload: {
       text: "Type stimulus text here.",
-      voice: "kokoro_default"
+      voice: "tribe_official_gtts"
     }
   };
 }
@@ -373,7 +373,11 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
         block.id,
         {
           content_hash: uploadedMetadata.contentHash,
-          payload: uploadedMetadata.payload
+          payload: uploadedMetadata.payload,
+          duration_ms:
+            block.type === "audio" && typeof uploadedMetadata.payload.duration_ms === "number"
+              ? uploadedMetadata.payload.duration_ms
+              : block.duration_ms
         },
         accessToken
       );

@@ -33,6 +33,15 @@ def validate_block_content(block: Block, owner: User | None = None) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="audio block duration cannot exceed 60000ms",
         )
+    if block.type.value == "audio":
+        source_duration = block.payload.get("duration_ms")
+        if isinstance(source_duration, (int, float)) and source_duration > 0:
+            tolerance_ms = max(1000, int(source_duration * 0.10))
+            if abs(block.duration_ms - source_duration) > tolerance_ms:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="audio block duration must match the uploaded media duration",
+                )
 
     if block.type.value in {"image", "audio"}:
         s3_key = block.payload.get("s3_key")

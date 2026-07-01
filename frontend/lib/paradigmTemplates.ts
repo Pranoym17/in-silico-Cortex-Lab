@@ -29,7 +29,7 @@ function textBlock(startMs: number, condition: string, text: string): CreateBloc
     duration_ms: 5000,
     payload: {
       text,
-      voice: "kokoro_default"
+      voice: "tribe_official_gtts"
     }
   };
 }

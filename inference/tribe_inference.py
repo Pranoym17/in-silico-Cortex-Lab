@@ -110,6 +110,7 @@ def _real_tribe_env() -> dict[str, str]:
             "TRIBE_EXPECTED_VERTEX_COUNT",
             str(FSAVERAGE5_VERTEX_COUNT),
         ),
+        "MEDIA_VALIDATION_MODE": "strict",
     }
 
 
@@ -469,6 +470,104 @@ def convert_audio_for_tribe(audio_path: Path, destination: Path) -> Path:
     return destination
 
 
+def probe_media(path: Path) -> dict[str, Any]:
+    if shutil.which("ffprobe") is None:
+        raise RuntimeError("ffprobe is required to validate real stimulus media")
+    completed = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration,format_name:stream=codec_type,codec_name,width,height,pix_fmt,avg_frame_rate,sample_rate,channels",
+            "-of",
+            "json",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        result = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError("ffprobe returned invalid media metadata") from exc
+    if not isinstance(result, dict):
+        raise ValueError("ffprobe returned invalid media metadata")
+    return result
+
+
+def media_duration_ms(probe: dict[str, Any]) -> int | None:
+    raw_duration = probe.get("format", {}).get("duration") if isinstance(probe.get("format"), dict) else None
+    try:
+        duration = float(raw_duration)
+    except (TypeError, ValueError):
+        return None
+    return round(duration * 1000) if duration > 0 else None
+
+
+def validate_audio_probe(probe: dict[str, Any], *, configured_duration_ms: int) -> dict[str, Any]:
+    streams = probe.get("streams")
+    if not isinstance(streams, list):
+        streams = []
+    audio_stream = next(
+        (
+            stream
+            for stream in streams
+            if isinstance(stream, dict) and stream.get("codec_type") == "audio"
+        ),
+        None,
+    )
+    duration_ms = media_duration_ms(probe)
+    if audio_stream is None or duration_ms is None:
+        raise ValueError("invalid_media: audio stimulus has no decodable audio stream or duration")
+    tolerance_ms = max(1000, round(duration_ms * 0.10))
+    if abs(configured_duration_ms - duration_ms) > tolerance_ms:
+        raise ValueError("invalid_media: audio block duration does not match the decoded media duration")
+    return {
+        "decoded_duration_ms": duration_ms,
+        "codec": audio_stream.get("codec_name"),
+        "sample_rate_hz": int(audio_stream["sample_rate"]) if str(audio_stream.get("sample_rate", "")).isdigit() else None,
+        "channels": audio_stream.get("channels"),
+    }
+
+
+def validate_image_video_probe(probe: dict[str, Any]) -> dict[str, Any]:
+    streams = probe.get("streams")
+    if not isinstance(streams, list):
+        streams = []
+    video_stream = next(
+        (
+            stream
+            for stream in streams
+            if isinstance(stream, dict) and stream.get("codec_type") == "video"
+        ),
+        None,
+    )
+    if video_stream is None:
+        raise ValueError("invalid_media: converted image has no decodable video stream")
+    width = video_stream.get("width")
+    height = video_stream.get("height")
+    if not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
+        raise ValueError("invalid_media: converted image has invalid dimensions")
+    if width > 4096 or height > 4096:
+        raise ValueError("invalid_media: image dimensions cannot exceed 4096 by 4096")
+    if video_stream.get("pix_fmt") != "yuv420p":
+        raise ValueError("invalid_media: converted image video must use yuv420p")
+    if video_stream.get("avg_frame_rate") not in {"2/1", "2"}:
+        raise ValueError("invalid_media: converted image video must use 2 fps")
+    return {
+        "width": width,
+        "height": height,
+        "pixel_format": video_stream.get("pix_fmt"),
+        "frame_rate": 2,
+    }
+
+
+def strict_media_validation_enabled() -> bool:
+    return os.environ.get("MEDIA_VALIDATION_MODE", "contract").strip().lower() == "strict"
+
+
 def _events_dataframe_for_block(model: Any, block: dict[str, Any], working_dir: Path) -> Any:
     block_type = block.get("type")
     if block_type == "text":
@@ -481,7 +580,9 @@ def _events_dataframe_for_block(model: Any, block: dict[str, Any], working_dir: 
             extensions_by_mime=AUDIO_EXTENSIONS_BY_MIME,
             fallback_extension=".wav",
         )
-        if audio_path.suffix.lower() not in {".wav", ".mp3", ".flac", ".ogg"}:
+        if strict_media_validation_enabled():
+            input_probe = probe_media(audio_path)
+            validate_audio_probe(input_probe, configured_duration_ms=int(block.get("duration_ms") or 0))
             converted_path = working_dir / "inputs" / f"{_safe_file_stem(block, 'audio')}-tribe.wav"
             audio_path = convert_audio_for_tribe(audio_path, converted_path)
         return model.get_events_dataframe(audio_path=str(audio_path))
@@ -495,6 +596,8 @@ def _events_dataframe_for_block(model: Any, block: dict[str, Any], working_dir: 
         video_path = working_dir / "inputs" / f"{_safe_file_stem(block, 'image')}.mp4"
         video_path.parent.mkdir(parents=True, exist_ok=True)
         convert_image_to_video(image_path, video_path, duration_ms=int(block.get("duration_ms") or 0))
+        if strict_media_validation_enabled():
+            validate_image_video_probe(probe_media(video_path))
         return model.get_events_dataframe(video_path=str(video_path))
     if block_type == "video":
         video_path = _materialize_media_block(
@@ -538,11 +641,14 @@ def _timing_metadata(
                 timing["end_seconds"] = float(start) + float(duration)
             word_timings.append(timing)
 
+    transcript = " ".join(timing["word"] for timing in word_timings)
     return {
         "type": "stimulus_metadata",
         "block_id": str(block.get("id") or ""),
         "stimulus_type": str(block.get("type") or ""),
         "word_timings": word_timings,
+        "transcript": transcript or None,
+        "speech_detected": bool(word_timings),
         "segment_count": len(segments) if hasattr(segments, "__len__") else None,
         "hrf_offset_seconds": TRIBE_HRF_OFFSET_SECONDS,
         "experiment_start_ms": int(block.get("start_ms") or 0),

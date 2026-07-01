@@ -29,7 +29,7 @@ export function BlockConfigPanel({
   const [payloadError, setPayloadError] = useState<string | null>(null);
   const [contentHash, setContentHash] = useState("");
   const [textValue, setTextValue] = useState("");
-  const [voice, setVoice] = useState("kokoro_default");
+  const [voice, setVoice] = useState("tribe_official_gtts");
   const [libraryId, setLibraryId] = useState("");
   const [s3Key, setS3Key] = useState("");
   const [displayMode, setDisplayMode] = useState("center");
@@ -69,7 +69,7 @@ export function BlockConfigPanel({
       setPayloadError(null);
       setContentHash("");
       setTextValue("");
-      setVoice("kokoro_default");
+      setVoice("tribe_official_gtts");
       setLibraryId("");
       setS3Key("");
       setDisplayMode("center");
@@ -97,7 +97,7 @@ export function BlockConfigPanel({
     setPayloadError(null);
     setContentHash(block.content_hash ?? "");
     setTextValue(typeof block.payload.text === "string" ? block.payload.text : "");
-    setVoice(typeof block.payload.voice === "string" ? block.payload.voice : "kokoro_default");
+    setVoice(typeof block.payload.voice === "string" ? block.payload.voice : "tribe_official_gtts");
     setLibraryId(typeof block.payload.library_id === "string" ? block.payload.library_id : "");
     setS3Key(typeof block.payload.s3_key === "string" ? block.payload.s3_key : "");
     setDisplayMode("mode" in display && typeof display.mode === "string" ? display.mode : "center");

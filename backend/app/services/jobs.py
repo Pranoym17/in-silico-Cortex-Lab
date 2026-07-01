@@ -57,12 +57,13 @@ def block_to_run_spec(block: Block) -> dict[str, Any]:
             "mime_type": _required_payload_string(block, "mime_type", "audio blocks require mime_type"),
             "channels": block.payload.get("channels", 1),
             "sample_rate_hz": block.payload.get("sample_rate_hz", 16000),
+            "source_duration_ms": block.payload.get("duration_ms"),
         }
 
     return {
         **base,
         "text": _required_payload_string(block, "text", "text blocks require text"),
-        "voice": block.payload.get("voice", "kokoro_default"),
+        "voice": block.payload.get("voice", "tribe_official_gtts"),
     }
 
 

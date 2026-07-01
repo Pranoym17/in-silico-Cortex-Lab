@@ -97,3 +97,18 @@ def test_validate_block_content_rejects_unowned_upload_key():
 
     assert exc.value.status_code == 422
     assert exc.value.detail == "block media must reference an upload owned by this experiment"
+
+
+def test_validate_block_content_rejects_audio_duration_mismatch():
+    block = SimpleNamespace(
+        type=BlockType.audio,
+        duration_ms=10_000,
+        experiment_id=uuid4(),
+        payload={"duration_ms": 2_000},
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        validate_block_content(block)
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "audio block duration must match the uploaded media duration"

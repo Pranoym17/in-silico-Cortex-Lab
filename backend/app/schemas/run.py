@@ -28,7 +28,7 @@ class ImageBlock(BaseStimulusBlock):
 class TextBlock(BaseStimulusBlock):
     type: Literal["text"]
     text: str = Field(min_length=1)
-    voice: str = "kokoro_default"
+    voice: str = "tribe_official_gtts"
 
     @model_validator(mode="after")
     def validate_word_count(self) -> "TextBlock":
@@ -43,6 +43,15 @@ class AudioBlock(BaseStimulusBlock):
     mime_type: Literal["audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a", "audio/webm"]
     channels: int = Field(ge=1, le=2)
     sample_rate_hz: int = Field(gt=0)
+    source_duration_ms: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_source_duration(self) -> "AudioBlock":
+        if self.source_duration_ms is not None:
+            tolerance_ms = max(1000, int(self.source_duration_ms * 0.10))
+            if abs(self.duration_ms - self.source_duration_ms) > tolerance_ms:
+                raise ValueError("audio block duration must match the uploaded media duration")
+        return self
 
 
 StimulusBlock = Annotated[Union[ImageBlock, TextBlock, AudioBlock], Field(discriminator="type")]

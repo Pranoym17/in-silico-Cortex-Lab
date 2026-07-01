@@ -61,7 +61,7 @@ Request body:
       "duration_ms": 8000,
       "content_hash": "sha256:b7a1...",
       "text": "The dog chased the ball.",
-      "voice": "kokoro_default"
+      "voice": "tribe_official_gtts"
     },
     {
       "id": "block_03HZX9E9K2M6N",

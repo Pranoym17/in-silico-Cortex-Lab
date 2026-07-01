@@ -10,6 +10,7 @@ export type JobErrorCode =
   | "tribe_access_denied"
   | "internal_error"
   | "cancelled"
+  | "invalid_media"
   | "atlas_unavailable";
 
 export type JobErrorCopy = {
@@ -33,6 +34,8 @@ export function formatJobErrorMessage(code: string | null, fallbackMessage: stri
       return "The streamed result exists in this browser session, but saving the NPZ artifact failed. Download is disabled until the job is rerun successfully.";
     case "upload_failed":
       return "Upload failed. Check your connection and S3 configuration, then retry the file upload.";
+    case "invalid_media":
+      return "A stimulus file is corrupt, unsupported, or does not match its configured duration.";
     case "validation_failed":
       return fallbackMessage ?? "Run validation failed. Fix the highlighted block fields before running again.";
     case "cancelled":

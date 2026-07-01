@@ -43,6 +43,8 @@ def classify_inference_exception(exc: Exception, *, chunk_seen: bool) -> JobErro
         return "model_access_required"
     if "tribe_access_denied" in message:
         return "tribe_access_denied"
+    if "invalid_media" in message or "ffmpeg" in message or "ffprobe" in message:
+        return "invalid_media"
     if chunk_seen:
         return "partial_failure"
     return "internal_error"
@@ -56,6 +58,8 @@ def user_facing_inference_failure(exc: Exception, *, chunk_seen: bool) -> str:
         return "Modal ran out of memory while running inference."
     if classified == "result_storage_failed":
         return "Inference finished, but the result artifact could not be saved."
+    if classified == "invalid_media":
+        return "A stimulus file is corrupt, unsupported, or does not match its configured duration."
 
     if chunk_seen:
         return "Inference failed after streaming partial results."
@@ -499,6 +503,8 @@ async def process_modal_inference_job(
                         "block_id": str(event.get("block_id") or ""),
                         "stimulus_type": str(event.get("stimulus_type") or ""),
                         "word_timings": event.get("word_timings") if isinstance(event.get("word_timings"), list) else [],
+                        "transcript": str(event.get("transcript")) if event.get("transcript") else None,
+                        "speech_detected": bool(event.get("speech_detected")),
                         "segment_count": event.get("segment_count"),
                         "hrf_offset_seconds": float(event.get("hrf_offset_seconds") or 0),
                         "experiment_start_ms": int(event.get("experiment_start_ms") or 0),

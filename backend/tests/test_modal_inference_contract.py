@@ -148,6 +148,46 @@ def test_timing_metadata_extracts_words_and_canonical_output_mapping():
     assert metadata["output_timestep_count"] == 2
     assert metadata["sample_rate_hz"] == 0.5
     assert metadata["alignment_policy"] == "concatenated-block-output-v1"
+    assert metadata["transcript"] == "hello"
+    assert metadata["speech_detected"] is True
+
+
+def test_audio_probe_validates_duration_and_stream_properties():
+    probe = {
+        "format": {"duration": "2.0"},
+        "streams": [
+            {"codec_type": "audio", "codec_name": "opus", "sample_rate": "48000", "channels": 1}
+        ],
+    }
+
+    assert tribe_inference.validate_audio_probe(probe, configured_duration_ms=2000) == {
+        "decoded_duration_ms": 2000,
+        "codec": "opus",
+        "sample_rate_hz": 48000,
+        "channels": 1,
+    }
+    with pytest.raises(ValueError, match="does not match"):
+        tribe_inference.validate_audio_probe(probe, configured_duration_ms=10_000)
+
+
+def test_image_video_probe_requires_dimensions_color_and_frame_rate():
+    probe = {
+        "streams": [
+            {
+                "codec_type": "video",
+                "codec_name": "h264",
+                "width": 640,
+                "height": 480,
+                "pix_fmt": "yuv420p",
+                "avg_frame_rate": "2/1",
+            }
+        ]
+    }
+
+    assert tribe_inference.validate_image_video_probe(probe)["frame_rate"] == 2
+    probe["streams"][0]["pix_fmt"] = "yuv444p"
+    with pytest.raises(ValueError, match="yuv420p"):
+        tribe_inference.validate_image_video_probe(probe)
 
 
 def test_real_tribe_stream_uses_official_text_prediction_flow():
@@ -552,6 +592,15 @@ def test_real_tribe_stream_converts_browser_recording(monkeypatch):
         return destination
 
     monkeypatch.setattr(tribe_inference, "convert_audio_for_tribe", fake_convert_audio_for_tribe)
+    monkeypatch.setenv("MEDIA_VALIDATION_MODE", "strict")
+    monkeypatch.setattr(
+        tribe_inference,
+        "probe_media",
+        lambda path: {
+            "format": {"duration": "1.0"},
+            "streams": [{"codec_type": "audio", "codec_name": "opus", "sample_rate": "48000", "channels": 1}],
+        },
+    )
     spec = {
         "blocks": [
             {
