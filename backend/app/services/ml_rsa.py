@@ -40,10 +40,19 @@ def block_labels_from_run_spec(run_spec: dict[str, Any]) -> list[str]:
     return labels
 
 
-def block_timestep_ranges(run_spec: dict[str, Any], timestep_count: int, sample_rate_hz: float | None) -> list[tuple[int, int]]:
+def block_timestep_ranges(
+    run_spec: dict[str, Any],
+    timestep_count: int,
+    sample_rate_hz: float | None,
+    result_metadata: dict[str, Any] | None = None,
+) -> list[tuple[int, int]]:
     blocks = run_spec.get("blocks")
     if not isinstance(blocks, list) or not blocks or timestep_count <= 0:
         return []
+
+    mapped_ranges = output_timestep_ranges(blocks, timestep_count, result_metadata)
+    if mapped_ranges:
+        return mapped_ranges
 
     sample_rate = sample_rate_hz if sample_rate_hz and sample_rate_hz > 0 else 2.0
     ranges: list[tuple[int, int]] = []
@@ -74,6 +83,37 @@ def block_timestep_ranges(run_spec: dict[str, Any], timestep_count: int, sample_
     return even_timestep_ranges(len(blocks), timestep_count)
 
 
+def output_timestep_ranges(
+    blocks: list[Any],
+    timestep_count: int,
+    result_metadata: dict[str, Any] | None,
+) -> list[tuple[int, int]]:
+    if not isinstance(result_metadata, dict):
+        return []
+    stimuli = result_metadata.get("stimuli")
+    if not isinstance(stimuli, list):
+        return []
+    by_id = {
+        str(item.get("block_id")): item
+        for item in stimuli
+        if isinstance(item, dict) and item.get("block_id")
+    }
+    ranges: list[tuple[int, int]] = []
+    for block in blocks:
+        if not isinstance(block, dict) or str(block.get("id")) not in by_id:
+            return []
+        timing = by_id[str(block.get("id"))]
+        start = timing.get("output_timestep_start")
+        count = timing.get("output_timestep_count")
+        if not isinstance(start, int) or not isinstance(count, int) or start < 0 or count <= 0:
+            return []
+        end = start + count
+        if end > timestep_count:
+            return []
+        ranges.append((start, end))
+    return ranges
+
+
 def even_timestep_ranges(block_count: int, timestep_count: int) -> list[tuple[int, int]]:
     if block_count <= 0 or timestep_count <= 0:
         return []
@@ -93,9 +133,10 @@ def aggregate_block_vectors(
     activations: NDArray[np.float32],
     run_spec: dict[str, Any],
     sample_rate_hz: float | None,
+    result_metadata: dict[str, Any] | None = None,
 ) -> BlockActivationSet:
     labels = block_labels_from_run_spec(run_spec)
-    ranges = block_timestep_ranges(run_spec, int(activations.shape[0]), sample_rate_hz)
+    ranges = block_timestep_ranges(run_spec, int(activations.shape[0]), sample_rate_hz, result_metadata)
     if len(labels) != len(ranges):
         raise ValueError("Run specification does not describe block timing")
     if len(ranges) < 2:
@@ -187,12 +228,14 @@ def compute_rsa_response(
     run_spec_b: dict[str, Any],
     activations_b: NDArray[np.float32],
     sample_rate_hz_b: float | None,
+    result_metadata_a: dict[str, Any] | None = None,
+    result_metadata_b: dict[str, Any] | None = None,
 ) -> RsaResponse:
     if activations_a.shape[1] != activations_b.shape[1]:
         raise ValueError("RSA requires both jobs to have the same vertex count")
 
-    set_a = aggregate_block_vectors(activations_a, run_spec_a, sample_rate_hz_a)
-    set_b = aggregate_block_vectors(activations_b, run_spec_b, sample_rate_hz_b)
+    set_a = aggregate_block_vectors(activations_a, run_spec_a, sample_rate_hz_a, result_metadata_a)
+    set_b = aggregate_block_vectors(activations_b, run_spec_b, sample_rate_hz_b, result_metadata_b)
     if set_a.vectors.shape[0] != set_b.vectors.shape[0]:
         raise ValueError("RSA requires both jobs to have the same number of stimulus blocks")
 
@@ -230,6 +273,8 @@ async def run_rsa(session: AsyncSession, owner: User, request: RsaRequest) -> Rs
             job_b.run_spec,
             result_b.activations,
             result_b.result.sample_rate_hz,
+            result_a.result.metadata_json,
+            result_b.result.metadata_json,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

@@ -2,6 +2,8 @@
 
 Browser-based platform for in-silico neuroscience: design experiments, run them through Meta's TRIBE v2 brain model, and explore predicted fMRI activations on an interactive 3D cortical surface. No scanner required.
 
+> Cortex Lab displays model predictions for an average synthetic subject. Outputs are not measured fMRI, medical advice, diagnosis, or evidence about an individual.
+
 This repository is currently in the specification stage. The PRD defines the product vision; the docs in this repo pin down the implementation contracts that code should follow.
 
 ## Source Of Truth

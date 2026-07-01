@@ -515,7 +515,15 @@ def _prediction_sample_rate_hz(model: Any, fallback: int) -> float:
     return float(fallback)
 
 
-def _timing_metadata(block: dict[str, Any], events: Any, segments: Any) -> dict[str, Any]:
+def _timing_metadata(
+    block: dict[str, Any],
+    events: Any,
+    segments: Any,
+    *,
+    output_timestep_start: int,
+    output_timestep_count: int,
+    sample_rate_hz: float,
+) -> dict[str, Any]:
     word_timings: list[dict[str, Any]] = []
     if hasattr(events, "to_dict"):
         for row in events.to_dict(orient="records"):
@@ -537,6 +545,12 @@ def _timing_metadata(block: dict[str, Any], events: Any, segments: Any) -> dict[
         "word_timings": word_timings,
         "segment_count": len(segments) if hasattr(segments, "__len__") else None,
         "hrf_offset_seconds": TRIBE_HRF_OFFSET_SECONDS,
+        "experiment_start_ms": int(block.get("start_ms") or 0),
+        "experiment_duration_ms": int(block.get("duration_ms") or 0),
+        "output_timestep_start": output_timestep_start,
+        "output_timestep_count": output_timestep_count,
+        "sample_rate_hz": sample_rate_hz,
+        "alignment_policy": "concatenated-block-output-v1",
     }
 
 
@@ -591,7 +605,14 @@ def run_real_tribe_stream(
             events = _events_dataframe_for_block(model, block, working_dir)
             predictions, segments = model.predict(events=events)
             activations = validate_prediction_matrix(predictions, expected_vertex_count=expected_vertex_count)
-            yield _timing_metadata(block, events, segments)
+            yield _timing_metadata(
+                block,
+                events,
+                segments,
+                output_timestep_start=completed_timesteps,
+                output_timestep_count=int(activations.shape[0]),
+                sample_rate_hz=sample_rate_hz,
+            )
 
             vertex_count = int(activations.shape[1])
             for local_timestep_start, activation_chunk in iter_activation_chunks(

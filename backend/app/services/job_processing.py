@@ -501,6 +501,12 @@ async def process_modal_inference_job(
                         "word_timings": event.get("word_timings") if isinstance(event.get("word_timings"), list) else [],
                         "segment_count": event.get("segment_count"),
                         "hrf_offset_seconds": float(event.get("hrf_offset_seconds") or 0),
+                        "experiment_start_ms": int(event.get("experiment_start_ms") or 0),
+                        "experiment_duration_ms": int(event.get("experiment_duration_ms") or 0),
+                        "output_timestep_start": int(event.get("output_timestep_start") or 0),
+                        "output_timestep_count": int(event.get("output_timestep_count") or 0),
+                        "sample_rate_hz": float(event.get("sample_rate_hz") or 0),
+                        "alignment_policy": str(event.get("alignment_policy") or ""),
                     }
                 )
                 continue
@@ -535,6 +541,7 @@ async def process_modal_inference_job(
                             "estimated_gpu_seconds": event.get("gpu_seconds"),
                         },
                         "processing_version": event.get("processing_version"),
+                        "alignment_policy": "concatenated-block-output-v1",
                     },
                 )
                 if await rollback_if_cancelled_before_completion(session, job):

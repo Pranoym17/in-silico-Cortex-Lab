@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import numpy as np
 import pytest
+from scipy.stats import spearmanr
 
 from app.schemas.ml import RsaRequest
 from app.services.ml_rsa import (
@@ -44,6 +45,18 @@ def test_aggregate_block_vectors_means_each_block_range():
     assert block_set.vectors.tolist() == [[1.0, 3.0], [7.5, 13.5]]
 
 
+def test_result_metadata_mapping_overrides_experiment_timeline():
+    spec = run_spec(("a", "b"))
+    metadata = {
+        "stimuli": [
+            {"block_id": "block-0", "output_timestep_start": 0, "output_timestep_count": 2},
+            {"block_id": "block-1", "output_timestep_start": 2, "output_timestep_count": 1},
+        ]
+    }
+
+    assert block_timestep_ranges(spec, 3, 10, metadata) == [(0, 2), (2, 3)]
+
+
 def test_cosine_dissimilarity_matrix_sets_diagonal_to_zero():
     vectors = np.array([[1.0, 0.0], [0.0, 1.0]], dtype="<f4")
 
@@ -55,6 +68,14 @@ def test_cosine_dissimilarity_matrix_sets_diagonal_to_zero():
 def test_spearman_correlation_handles_ranked_vectors():
     assert spearman_correlation(np.array([1.0, 2.0, 3.0]), np.array([1.0, 2.0, 3.0])) == pytest.approx(1.0)
     assert spearman_correlation(np.array([1.0, 2.0, 3.0]), np.array([3.0, 2.0, 1.0])) == pytest.approx(-1.0)
+
+
+def test_spearman_matches_scipy_reference_with_ties():
+    values_a = np.array([1.0, 1.0, 3.0, 4.0, 7.0])
+    values_b = np.array([5.0, 5.0, 2.0, 1.0, 0.0])
+
+    expected = float(spearmanr(values_a, values_b).statistic)
+    assert spearman_correlation(values_a, values_b) == pytest.approx(expected)
 
 
 def test_classical_mds_returns_one_point_per_label():

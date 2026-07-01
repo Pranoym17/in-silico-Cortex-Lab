@@ -122,6 +122,34 @@ class FakeTribeModel:
         return np.array([[0.0, 1.0], [2.0, 3.0]], dtype=np.float32), [{"segment": 0}]
 
 
+class FakeEventFrame:
+    def to_dict(self, *, orient):
+        assert orient == "records"
+        return [
+            {"type": "Word", "word": "hello", "start": 0.25, "duration": 0.4},
+            {"type": "Audio", "start": 0.0, "duration": 1.0},
+        ]
+
+
+def test_timing_metadata_extracts_words_and_canonical_output_mapping():
+    metadata = tribe_inference._timing_metadata(
+        {"id": "text-1", "type": "text", "start_ms": 1500, "duration_ms": 2000},
+        FakeEventFrame(),
+        [{"segment": 0}, {"segment": 1}],
+        output_timestep_start=3,
+        output_timestep_count=2,
+        sample_rate_hz=0.5,
+    )
+
+    assert metadata["word_timings"] == [{"word": "hello", "start_seconds": 0.25, "end_seconds": 0.65}]
+    assert metadata["experiment_start_ms"] == 1500
+    assert metadata["experiment_duration_ms"] == 2000
+    assert metadata["output_timestep_start"] == 3
+    assert metadata["output_timestep_count"] == 2
+    assert metadata["sample_rate_hz"] == 0.5
+    assert metadata["alignment_policy"] == "concatenated-block-output-v1"
+
+
 def test_real_tribe_stream_uses_official_text_prediction_flow():
     model = FakeTribeModel()
     spec = {
@@ -157,6 +185,9 @@ def test_real_tribe_stream_uses_official_text_prediction_flow():
     assert events[3]["timestep_count"] == 2
     assert events[-1]["timesteps"] == 2
     assert events[-1]["vertex_count"] == 2
+    assert events[-1]["model_version"] == "facebook/tribev2"
+    assert events[-1]["processing_version"] == "cortex-stimulus-v1"
+    assert events[-1]["runtime_ms"] >= 0
 
 
 def test_real_tribe_stream_chunks_prediction_timesteps(monkeypatch):
