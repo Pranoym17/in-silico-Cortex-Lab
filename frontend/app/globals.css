@@ -1339,6 +1339,64 @@ pre {
   color: var(--muted);
 }
 
+.stimulus-catalog {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.catalog-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, auto);
+  gap: 8px;
+}
+
+.catalog-filters input,
+.catalog-filters select {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101114;
+  color: var(--foreground);
+  padding: 9px;
+}
+
+.stimulus-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 560px;
+  overflow: auto;
+}
+
+.stimulus-item {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.stimulus-item img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.stimulus-item audio {
+  width: 100%;
+  min-width: 0;
+}
+
+.stimulus-item span,
+.stimulus-item details {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .condition-row {
   grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: center;

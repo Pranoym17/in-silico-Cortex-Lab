@@ -82,6 +82,18 @@ def test_validate_block_content_accepts_owned_upload_key():
     validate_block_content(block, owner)
 
 
+def test_validate_block_content_accepts_trusted_stimulus_library_key():
+    owner = SimpleNamespace(id=uuid4())
+    block = SimpleNamespace(
+        type=BlockType.image,
+        duration_ms=2000,
+        experiment_id=uuid4(),
+        payload={"s3_key": "stimulus-library/v1/faces/face-001.png"},
+    )
+
+    validate_block_content(block, owner)
+
+
 def test_validate_block_content_rejects_unowned_upload_key():
     owner = SimpleNamespace(id=uuid4())
     experiment_id = uuid4()

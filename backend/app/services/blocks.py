@@ -53,7 +53,8 @@ def validate_block_content(block: Block, owner: User | None = None) -> None:
                 )
             if owner is not None:
                 expected_prefix = _expected_upload_prefix(owner, block.experiment_id)
-                if not s3_key.startswith(expected_prefix):
+                trusted_library_key = s3_key.startswith("stimulus-library/v1/")
+                if not trusted_library_key and not s3_key.startswith(expected_prefix):
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         detail="block media must reference an upload owned by this experiment",
