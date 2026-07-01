@@ -32,6 +32,16 @@ These are engineering controls, not legal advice.
 inference\.venv\Scripts\modal.exe secret create huggingface-secret HF_TOKEN=hf_your_token
 ```
 
+5. Create a least-privilege AWS secret for S3 stimulus reads:
+
+```powershell
+inference\.venv\Scripts\modal.exe secret create cortex-aws `
+  AWS_ACCESS_KEY_ID=your_key `
+  AWS_SECRET_ACCESS_KEY=your_secret `
+  AWS_REGION=ca-central-1 `
+  S3_BUCKET_NAME=your_bucket
+```
+
 ### Hugging Face
 
 1. Accept access terms for `facebook/tribev2` and its gated dependencies.

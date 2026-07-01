@@ -14,7 +14,7 @@ from app.schemas.sse import CompleteEvent, ErrorEvent, ProgressEvent, QueuedEven
 from app.services.activation_events import fake_activation_chunk
 from app.services.error_codes import JobErrorCode, is_retryable_job_error, normalize_job_error_code
 from app.services.modal_inference import ModalInferenceError, encode_modal_chunk_event, stream_deployed_modal_events
-from app.services.result_cache import CachedResult, cached_result_to_metadata, set_cached_result, text_result_cache_context
+from app.services.result_cache import CachedResult, cached_result_to_metadata, run_result_cache_identity, set_cached_result
 from app.services.result_storage import ActivationMatrixAssembler, ResultStorageError, store_job_result
 from app.services.sse_broker import JobEventBroker, get_job_event_broker
 
@@ -346,12 +346,8 @@ async def process_fake_inference_job(
         return failed_job
     if await rollback_if_cancelled_before_completion(session, job):
         return job
-    if len(run_request.blocks) == 1 and run_request.blocks[0].type == "text":
-        set_cached_result(
-            run_request.blocks[0].content_hash,
-            result,
-            text_result_cache_context(run_request.blocks[0], run_request.settings, model_name="fake", model_version="dev"),
-        )
+    cache_hash, cache_context = run_result_cache_identity(run_request, model_name="fake", model_version="dev")
+    set_cached_result(cache_hash, result, cache_context)
     job.status = JobStatus.complete
     job.completed_at = datetime.now(UTC)
     await session.commit()
@@ -425,6 +421,7 @@ async def process_modal_inference_job(
     vertex_count = 0
     result_assembler = ActivationMatrixAssembler()
     stimulus_metadata: list[dict[str, Any]] = []
+    first_chunk_ms: int | None = None
 
     try:
         logger.info("modal_call_started", extra={"job_id": str(job.id), "experiment_id": str(job.experiment_id), "user_id": str(job.owner_id), "provider": "modal", "attempt": 1})
@@ -486,6 +483,8 @@ async def process_modal_inference_job(
                 envelope = encode_modal_chunk_event(event)
                 result_assembler.add_chunk(event)
                 chunk_seen = True
+                if first_chunk_ms is None:
+                    first_chunk_ms = int((time.monotonic() - started_monotonic) * 1000)
                 completed_timesteps = max(
                     completed_timesteps,
                     int(event["timestep_start"]) + int(event["timestep_count"]),
@@ -526,20 +525,22 @@ async def process_modal_inference_job(
                         "atlas": run_request.settings.atlas,
                         "stimuli": stimulus_metadata,
                         "hrf_offset_seconds": 5.0,
+                        "run_settings": run_request.settings.model_dump(mode="json"),
+                        "stimulus_hashes": [block.content_hash for block in run_request.blocks],
+                        "timing": {
+                            "first_chunk_ms": first_chunk_ms,
+                            "total_runtime_ms": int((time.monotonic() - started_monotonic) * 1000),
+                            "model_load_ms": event.get("model_load_ms"),
+                            "modal_runtime_ms": event.get("runtime_ms"),
+                            "estimated_gpu_seconds": event.get("gpu_seconds"),
+                        },
+                        "processing_version": event.get("processing_version"),
                     },
                 )
                 if await rollback_if_cancelled_before_completion(session, job):
                     return job
-                if len(run_request.blocks) == 1 and run_request.blocks[0].type == "text":
-                    set_cached_result(
-                        run_request.blocks[0].content_hash,
-                        result,
-                        text_result_cache_context(
-                            run_request.blocks[0],
-                            run_request.settings,
-                            model_name="tribev2",
-                        ),
-                    )
+                cache_hash, cache_context = run_result_cache_identity(run_request, model_name="tribev2")
+                set_cached_result(cache_hash, result, cache_context)
                 job.status = JobStatus.complete
                 job.completed_at = datetime.now(UTC)
                 await session.commit()

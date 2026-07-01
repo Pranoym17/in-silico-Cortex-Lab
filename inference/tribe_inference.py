@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from collections.abc import Generator, Iterable
 from functools import lru_cache
 from pathlib import Path
@@ -32,6 +33,7 @@ DEFAULT_SAMPLE_RATE_HZ = 2
 DEFAULT_REAL_CHUNK_TIMESTEPS = 4
 FSAVERAGE5_VERTEX_COUNT = 20484
 TRIBE_HRF_OFFSET_SECONDS = 5.0
+PROCESSING_VERSION = "cortex-stimulus-v1"
 IMAGE_EXTENSIONS_BY_MIME = {
     "image/png": ".png",
     "image/jpeg": ".jpg",
@@ -93,6 +95,10 @@ def _expected_vertex_count() -> int | None:
 
 def _modal_secret_name() -> str:
     return os.environ.get("MODAL_HF_SECRET_NAME", "huggingface-secret").strip() or "huggingface-secret"
+
+
+def _modal_aws_secret_name() -> str:
+    return os.environ.get("MODAL_AWS_SECRET_NAME", "cortex-aws").strip() or "cortex-aws"
 
 
 def _real_tribe_env() -> dict[str, str]:
@@ -544,6 +550,7 @@ def run_real_tribe_stream(
     job_id = str(spec.get("job_id") or "tribe-real")
     requested_sample_rate_hz = _sample_rate_hz(spec)
 
+    runtime_started = time.monotonic()
     yield {
         "type": "warming",
         "job_id": job_id,
@@ -551,7 +558,9 @@ def run_real_tribe_stream(
         "estimated_seconds": 120,
     }
 
+    model_load_started = time.monotonic()
     model = model or load_tribe_model()
+    model_load_ms = int((time.monotonic() - model_load_started) * 1000)
     sample_rate_hz = _prediction_sample_rate_hz(model, requested_sample_rate_hz)
     chunk_timesteps = _real_chunk_timesteps()
     expected_vertex_count = _expected_vertex_count()
@@ -559,6 +568,7 @@ def run_real_tribe_stream(
     total_blocks = len(blocks)
     vertex_count = 0
     chunk_index = 0
+    first_chunk_ms: int | None = None
 
     yield {
         "type": "progress",
@@ -588,6 +598,8 @@ def run_real_tribe_stream(
                 activations=activations,
                 chunk_timesteps=chunk_timesteps,
             ):
+                if first_chunk_ms is None:
+                    first_chunk_ms = int((time.monotonic() - runtime_started) * 1000)
                 yield activation_chunk_event(
                     job_id=job_id,
                     block_id=block_id,
@@ -610,12 +622,19 @@ def run_real_tribe_stream(
         if temp_context is not None:
             temp_context.cleanup()
 
+    runtime_ms = int((time.monotonic() - runtime_started) * 1000)
     yield {
         "type": "complete",
         "job_id": job_id,
         "status": "complete",
         "timesteps": completed_timesteps,
         "vertex_count": vertex_count,
+        "model_version": TRIBE_MODEL_ID,
+        "processing_version": PROCESSING_VERSION,
+        "model_load_ms": model_load_ms,
+        "first_chunk_ms": first_chunk_ms,
+        "runtime_ms": runtime_ms,
+        "gpu_seconds": round(runtime_ms / 1000, 3),
     }
 
 
@@ -704,7 +723,10 @@ if modal is not None:
         .pip_install(f"transformers=={COMPATIBLE_TRANSFORMERS_VERSION}")
         .env(_real_tribe_env())
     )
-    real_secrets = [modal.Secret.from_name(_modal_secret_name())]
+    real_secrets = [
+        modal.Secret.from_name(_modal_secret_name()),
+        modal.Secret.from_name(_modal_aws_secret_name()),
+    ]
 
     app = modal.App(APP_NAME)
 

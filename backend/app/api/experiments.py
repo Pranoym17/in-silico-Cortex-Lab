@@ -23,7 +23,7 @@ from app.services.experiments import (
 from app.services.job_dispatch import dispatch_inference_job
 from app.services.jobs import create_job_from_experiment, list_jobs_for_experiment
 from app.services.library import publish_experiment
-from app.services.result_cache import delete_cached_result, get_cached_result, text_result_cache_context
+from app.services.result_cache import delete_cached_result, get_cached_result, run_result_cache_identity
 from app.services.result_storage import ResultStorageError, result_artifact_exists
 from app.services.job_processing import complete_job_from_cached_result
 
@@ -170,20 +170,10 @@ async def list_experiment_jobs_route(
 
 
 async def get_run_cache_hit(run_spec: dict):
-    blocks = run_spec.get("blocks")
-    if not isinstance(blocks, list) or len(blocks) != 1:
+    try:
+        content_hash, context = run_result_cache_identity(run_spec, model_name="tribev2")
+    except (TypeError, ValueError):
         return None
-
-    block = blocks[0]
-    if not isinstance(block, dict) or block.get("type") != "text":
-        return None
-
-    content_hash = block.get("content_hash")
-    if not isinstance(content_hash, str) or not content_hash.strip():
-        return None
-
-    settings = run_spec.get("settings")
-    context = text_result_cache_context(_DictAdapter(block), _DictAdapter(settings), model_name="tribev2")
     cached = await asyncio.to_thread(get_cached_result, content_hash, context)
     if cached is None:
         return None
@@ -196,17 +186,3 @@ async def get_run_cache_hit(run_spec: dict):
 
     await asyncio.to_thread(delete_cached_result, content_hash, context)
     return None
-
-
-class _DictAdapter:
-    def __init__(self, values):
-        self._values = values if isinstance(values, dict) else {}
-
-    def __getattr__(self, name: str):
-        try:
-            return self._values[name]
-        except KeyError as exc:
-            raise AttributeError(name) from exc
-
-    def model_dump(self, mode: str = "json"):
-        return dict(self._values)

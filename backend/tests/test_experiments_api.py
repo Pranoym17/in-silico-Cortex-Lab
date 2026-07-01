@@ -362,7 +362,9 @@ async def test_get_run_cache_hit_evicts_cached_result_when_s3_artifact_is_missin
     monkeypatch.setattr("app.api.experiments.delete_cached_result", lambda content_hash, context=None: deleted.append(content_hash))
 
     assert await get_run_cache_hit({"blocks": [{"type": "text", "content_hash": "sha256:abc"}]}) is None
-    assert deleted == ["sha256:abc"]
+    assert len(deleted) == 1
+    assert deleted[0].startswith("sha256:")
+    assert deleted[0] != "sha256:abc"
 
 
 @pytest.mark.asyncio

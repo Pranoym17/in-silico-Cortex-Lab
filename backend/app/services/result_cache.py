@@ -46,6 +46,48 @@ def text_result_cache_context(block: Any, settings: Any, *, model_name: str, mod
     }
 
 
+def run_result_cache_identity(run_spec: Any, *, model_name: str, model_version: str | None = None) -> tuple[str, dict[str, Any]]:
+    if hasattr(run_spec, "model_dump"):
+        normalized = run_spec.model_dump(mode="json")
+    elif isinstance(run_spec, dict):
+        normalized = run_spec
+    else:
+        raise TypeError("run_spec must be a mapping or Pydantic model")
+
+    blocks = normalized.get("blocks")
+    settings = normalized.get("settings")
+    if not isinstance(blocks, list) or not blocks:
+        raise ValueError("run_spec must include blocks")
+    canonical_blocks = [
+        {
+            "type": block.get("type"),
+            "content_hash": block.get("content_hash"),
+            "start_ms": block.get("start_ms"),
+            "duration_ms": block.get("duration_ms"),
+            "condition": block.get("condition"),
+            "display": block.get("display"),
+            "voice": block.get("voice"),
+            "mime_type": block.get("mime_type"),
+        }
+        for block in blocks
+        if isinstance(block, dict)
+    ]
+    if len(canonical_blocks) != len(blocks) or any(not block.get("content_hash") for block in canonical_blocks):
+        raise ValueError("all run blocks require content_hash")
+
+    payload = {"blocks": canonical_blocks, "settings": settings}
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    context = {
+        "run_spec": payload,
+        "model_name": model_name,
+        "model_version": model_version,
+        "cache_contract": "whole-run-v1",
+    }
+    return f"sha256:{digest}", context
+
+
 def _redis_client():
     return redis.Redis.from_url(get_settings().redis_url, decode_responses=True)
 

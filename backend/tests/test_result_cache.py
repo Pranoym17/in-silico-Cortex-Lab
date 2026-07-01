@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from app.services import result_cache
-from app.services.result_cache import cache_key_for_content_hash, get_cached_result, set_cached_result
+from app.services.result_cache import cache_key_for_content_hash, get_cached_result, run_result_cache_identity, set_cached_result
 
 
 class FakeRedis:
@@ -44,6 +44,38 @@ def test_cache_key_includes_run_context_when_present():
     assert fast.startswith("tribe:v2:sha256:abc:")
     assert slow.startswith("tribe:v2:sha256:abc:")
     assert fast != slow
+
+
+def test_whole_run_cache_identity_covers_media_timing_and_settings():
+    baseline = {
+        "blocks": [
+            {
+                "type": "audio",
+                "content_hash": "sha256:audio",
+                "start_ms": 0,
+                "duration_ms": 1000,
+                "condition": "speech",
+                "mime_type": "audio/wav",
+            }
+        ],
+        "settings": {"surface": "fsaverage5", "target_sample_rate_hz": 2},
+    }
+    baseline_hash, baseline_context = run_result_cache_identity(baseline, model_name="tribev2")
+    changed = {**baseline, "settings": {**baseline["settings"], "target_sample_rate_hz": 1}}
+    changed_hash, _ = run_result_cache_identity(changed, model_name="tribev2")
+
+    assert baseline_hash.startswith("sha256:")
+    assert baseline_hash != changed_hash
+    assert baseline_context["cache_contract"] == "whole-run-v1"
+
+
+def test_whole_run_cache_identity_rejects_missing_hash():
+    try:
+        run_result_cache_identity({"blocks": [{"type": "image"}]}, model_name="tribev2")
+    except ValueError as exc:
+        assert "content_hash" in str(exc)
+    else:
+        raise AssertionError("missing content hash must fail")
 
 
 def test_set_and_get_cached_result(monkeypatch):

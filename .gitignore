@@ -5,6 +5,7 @@ logs
 .tmp_pytest/
 .tmp_*/
 backend/tmp_*/
+evidence/
 __pycache__/
 *.py[cod]
 npm-debug.log*

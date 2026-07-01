@@ -1,0 +1,19 @@
+{
+  "job_id": "tribe-proof-text",
+  "blocks": [
+    {
+      "id": "text-proof",
+      "type": "text",
+      "condition": "language",
+      "start_ms": 0,
+      "duration_ms": 3000,
+      "content_hash": "sha256:6cbda001e6fc5d163ff89867c09b3c0407a35330b473c5f4dc257dd48986b278",
+      "text": "The researcher carefully examined the cortical response."
+    }
+  ],
+  "settings": {
+    "target_sample_rate_hz": 2,
+    "surface": "fsaverage5",
+    "atlas": "desikan-killiany"
+  }
+}
