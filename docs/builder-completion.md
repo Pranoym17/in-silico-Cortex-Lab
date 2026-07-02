@@ -20,6 +20,17 @@ with a timer and input-level feedback.
 
 ## Manual browser acceptance
 
+Automated acceptance runs against installed Chrome and Edge with:
+
+```powershell
+cd frontend
+npm.cmd run test:e2e
+```
+
+It creates disposable authenticated experiments against the local API and
+verifies keyboard timing, undo/redo identity preservation, zoom, synchronized
+text playback, denied-microphone messaging, and mobile-width containment.
+
 Run this matrix before a production release because microphone permissions,
 media codecs, touch gestures, and browser warning text are controlled by each
 browser:
