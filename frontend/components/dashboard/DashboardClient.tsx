@@ -107,7 +107,7 @@ export function DashboardClient() {
 
     try {
       const experiment = await createExperiment({ name: name.trim() }, accessToken);
-      setExperiments((current) => [experiment, ...current]);
+      setExperiments((current) => [experiment, ...current.filter((item) => item.id !== experiment.id)]);
       setName("Untitled experiment");
     } catch (caught) {
       const message = caught instanceof ApiError ? caught.message : "Failed to create experiment";

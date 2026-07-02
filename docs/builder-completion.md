@@ -20,7 +20,8 @@ with a timer and input-level feedback.
 
 ## Manual browser acceptance
 
-Automated acceptance runs against installed Chrome and Edge with:
+Automated acceptance runs against Chrome, Edge, Firefox, and Playwright WebKit
+with:
 
 ```powershell
 cd frontend

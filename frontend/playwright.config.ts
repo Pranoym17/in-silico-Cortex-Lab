@@ -43,6 +43,14 @@ export default defineConfig({
     {
       name: "edge",
       use: { ...devices["Desktop Edge"], channel: "msedge" }
+    },
+    {
+      name: "firefox",
+      use: { ...devices["Desktop Firefox"] }
+    },
+    {
+      name: "webkit",
+      use: { ...devices["Desktop Safari"] }
     }
   ]
 });

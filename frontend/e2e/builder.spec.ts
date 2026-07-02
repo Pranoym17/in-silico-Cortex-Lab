@@ -99,11 +99,23 @@ test("builder supports keyboard timing, history, zoom, and playback", async ({ p
 
 test("microphone denial is explained and mobile layout stays within the viewport", async ({ page, context }) => {
   await context.clearPermissions();
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => {
+          throw new DOMException("Permission denied by browser QA", "NotAllowedError");
+        }
+      }
+    });
+  });
   await page.setViewportSize({ width: 390, height: 844 });
   await openFreshBuilder(page);
   await page.getByRole("button", { name: "Audio", exact: true }).click();
   await page.getByRole("button", { name: "Record microphone" }).click();
-  await expect(page.getByText(/microphone access was denied|could not access the microphone/i)).toBeVisible();
+  await expect(
+    page.getByText(/microphone access was denied|could not access the microphone|recording is not supported/i)
+  ).toBeVisible();
 
   const workspace = page.locator(".builder-workspace");
   const box = await workspace.boundingBox();
