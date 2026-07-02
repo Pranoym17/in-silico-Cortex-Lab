@@ -8,6 +8,17 @@ python scripts/check_external_readiness.py --strict
 
 reports `READY`. The checker reports presence and consistency only; it never prints secret values.
 
+After configuring production resources, run the read-only live probe:
+
+```powershell
+python scripts/probe_external_services.py --strict
+```
+
+The probe requires `DEPLOYMENT_STAGE=production`, a matching
+`PRODUCTION_AWS_ACCOUNT_ID`, bucket access in `PRODUCTION_AWS_REGION`, a
+successful Redis PING, and a reachable Supabase JWKS endpoint. Its output is
+sanitized and never includes credentials.
+
 ## Decisions
 
 - **Production region:** `ca-central-1` is the default because the project owner is in Canada. Change it only through an explicit architecture decision after checking service availability, latency, residency, and cost.
@@ -52,7 +63,8 @@ inference\.venv\Scripts\modal.exe secret create cortex-aws `
 
 1. Confirm `ca-central-1` or record a replacement region decision.
 2. Use a least-privilege deployment identity; do not use root credentials.
-3. Configure the bucket, queue, Redis endpoint, and production database before live proof runs.
+3. Set `PRODUCTION_AWS_ACCOUNT_ID` to the confirmed 12-digit production account.
+4. Configure the bucket, queue, Redis endpoint, and production database before live proof runs.
 
 ### Supabase
 
