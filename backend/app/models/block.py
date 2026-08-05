@@ -14,6 +14,7 @@ class BlockType(str, enum.Enum):
     image = "image"
     text = "text"
     audio = "audio"
+    video = "video"
 
 
 class Block(TimestampMixin, Base):

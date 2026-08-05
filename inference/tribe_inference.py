@@ -26,7 +26,9 @@ FUNCTION_NAME = "run"
 TRIBE_MODEL_ID = "facebook/tribev2"
 OFFICIAL_TRIBE_SOURCE_URL = "git+https://github.com/facebookresearch/tribev2.git"
 COMPATIBLE_EXCA_VERSION = "0.5.20"
-COMPATIBLE_TRANSFORMERS_VERSION = "4.48.3"
+# TRIBE's current video extractor imports AutoVideoProcessor, which is not
+# exported by the older text/audio-only runtime pin.
+COMPATIBLE_TRANSFORMERS_VERSION = "4.53.1"
 FAKE_VERTEX_COUNT = 16
 FAKE_TIMESTEPS_PER_BLOCK = 1
 DEFAULT_SAMPLE_RATE_HZ = 2
@@ -34,6 +36,7 @@ DEFAULT_REAL_CHUNK_TIMESTEPS = 4
 FSAVERAGE5_VERTEX_COUNT = 20484
 TRIBE_HRF_OFFSET_SECONDS = 5.0
 PROCESSING_VERSION = "cortex-stimulus-v1"
+TRIBE_CACHE_VOLUME_NAME = "cortex-lab-tribe-cache"
 IMAGE_EXTENSIONS_BY_MIME = {
     "image/png": ".png",
     "image/jpeg": ".jpg",
@@ -111,6 +114,7 @@ def _real_tribe_env() -> dict[str, str]:
             str(FSAVERAGE5_VERTEX_COUNT),
         ),
         "MEDIA_VALIDATION_MODE": "strict",
+        "TOKENIZERS_PARALLELISM": "false",
     }
 
 
@@ -848,8 +852,13 @@ if modal is not None:
         )
         .pip_install(f"exca=={COMPATIBLE_EXCA_VERSION}")
         .pip_install(f"transformers=={COMPATIBLE_TRANSFORMERS_VERSION}")
+        .pip_install(
+            "https://github.com/explosion/spacy-models/releases/download/"
+            "en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl"
+        )
         .env(_real_tribe_env())
     )
+    tribe_cache_volume = modal.Volume.from_name(TRIBE_CACHE_VOLUME_NAME, create_if_missing=True)
     real_secrets = [
         modal.Secret.from_name(_modal_secret_name()),
         modal.Secret.from_name(_modal_aws_secret_name()),
@@ -862,9 +871,18 @@ if modal is not None:
         os.environ["TRIBE_INFERENCE_MODE"] = "fake"
         yield from run_configured_stream(spec)
 
-    @app.function(image=real_image, secrets=real_secrets, gpu="A10G", timeout=300)
+    @app.function(
+        image=real_image,
+        secrets=real_secrets,
+        volumes={"/cache": tribe_cache_volume},
+        gpu="A10G",
+        timeout=900,
+    )
     def run_real(spec: dict[str, Any]):
-        yield from run_configured_stream(spec)
+        try:
+            yield from run_configured_stream(spec)
+        finally:
+            tribe_cache_volume.commit()
 
     @app.function(image=real_image, secrets=real_secrets, timeout=60)
     def check_real_runtime() -> dict[str, Any]:

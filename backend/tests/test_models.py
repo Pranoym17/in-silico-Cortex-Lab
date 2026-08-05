@@ -26,7 +26,7 @@ def test_result_model_has_cp9_metadata_columns():
 
 def test_expected_enums_match_contract():
     assert [status.value for status in models.ExperimentStatus] == ["draft", "ready", "archived"]
-    assert [block_type.value for block_type in models.BlockType] == ["image", "text", "audio"]
+    assert [block_type.value for block_type in models.BlockType] == ["image", "text", "audio", "video"]
     assert [status.value for status in models.JobStatus] == [
         "queued",
         "warming",

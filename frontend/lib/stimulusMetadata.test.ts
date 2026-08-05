@@ -36,4 +36,12 @@ describe("stimulusMetadata", () => {
   it("accepts ready text metadata", () => {
     expect(getStimulusReadinessIssues(makeBlock({ content_hash: "sha256:text" }))).toEqual([]);
   });
+
+  it("requires a readable short duration for video blocks", () => {
+    const issues = getStimulusReadinessIssues(
+      makeBlock({ type: "video", content_hash: "sha256:video", payload: { s3_key: "uploads/clip.mp4" } })
+    );
+
+    expect(issues).toContain("Video blocks must have a readable duration of 10 seconds or less.");
+  });
 });

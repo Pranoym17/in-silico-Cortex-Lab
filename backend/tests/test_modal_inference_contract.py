@@ -50,6 +50,18 @@ def _run_spec() -> dict:
     }
 
 
+def test_real_runtime_environment_uses_persistent_safe_defaults(monkeypatch):
+    monkeypatch.delenv("TRIBE_CHUNK_TIMESTEPS", raising=False)
+    monkeypatch.delenv("TRIBE_EXPECTED_VERTEX_COUNT", raising=False)
+
+    environment = tribe_inference._real_tribe_env()
+
+    assert environment["TRIBE_CACHE_FOLDER"] == "/cache"
+    assert environment["TRIBE_EXPECTED_VERTEX_COUNT"] == "20484"
+    assert environment["MEDIA_VALIDATION_MODE"] == "strict"
+    assert environment["TOKENIZERS_PARALLELISM"] == "false"
+
+
 def test_fake_modal_stream_emits_replayable_contract_events():
     events = list(tribe_inference.run_fake_stream(_run_spec()))
 

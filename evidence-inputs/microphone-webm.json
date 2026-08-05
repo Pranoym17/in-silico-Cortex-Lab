@@ -1,0 +1,5 @@
+{
+  "job_id": "live-proof-microphone-webm",
+  "settings": {"hrf_offset_ms": 5000, "target_sample_rate_hz": 2, "surface": "fsaverage5", "atlas": "desikan-killiany"},
+  "blocks": [{"id": "microphone-webm-1", "type": "audio", "condition": "microphone", "start_ms": 0, "duration_ms": 6000, "content_hash": "sha256:56047c753059b17ab34283d566b27014f7bf3f573d76a570ac35e5bafd617077", "s3_key": "live-proof/microphone-webm.webm", "mime_type": "audio/webm", "channels": 1, "sample_rate_hz": 16000, "source_duration_ms": 6000}]
+}

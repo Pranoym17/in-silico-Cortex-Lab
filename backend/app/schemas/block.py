@@ -25,6 +25,9 @@ class BlockBase(BaseModel):
         if self.type == BlockType.audio and self.duration_ms > 60000:
             raise ValueError("audio block duration cannot exceed 60000ms")
 
+        if self.type == BlockType.video and not 500 <= self.duration_ms <= 10000:
+            raise ValueError("video block duration must be between 500ms and 10000ms")
+
         if self.type == BlockType.text:
             text = self.payload.get("text")
             if text is not None and isinstance(text, str) and len(text.split()) > 1024:

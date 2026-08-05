@@ -14,7 +14,8 @@ export function getBuilderSummary(blocks: StimulusBlock[]): BuilderSummary {
   const countsByType: BuilderSummary["countsByType"] = {
     image: 0,
     text: 0,
-    audio: 0
+    audio: 0,
+    video: 0
   };
 
   let readyBlocks = 0;

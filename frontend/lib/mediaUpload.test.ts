@@ -47,6 +47,13 @@ describe("mediaUpload", () => {
     );
   });
 
+  it("accepts supported native video uploads and rejects unsupported types", () => {
+    expect(() => validateUploadFile("video", new File(["x"], "clip.mp4", { type: "video/mp4" }))).not.toThrow();
+    expect(() => validateUploadFile("video", new File(["x"], "clip.avi", { type: "video/x-msvideo" }))).toThrow(
+      "Video uploads must be MP4, WebM, or MOV."
+    );
+  });
+
   it("formats upload failures with retry guidance", () => {
     expect(formatUploadError(new Error("Upload failed with status 403"))).toContain("Retry the upload");
   });

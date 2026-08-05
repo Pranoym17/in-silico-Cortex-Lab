@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { StimulusBlock, UpdateBlockInput } from "@/lib/api";
-import { AUDIO_MIME_TYPES, IMAGE_MIME_TYPES, normalizeContentHash } from "@/lib/stimulusMetadata";
+import { AUDIO_MIME_TYPES, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES, normalizeContentHash } from "@/lib/stimulusMetadata";
 import {
   estimateTextDurationMs,
   formatRecordingElapsed,
@@ -44,12 +44,13 @@ export function BlockConfigPanel({
   const [imageHeight, setImageHeight] = useState(0);
   const [filename, setFilename] = useState("");
   const [audioMimeType, setAudioMimeType] = useState("audio/wav");
+  const [videoMimeType, setVideoMimeType] = useState("video/mp4");
   const [channels, setChannels] = useState(1);
   const [sampleRateHz, setSampleRateHz] = useState(16000);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
-  const [localPreviewKind, setLocalPreviewKind] = useState<"image" | "audio" | null>(null);
+  const [localPreviewKind, setLocalPreviewKind] = useState<"image" | "audio" | "video" | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [autoTextDuration, setAutoTextDuration] = useState(true);
   const [recordingStatus, setRecordingStatus] = useState<"idle" | "recording" | "processing">("idle");
@@ -114,6 +115,7 @@ export function BlockConfigPanel({
       setImageHeight(0);
       setFilename("");
       setAudioMimeType("audio/wav");
+      setVideoMimeType("video/mp4");
       setChannels(1);
       setSampleRateHz(16000);
       setUploadError(null);
@@ -147,6 +149,7 @@ export function BlockConfigPanel({
     setImageHeight(typeof block.payload.height === "number" ? block.payload.height : 0);
     setFilename(typeof block.payload.filename === "string" ? block.payload.filename : "");
     setAudioMimeType(typeof block.payload.mime_type === "string" ? block.payload.mime_type : "audio/wav");
+    setVideoMimeType(typeof block.payload.mime_type === "string" ? block.payload.mime_type : "video/mp4");
     setChannels(typeof block.payload.channels === "number" ? block.payload.channels : 1);
     setSampleRateHz(typeof block.payload.sample_rate_hz === "number" ? block.payload.sample_rate_hz : 16000);
     setUploadError(null);
@@ -178,6 +181,16 @@ export function BlockConfigPanel({
           mode: displayMode,
           secondary_public_path: displayMode === "side_by_side" ? secondaryImagePath : undefined
         }
+      };
+    }
+
+    if (block.type === "video") {
+      return {
+        ...basePayload,
+        source: typeof basePayload.source === "string" ? basePayload.source : "upload",
+        filename,
+        s3_key: s3Key,
+        mime_type: videoMimeType
       };
     }
 
@@ -225,7 +238,9 @@ export function BlockConfigPanel({
       URL.revokeObjectURL(localPreviewUrl);
     }
     setLocalPreviewUrl(URL.createObjectURL(file));
-    setLocalPreviewKind(block.type === "image" || block.type === "audio" ? block.type : null);
+    setLocalPreviewKind(
+      block.type === "image" || block.type === "audio" || block.type === "video" ? block.type : null
+    );
     setSelectedFileName(file.name);
     setUploadStatus("uploading");
     setUploadError(null);
@@ -265,6 +280,9 @@ export function BlockConfigPanel({
           <AudioWaveformPreview sourceUrl={localPreviewUrl} />
           <audio className="stimulus-audio-preview" controls src={localPreviewUrl} />
         </>
+      ) : null}
+      {block.type === "video" && localPreviewUrl && localPreviewKind === "video" ? (
+        <video className="stimulus-video-preview" controls src={localPreviewUrl} />
       ) : null}
       <form className="block-config-form" onSubmit={handleSubmit}>
         <label>
@@ -502,13 +520,47 @@ export function BlockConfigPanel({
             </div>
           </>
         ) : null}
+        {block.type === "video" ? (
+          <>
+            <label>
+              Replace video
+              <input
+                accept={VIDEO_MIME_TYPES.join(",")}
+                disabled={isSaving}
+                onChange={(event) => handleUpload(event.target.files?.[0])}
+                type="file"
+              />
+            </label>
+            <UploadState status={uploadStatus} fileName={selectedFileName} />
+            <label>
+              Filename
+              <input onChange={(event) => setFilename(event.target.value)} value={filename} />
+            </label>
+            <label>
+              S3 object key
+              <input onChange={(event) => setS3Key(event.target.value)} value={s3Key} />
+            </label>
+            <label>
+              MIME type
+              <select onChange={(event) => setVideoMimeType(event.target.value)} value={videoMimeType}>
+                {VIDEO_MIME_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p>Videos are limited to 10 seconds for launch inference.</p>
+          </>
+        ) : null}
         <label>
           Payload JSON
           <textarea onChange={(event) => setPayloadText(event.target.value)} rows={10} value={payloadText} />
         </label>
         {payloadError ? <p className="error-text">{payloadError}</p> : null}
         {uploadError ? <p className="error-text">{uploadError}</p> : null}
-        {(block.type === "image" || block.type === "audio") && (s3Key || filename || contentHash) ? (
+        {(block.type === "image" || block.type === "audio" || block.type === "video") &&
+        (s3Key || filename || contentHash) ? (
           <div className="metadata-grid">
             {filename ? (
               <div>
@@ -547,6 +599,7 @@ export function BlockConfigPanel({
       setUploadError("Microphone recording is not supported by this browser.");
       return;
     }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recordingStreamRef.current = stream;

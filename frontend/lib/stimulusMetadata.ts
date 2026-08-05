@@ -2,6 +2,7 @@ import { StimulusBlock } from "@/lib/api";
 
 export const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 export const AUDIO_MIME_TYPES = ["audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a", "audio/webm"] as const;
+export const VIDEO_MIME_TYPES = ["video/mp4", "video/webm", "video/quicktime"] as const;
 
 export function normalizeContentHash(value: string) {
   const trimmed = value.trim();
@@ -35,6 +36,15 @@ export function getStimulusReadinessIssues(block: StimulusBlock) {
   if (block.type === "audio") {
     if (typeof block.payload.s3_key !== "string" || !block.payload.s3_key.trim()) {
       issues.push("Audio blocks need an uploaded S3 object key before running.");
+    }
+  }
+
+  if (block.type === "video") {
+    if (typeof block.payload.s3_key !== "string" || !block.payload.s3_key.trim()) {
+      issues.push("Video blocks need an uploaded S3 object key before running.");
+    }
+    if (typeof block.payload.duration_ms !== "number" || block.payload.duration_ms > 10000) {
+      issues.push("Video blocks must have a readable duration of 10 seconds or less.");
     }
   }
 

@@ -31,8 +31,15 @@ export type AudioRunBlock = RunBlock & {
   source_duration_ms?: number;
 };
 
+export type VideoRunBlock = RunBlock & {
+  type: "video";
+  s3_key: string;
+  mime_type: string;
+  source_duration_ms?: number;
+};
+
 export type RunExperimentInput = {
-  blocks: Array<ImageRunBlock | TextRunBlock | AudioRunBlock>;
+  blocks: Array<ImageRunBlock | TextRunBlock | AudioRunBlock | VideoRunBlock>;
   settings: {
     hrf_offset_ms: number;
     target_sample_rate_hz: number;
@@ -62,7 +69,7 @@ function getDisplayMode(payload: Record<string, unknown>) {
   return "mode" in display && typeof display.mode === "string" ? display.mode : "center";
 }
 
-export function toRunBlock(block: StimulusBlock): ImageRunBlock | TextRunBlock | AudioRunBlock {
+export function toRunBlock(block: StimulusBlock): ImageRunBlock | TextRunBlock | AudioRunBlock | VideoRunBlock {
   const base = {
     id: block.id,
     type: block.type,
@@ -90,6 +97,16 @@ export function toRunBlock(block: StimulusBlock): ImageRunBlock | TextRunBlock |
       mime_type: requireString(block.payload.mime_type, "Audio blocks need a MIME type before running."),
       channels: typeof block.payload.channels === "number" ? block.payload.channels : 1,
       sample_rate_hz: typeof block.payload.sample_rate_hz === "number" ? block.payload.sample_rate_hz : 16000,
+      source_duration_ms: typeof block.payload.duration_ms === "number" ? block.payload.duration_ms : undefined
+    };
+  }
+
+  if (block.type === "video") {
+    return {
+      ...base,
+      type: "video",
+      s3_key: requireString(block.payload.s3_key, "Video blocks need an S3 object key before running."),
+      mime_type: requireString(block.payload.mime_type, "Video blocks need a MIME type before running."),
       source_duration_ms: typeof block.payload.duration_ms === "number" ? block.payload.duration_ms : undefined
     };
   }

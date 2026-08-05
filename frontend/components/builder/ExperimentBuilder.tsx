@@ -60,6 +60,16 @@ function makeDefaultBlock(type: StimulusBlockType, startMs: number): CreateBlock
     return assetBlock(getStimulusAsset("auditory-control-01"), startMs, "condition_a");
   }
 
+  if (type === "video") {
+    return {
+      type,
+      condition: "condition_a",
+      start_ms: startMs,
+      duration_ms: 10000,
+      payload: { source: "upload", mime_type: "video/mp4" }
+    };
+  }
+
   return {
     type,
     condition: "condition_a",
@@ -438,7 +448,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   }
 
   async function handleUploadBlockFile(block: StimulusBlock, file: File) {
-    if (!accessToken || (block.type !== "image" && block.type !== "audio")) {
+    if (!accessToken || (block.type !== "image" && block.type !== "audio" && block.type !== "video")) {
       return;
     }
 
@@ -459,7 +469,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
           content_hash: uploadedMetadata.contentHash,
           payload: uploadedMetadata.payload,
           duration_ms:
-            block.type === "audio" && typeof uploadedMetadata.payload.duration_ms === "number"
+            (block.type === "audio" || block.type === "video") && typeof uploadedMetadata.payload.duration_ms === "number"
               ? uploadedMetadata.payload.duration_ms
               : block.duration_ms
         },
@@ -587,6 +597,9 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
             </button>
             <button type="button" onClick={() => handleAddBlock("audio")} disabled={!accessToken || isMutating}>
               Audio
+            </button>
+            <button type="button" onClick={() => handleAddBlock("video")} disabled={!accessToken || isMutating}>
+              Video
             </button>
           </section>
 

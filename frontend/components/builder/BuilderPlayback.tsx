@@ -43,7 +43,7 @@ export function BuilderPlayback({
   const frameRef = useRef<number | null>(null);
   const previousFrameRef = useRef<number | null>(null);
   const timeRef = useRef(timeMs);
-  const audioRefs = useRef(new Map<string, HTMLAudioElement>());
+  const mediaRefs = useRef(new Map<string, HTMLMediaElement>());
   timeRef.current = timeMs;
 
   const setTime = useCallback(
@@ -102,18 +102,18 @@ export function BuilderPlayback({
   const activeIds = useMemo(() => new Set(activeBlocks.map((block) => block.id)), [activeBlocks]);
 
   useEffect(() => {
-    for (const block of blocks.filter((item) => item.type === "audio")) {
-      const audio = audioRefs.current.get(block.id);
-      if (!audio) continue;
+    for (const block of blocks.filter((item) => item.type === "audio" || item.type === "video")) {
+      const media = mediaRefs.current.get(block.id);
+      if (!media) continue;
       const active = activeIds.has(block.id);
       const expectedSeconds = getBlockLocalTimeMs(block, timeMs) / 1000;
-      if (Math.abs(audio.currentTime - expectedSeconds) > 0.2) {
-        audio.currentTime = expectedSeconds;
+      if (Math.abs(media.currentTime - expectedSeconds) > 0.2) {
+        media.currentTime = expectedSeconds;
       }
       if (active && isPlaying) {
-        void audio.play().catch(() => setPlaying(false));
+        void media.play().catch(() => setPlaying(false));
       } else {
-        audio.pause();
+        media.pause();
       }
     }
   }, [activeIds, blocks, isPlaying, setPlaying, timeMs]);
@@ -154,6 +154,23 @@ export function BuilderPlayback({
               </p>
             );
           }
+          if (block.type === "video") {
+            const source = getMediaSource(block.payload);
+            return source ? (
+              <video
+                className="builder-playback-video"
+                key={block.id}
+                muted
+                playsInline
+                preload="metadata"
+                ref={(element) => {
+                  if (element) mediaRefs.current.set(block.id, element);
+                  else mediaRefs.current.delete(block.id);
+                }}
+                src={source}
+              />
+            ) : null;
+          }
           return null;
         })}
         {blocks.filter((block) => block.type === "audio").map((block) => {
@@ -163,8 +180,8 @@ export function BuilderPlayback({
               key={block.id}
               preload="metadata"
               ref={(element) => {
-                if (element) audioRefs.current.set(block.id, element);
-                else audioRefs.current.delete(block.id);
+                if (element) mediaRefs.current.set(block.id, element);
+                else mediaRefs.current.delete(block.id);
               }}
               src={source}
             />

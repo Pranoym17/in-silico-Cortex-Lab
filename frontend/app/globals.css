@@ -685,7 +685,8 @@ button:disabled {
 }
 
 .stimulus-preview,
-.stimulus-audio-preview {
+.stimulus-audio-preview,
+.stimulus-video-preview {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -955,6 +956,11 @@ button:disabled {
   width: 10px;
   height: 10px;
   border-radius: 999px;
+}
+
+.stimulus-video-preview {
+  max-height: 260px;
+  object-fit: contain;
 }
 
 .cognitive-state-timeline {
@@ -1521,6 +1527,13 @@ pre {
 .builder-playback-image-side-by-side img {
   width: 100%;
   height: 100%;
+}
+
+.builder-playback-video {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
 }
 
 .builder-playback-missing-media {

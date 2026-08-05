@@ -40,7 +40,8 @@ describe("builderSummary", () => {
       countsByType: {
         image: 1,
         text: 1,
-        audio: 0
+        audio: 0,
+        video: 0
       }
     });
   });

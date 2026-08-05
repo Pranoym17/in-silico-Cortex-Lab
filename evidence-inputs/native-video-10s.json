@@ -1,0 +1,22 @@
+{
+  "job_id": "live-proof-native-video-10s",
+  "settings": {
+    "hrf_offset_ms": 5000,
+    "target_sample_rate_hz": 2,
+    "surface": "fsaverage5",
+    "atlas": "desikan-killiany"
+  },
+  "blocks": [
+    {
+      "id": "native-video-1",
+      "type": "video",
+      "condition": "moving-pattern",
+      "start_ms": 0,
+      "duration_ms": 10000,
+      "content_hash": "sha256:492254c80780a54040c78bc8187f71258151bedd036259b9fd4faf3f15e01f95",
+      "s3_key": "live-proof/native-video-10s.mp4",
+      "mime_type": "video/mp4",
+      "source_duration_ms": 10000
+    }
+  ]
+}

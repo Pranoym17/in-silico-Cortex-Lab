@@ -54,7 +54,22 @@ class AudioBlock(BaseStimulusBlock):
         return self
 
 
-StimulusBlock = Annotated[Union[ImageBlock, TextBlock, AudioBlock], Field(discriminator="type")]
+class VideoBlock(BaseStimulusBlock):
+    type: Literal["video"]
+    s3_key: str
+    mime_type: Literal["video/mp4", "video/webm", "video/quicktime"]
+    source_duration_ms: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_source_duration(self) -> "VideoBlock":
+        if not 500 <= self.duration_ms <= 10000:
+            raise ValueError("video block duration must be between 500ms and 10000ms")
+        if self.source_duration_ms is not None and abs(self.duration_ms - self.source_duration_ms) > 250:
+            raise ValueError("video block duration must match the uploaded media duration")
+        return self
+
+
+StimulusBlock = Annotated[Union[ImageBlock, TextBlock, AudioBlock, VideoBlock], Field(discriminator="type")]
 
 
 class RunSettings(BaseModel):
@@ -81,6 +96,8 @@ class RunExperimentRequest(BaseModel):
                 raise ValueError("image block duration must be between 500ms and 30000ms")
             if block.type == "audio" and block.duration_ms > 60000:
                 raise ValueError("audio block duration cannot exceed 60000ms")
+            if block.type == "video" and not 500 <= block.duration_ms <= 10000:
+                raise ValueError("video block duration must be between 500ms and 10000ms")
 
         if previous_end > 300000:
             raise ValueError("experiment duration cannot exceed 300000ms")

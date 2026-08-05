@@ -58,7 +58,7 @@ export type UpdateExperimentInput = Partial<{
   status: ExperimentStatus;
 }>;
 
-export type StimulusBlockType = "image" | "text" | "audio";
+export type StimulusBlockType = "image" | "text" | "audio" | "video";
 
 export type StimulusBlock = {
   id: string;
@@ -96,7 +96,7 @@ export type ReorderBlockInput = {
   duration_ms: number;
 };
 
-export type UploadKind = "image" | "audio";
+export type UploadKind = "image" | "audio" | "video";
 
 export type CreateUploadIntentInput = {
   experiment_id: string;

@@ -1,0 +1,5 @@
+{
+  "job_id": "live-proof-image-derived-video",
+  "settings": {"hrf_offset_ms": 5000, "target_sample_rate_hz": 2, "surface": "fsaverage5", "atlas": "desikan-killiany"},
+  "blocks": [{"id": "image-derived-video-1", "type": "image", "condition": "face", "start_ms": 0, "duration_ms": 2000, "content_hash": "sha256:b010f1a2b5113312c3853502d47071e5743dfce3e98cef2dc26a4fc0eaeda046", "s3_key": "live-proof/face-001.png", "mime_type": "image/png", "display": {"mode": "center"}}]
+}

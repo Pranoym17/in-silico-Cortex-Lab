@@ -1,12 +1,14 @@
 import { CreateUploadIntentInput, StimulusBlock, UploadIntent } from "./api";
 import { formatUploadError as formatJobUploadError } from "./jobErrors";
-import { AUDIO_MIME_TYPES, IMAGE_MIME_TYPES } from "./stimulusMetadata";
+import { AUDIO_MIME_TYPES, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES } from "./stimulusMetadata";
 
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_AUDIO_SIZE_BYTES = 100 * 1024 * 1024;
+const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
+export const MAX_VIDEO_DURATION_MS = 10000;
 const MAX_IMAGE_PIXELS = 4096 * 4096;
 
-export type UploadableBlock = Extract<StimulusBlock["type"], "image" | "audio">;
+export type UploadableBlock = Extract<StimulusBlock["type"], "image" | "audio" | "video">;
 
 export type UploadedStimulusMetadata = {
   contentHash: string;
@@ -40,6 +42,15 @@ export function validateUploadFile(kind: UploadableBlock, file: File) {
       throw new Error("Audio uploads cannot exceed 100MB.");
     }
   }
+
+  if (kind === "video") {
+    if (!VIDEO_MIME_TYPES.includes(file.type as (typeof VIDEO_MIME_TYPES)[number])) {
+      throw new Error("Video uploads must be MP4, WebM, or MOV.");
+    }
+    if (file.size > MAX_VIDEO_SIZE_BYTES) {
+      throw new Error("Video uploads cannot exceed 100MB.");
+    }
+  }
 }
 
 export function createUploadIntentInput(
@@ -47,8 +58,8 @@ export function createUploadIntentInput(
   block: StimulusBlock,
   file: File
 ): CreateUploadIntentInput {
-  if (block.type !== "image" && block.type !== "audio") {
-    throw new Error("Only image and audio blocks support file uploads.");
+  if (block.type !== "image" && block.type !== "audio" && block.type !== "video") {
+    throw new Error("Only image, audio, and video blocks support file uploads.");
   }
 
   return {
@@ -106,15 +117,23 @@ export async function readImageDimensions(file: File) {
 }
 
 export async function readAudioDurationMs(file: File) {
+  return readMediaDurationMs(file, "audio");
+}
+
+export async function readVideoDurationMs(file: File) {
+  return readMediaDurationMs(file, "video");
+}
+
+async function readMediaDurationMs(file: File, kind: "audio" | "video") {
   const url = URL.createObjectURL(file);
 
   try {
-    const audio = new Audio();
+    const media = document.createElement(kind);
     const loaded = new Promise<number | null>((resolve) => {
-      audio.onloadedmetadata = () => resolve(Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : null);
-      audio.onerror = () => resolve(null);
+      media.onloadedmetadata = () => resolve(Number.isFinite(media.duration) ? Math.round(media.duration * 1000) : null);
+      media.onerror = () => resolve(null);
     });
-    audio.src = url;
+    media.src = url;
     return await loaded;
   } finally {
     URL.revokeObjectURL(url);
@@ -145,7 +164,13 @@ export async function buildUploadedStimulusMetadata(
     };
   }
 
-  const durationMs = await readAudioDurationMs(file);
+  const durationMs = block.type === "video" ? await readVideoDurationMs(file) : await readAudioDurationMs(file);
+  if (durationMs === null) {
+    throw new Error(`Could not read ${block.type} duration. Choose a supported, non-corrupt file.`);
+  }
+  if (block.type === "video" && durationMs > MAX_VIDEO_DURATION_MS) {
+    throw new Error("Video blocks cannot exceed 10 seconds.");
+  }
   return {
     contentHash,
     payload: {
@@ -156,8 +181,12 @@ export async function buildUploadedStimulusMetadata(
       mime_type: file.type,
       size_bytes: file.size,
       duration_ms: durationMs,
-      channels: typeof block.payload.channels === "number" ? block.payload.channels : 1,
-      sample_rate_hz: typeof block.payload.sample_rate_hz === "number" ? block.payload.sample_rate_hz : 16000
+      ...(block.type === "audio"
+        ? {
+            channels: typeof block.payload.channels === "number" ? block.payload.channels : 1,
+            sample_rate_hz: typeof block.payload.sample_rate_hz === "number" ? block.payload.sample_rate_hz : 16000
+          }
+        : {})
     }
   };
 }

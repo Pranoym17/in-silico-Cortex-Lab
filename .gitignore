@@ -6,6 +6,8 @@ logs
 .tmp_*/
 backend/tmp_*/
 evidence/
+evidence-inputs/*.mp4
+evidence-inputs/*.webm
 __pycache__/
 *.py[cod]
 npm-debug.log*

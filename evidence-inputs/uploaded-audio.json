@@ -1,0 +1,5 @@
+{
+  "job_id": "live-proof-uploaded-audio",
+  "settings": {"hrf_offset_ms": 5000, "target_sample_rate_hz": 2, "surface": "fsaverage5", "atlas": "desikan-killiany"},
+  "blocks": [{"id": "uploaded-audio-1", "type": "audio", "condition": "auditory-control", "start_ms": 0, "duration_ms": 6000, "content_hash": "sha256:5e7e7e69dcadb390e3addf830e2d54fd1f4fd3435cc5ec5e0fadf6c86e480b81", "s3_key": "live-proof/auditory-control-01.wav", "mime_type": "audio/wav", "channels": 1, "sample_rate_hz": 16000, "source_duration_ms": 6000}]
+}

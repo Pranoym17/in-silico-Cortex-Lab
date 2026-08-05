@@ -193,6 +193,11 @@ async def test_apply_template_rolls_back_replace_when_commit_fails(monkeypatch):
     assert session.rollbacks == 1
 
 
+def test_block_create_rejects_video_longer_than_ten_seconds():
+    with pytest.raises(ValidationError, match="video block duration"):
+        BlockCreate(type="video", start_ms=0, duration_ms=10001, payload={})
+
+
 @pytest.mark.asyncio
 async def test_apply_template_preserves_existing_block_identity(monkeypatch):
     owner = SimpleNamespace(id=uuid4())

@@ -4,9 +4,10 @@ from uuid import UUID
 from pydantic import BaseModel, Field, model_validator
 
 
-UploadKind = Literal["image", "audio"]
+UploadKind = Literal["image", "audio", "video"]
 ImageMimeType = Literal["image/png", "image/jpeg", "image/webp"]
 AudioMimeType = Literal["audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a", "audio/webm"]
+VideoMimeType = Literal["video/mp4", "video/webm", "video/quicktime"]
 
 
 class UploadIntentRequest(BaseModel):
@@ -14,7 +15,7 @@ class UploadIntentRequest(BaseModel):
     block_id: UUID | None = None
     kind: UploadKind
     filename: str = Field(min_length=1, max_length=255)
-    mime_type: ImageMimeType | AudioMimeType
+    mime_type: ImageMimeType | AudioMimeType | VideoMimeType
     size_bytes: int = Field(gt=0)
 
     @model_validator(mode="after")
@@ -30,6 +31,12 @@ class UploadIntentRequest(BaseModel):
                 raise ValueError("audio uploads require an audio MIME type")
             if self.size_bytes > 100 * 1024 * 1024:
                 raise ValueError("audio uploads cannot exceed 100MB")
+
+        if self.kind == "video":
+            if not self.mime_type.startswith("video/"):
+                raise ValueError("video uploads require a video MIME type")
+            if self.size_bytes > 100 * 1024 * 1024:
+                raise ValueError("video uploads cannot exceed 100MB")
 
         return self
 
