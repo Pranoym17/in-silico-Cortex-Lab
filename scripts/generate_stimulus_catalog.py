@@ -127,6 +127,15 @@ def write_tone(identifier: str, title: str, frequencies: list[float], tags: list
     return record
 
 
+def video_asset(identifier: str, title: str, tags: list[str]) -> dict:
+    path = OUTPUT / "video" / f"{identifier}.mp4"
+    if not path.is_file():
+        raise RuntimeError(f"native video asset is missing: {path}")
+    record = asset_record(identifier, title, "video", "video", path, tags, "video/mp4")
+    record["duration_ms"] = 10_000
+    return record
+
+
 def asset_record(
     identifier: str,
     title: str,
@@ -193,6 +202,7 @@ def generate() -> list[dict]:
             write_tone("auditory-control-02", "Auditory control pulses", [320.0, 160.0], ["audio", "control"]),
         ]
     )
+    assets.append(video_asset("moving-pattern-01", "Moving audiovisual pattern", ["video", "motion", "pattern", "audiovisual"]))
     CATALOG.write_text(
         json.dumps(
             {

@@ -4,8 +4,8 @@ import { CreateBlockInput } from "./api";
 export type StimulusAsset = {
   id: string;
   title: string;
-  category: "faces" | "scenes" | "objects" | "words" | "patterns" | "audio";
-  modality: "image" | "audio";
+  category: "faces" | "scenes" | "objects" | "words" | "patterns" | "audio" | "video";
+  modality: "image" | "audio" | "video";
   tags: string[];
   public_path: string;
   object_key: string;
@@ -23,7 +23,7 @@ export type StimulusAsset = {
 };
 
 export const STIMULUS_ASSETS = catalog.assets as StimulusAsset[];
-export const STIMULUS_CATEGORIES = ["faces", "scenes", "objects", "words", "patterns", "audio"] as const;
+export const STIMULUS_CATEGORIES = ["faces", "scenes", "objects", "words", "patterns", "audio", "video"] as const;
 
 export function getStimulusAsset(id: string) {
   const asset = STIMULUS_ASSETS.find((item) => item.id === id);
@@ -63,6 +63,26 @@ export function assetBlock(asset: StimulusAsset, startMs: number, condition: str
         duration_ms: durationMs,
         channels: 1,
         sample_rate_hz: asset.sample_rate_hz ?? 16000,
+        attribution: asset.attribution,
+        license: asset.license
+      }
+    };
+  }
+  if (asset.modality === "video") {
+    return {
+      type: "video",
+      condition,
+      start_ms: startMs,
+      duration_ms: durationMs,
+      content_hash: `sha256:${asset.sha256}`,
+      payload: {
+        source: "library",
+        library_id: asset.id,
+        filename: asset.public_path.split("/").at(-1),
+        public_path: asset.public_path,
+        s3_key: asset.object_key,
+        mime_type: asset.mime_type,
+        duration_ms: durationMs,
         attribution: asset.attribution,
         license: asset.license
       }

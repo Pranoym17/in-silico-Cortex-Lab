@@ -2,7 +2,7 @@
   "schema_version": 1,
   "catalog_version": "v1",
   "license_policy": "cc0-public-domain",
-  "asset_count": 204,
+  "asset_count": 205,
   "assets": [
     {
       "id": "face-001",
@@ -4375,6 +4375,30 @@
       "generated": true,
       "duration_ms": 6000,
       "sample_rate_hz": 16000
+    },
+    {
+      "id": "moving-pattern-01",
+      "title": "Moving audiovisual pattern",
+      "category": "video",
+      "modality": "video",
+      "tags": [
+        "video",
+        "motion",
+        "pattern",
+        "audiovisual"
+      ],
+      "public_path": "/stimuli/v1/video/moving-pattern-01.mp4",
+      "object_key": "stimulus-library/v1/video/moving-pattern-01.mp4",
+      "mime_type": "video/mp4",
+      "sha256": "492254c80780a54040c78bc8187f71258151bedd036259b9fd4faf3f15e01f95",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "creator": "Cortex Lab procedural stimulus generator",
+      "source_url": "https://github.com/",
+      "attribution": "Cortex Lab procedural stimulus, CC0 1.0",
+      "redistribution_permitted": true,
+      "generated": true,
+      "duration_ms": 10000
     }
   ]
 }

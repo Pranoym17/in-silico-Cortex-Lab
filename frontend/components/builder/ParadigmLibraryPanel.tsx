@@ -83,6 +83,8 @@ export function ParadigmLibraryPanel({
             <article className="stimulus-item" key={asset.id}>
               {asset.modality === "image" ? (
                 <img alt={asset.title} src={asset.public_path} />
+              ) : asset.modality === "video" ? (
+                <video aria-label={`${asset.title} preview`} controls muted playsInline preload="metadata" src={asset.public_path} />
               ) : (
                 <audio aria-label={`${asset.title} preview`} controls preload="none" src={asset.public_path} />
               )}
