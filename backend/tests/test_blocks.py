@@ -126,6 +126,20 @@ def test_validate_block_content_rejects_audio_duration_mismatch():
     assert exc.value.detail == "audio block duration must match the uploaded media duration"
 
 
+def test_validate_block_content_rejects_video_duration_mismatch():
+    block = SimpleNamespace(
+        type=BlockType.video,
+        duration_ms=10_000,
+        experiment_id=uuid4(),
+        payload={"duration_ms": 9_000},
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        validate_block_content(block)
+
+    assert exc.value.detail == "video block duration must match the uploaded media duration"
+
+
 @pytest.mark.asyncio
 async def test_apply_template_rolls_back_replace_when_commit_fails(monkeypatch):
     owner = SimpleNamespace(id=uuid4())
