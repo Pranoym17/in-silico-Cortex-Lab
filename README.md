@@ -4,12 +4,7 @@ Browser-based platform for in-silico neuroscience: design experiments, run them 
 
 > Cortex Lab displays model predictions for an average synthetic subject. Outputs are not measured fMRI, medical advice, diagnosis, or evidence about an individual.
 
-This repository is currently in the specification stage. The PRD defines the product vision; the docs in this repo pin down the implementation contracts that code should follow.
-
-## Source Of Truth
-
-- [Project understanding](docs/project-understanding.md): product shape, architecture, implementation priorities, and non-goals.
-- [Technical contracts](docs/technical-contracts.md): auth flow, run API schema, SSE wire format, Celery/Modal handshake, validation rules, cache keys, mesh outputs, setup, costs, and tests.
+This is an active research-platform implementation. Internal planning, operational notes, and validation records are intentionally kept out of the public repository.
 
 ## MVP Stack
 

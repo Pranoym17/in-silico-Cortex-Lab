@@ -8,6 +8,9 @@ backend/tmp_*/
 evidence/
 evidence-inputs/*.mp4
 evidence-inputs/*.webm
+
+# Internal implementation notes and validation records stay local.
+docs/
 __pycache__/
 *.py[cod]
 npm-debug.log*
