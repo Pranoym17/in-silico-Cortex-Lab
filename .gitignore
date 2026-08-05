@@ -8,6 +8,7 @@ backend/tmp_*/
 evidence/
 evidence-inputs/*.npz
 evidence-inputs/*.metadata.json
+evidence/worker-flow/
 evidence-inputs/*.mp4
 evidence-inputs/*.webm
 
