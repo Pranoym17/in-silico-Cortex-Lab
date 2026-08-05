@@ -6,6 +6,8 @@ logs
 .tmp_*/
 backend/tmp_*/
 evidence/
+evidence-inputs/*.npz
+evidence-inputs/*.metadata.json
 evidence-inputs/*.mp4
 evidence-inputs/*.webm
 
