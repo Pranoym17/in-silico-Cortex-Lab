@@ -16,6 +16,12 @@ This is an active research-platform implementation. Internal planning, operation
 
 ## Local Setup
 
+Environment ownership is deliberate:
+
+- Root `.env`: FastAPI, background worker, Docker, database, Redis, S3, Modal, and server-only secrets.
+- `frontend/.env.local`: only `NEXT_PUBLIC_*` browser configuration.
+- There is no `backend/.env`; backend settings always load the root `.env`.
+
 ```bash
 cp .env.example .env
 cp frontend/.env.example frontend/.env.local
