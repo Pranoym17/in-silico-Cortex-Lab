@@ -99,6 +99,8 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [isRunningOptimizer, setIsRunningOptimizer] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDownloadingResult, setIsDownloadingResult] = useState(false);
+  const [isExportingScreenshot, setIsExportingScreenshot] = useState(false);
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
   const [selectedTimestep, setSelectedTimestep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [showLeft, setShowLeft] = useState(true);
@@ -413,6 +415,26 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   }, [isPlaying, maxSelectableTimestep, selectedTimestep]);
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+        return;
+      }
+      if (event.key === " ") {
+        event.preventDefault();
+        setIsPlaying((value) => !value);
+      }
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        setIsPlaying(false);
+        setSelectedTimestep((value) => Math.max(0, Math.min(maxSelectableTimestep, value + (event.key === "ArrowLeft" ? -1 : 1))));
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [maxSelectableTimestep]);
+
+  useEffect(() => {
     if (!shouldReconnect) {
       return;
     }
@@ -495,6 +517,33 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
       setCancelError(caught instanceof Error ? caught.message : "Job cancellation failed");
     } finally {
       setIsCancelling(false);
+    }
+  }
+
+  async function exportScreenshot() {
+    const canvas = document.querySelector<HTMLCanvasElement>(".brain-scene canvas");
+    if (!canvas) {
+      setScreenshotError("The 3D canvas is not ready to export.");
+      return;
+    }
+
+    setIsExportingScreenshot(true);
+    setScreenshotError(null);
+    try {
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) {
+        throw new Error("The browser could not encode the viewer image.");
+      }
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = `cortexlab-${jobId.slice(0, 8)}-timestep-${selectedTimestep}.png`;
+      anchor.click();
+      URL.revokeObjectURL(href);
+    } catch (caught) {
+      setScreenshotError(caught instanceof Error ? caught.message : "Screenshot export failed");
+    } finally {
+      setIsExportingScreenshot(false);
     }
   }
 
@@ -691,6 +740,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 type="button"
               >
                 {isCancelling ? "Cancelling" : "Cancel"}
+              </button>
+              <button disabled={isExportingScreenshot || !manifest} onClick={exportScreenshot} type="button">
+                {isExportingScreenshot ? "Exporting" : "Export PNG"}
               </button>
             </div>
             <div className="viewer-control-row">
@@ -1173,6 +1225,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           {streamError ? <ErrorPanel message={streamError} onRetry={retryViewerStream} /> : null}
           {resultError ? <ErrorPanel message={resultError} /> : null}
           {cancelError ? <ErrorPanel message={cancelError} /> : null}
+          {screenshotError ? <ErrorPanel message={screenshotError} /> : null}
           {shouldReconnect ? <p>Reconnecting in {reconnectDelaySeconds}s.</p> : null}
           {accessToken && connectionStatus === "disconnected" && !isTerminalViewerStatus(status) ? (
             <button type="button" onClick={() => setConnectAttempt((value) => value + 1)}>
