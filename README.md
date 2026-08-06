@@ -48,6 +48,18 @@ cd backend
 cd ..
 ```
 
+Start the background worker in a second terminal. On native Windows, Celery's
+default prefork pool cannot reliably use its multiprocessing locks, so use the
+single-process `solo` pool:
+
+```powershell
+cd backend
+.\.venv\Scripts\celery.exe -A app.tasks.celery_app.celery_app worker --loglevel=INFO --pool=solo --concurrency=1
+```
+
+This processes one job at a time locally and is the expected development setup.
+The Docker worker runs on Linux and keeps the default multiprocessing pool.
+
 Supabase is optional until the real login flow is exercised. When your Supabase project exists, fill in `frontend/.env.local` with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, then put the matching `SUPABASE_JWT_SECRET` in `.env`.
 
 Run backend tests:
