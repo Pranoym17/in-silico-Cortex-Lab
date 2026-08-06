@@ -9,8 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 from app.schemas.ml import CognitiveStatePoint, CognitiveStatesResponse
 from app.services.jobs import get_owned_job
+from app.services.ml_classifier_artifact import ClassifierArtifactError, load_cognitive_classifier_artifact
 from app.services.ml_results import load_owned_result_matrix
 from app.services.ml_rsa import block_timestep_ranges
+from app.core.config import get_settings
 
 
 COGNITIVE_STATE_LABELS = [
@@ -88,6 +90,23 @@ def classify_cognitive_states(
     if activations.ndim != 2:
         raise ValueError("Cognitive state classification requires a 2D activation matrix")
 
+    settings = get_settings()
+    if settings.cognitive_classifier_mode == "artifact":
+        if not settings.cognitive_classifier_artifact_path:
+            raise ClassifierArtifactError("COGNITIVE_CLASSIFIER_ARTIFACT_PATH is required in artifact mode.")
+        classifier = load_cognitive_classifier_artifact(settings.cognitive_classifier_artifact_path)
+        probabilities = classifier.predict_proba(activations)
+        states = [
+            CognitiveStatePoint(
+                timestep=timestep,
+                label=classifier.labels[int(np.argmax(probabilities[timestep]))],
+                confidence=float(np.max(probabilities[timestep])),
+                scores={label: float(probabilities[timestep, index]) for index, label in enumerate(classifier.labels)},
+            )
+            for timestep in range(int(activations.shape[0]))
+        ]
+        return CognitiveStatesResponse(job_id=job_id, classifier_version=classifier.version, states=states)
+
     states: list[CognitiveStatePoint] = []
     timestep_count = int(activations.shape[0])
     for timestep in range(timestep_count):
@@ -121,5 +140,5 @@ async def get_cognitive_states(session: AsyncSession, owner: User, job_id: UUID)
             result_matrix.activations,
             result_matrix.result.sample_rate_hz,
         )
-    except ValueError as exc:
+    except (ValueError, ClassifierArtifactError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

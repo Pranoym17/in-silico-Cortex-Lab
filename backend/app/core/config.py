@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     ml_cache_enabled: bool = True
     ml_cache_ttl_seconds: int = 2_592_000
+    cognitive_classifier_mode: Literal["rules", "artifact"] = "rules"
+    cognitive_classifier_artifact_path: str | None = None
 
     model_config = SettingsConfigDict(env_file=ROOT_ENV_FILE, extra="ignore")
 
