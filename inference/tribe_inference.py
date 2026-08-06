@@ -474,6 +474,40 @@ def convert_audio_for_tribe(audio_path: Path, destination: Path) -> Path:
     return destination
 
 
+def trim_video_for_tribe(video_path: Path, destination: Path, *, start_ms: int, duration_ms: int) -> Path:
+    if start_ms < 0 or duration_ms <= 0:
+        raise ValueError("video trim start and duration must be positive")
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError("ffmpeg is required to trim uploaded video")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-ss",
+            f"{start_ms / 1000:.3f}",
+            "-i",
+            str(video_path),
+            "-t",
+            f"{duration_ms / 1000:.3f}",
+            "-map",
+            "0:v:0",
+            "-an",
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
+            "-r",
+            "2",
+            str(destination),
+        ],
+        check=True,
+    )
+    return destination
+
+
 def probe_media(path: Path) -> dict[str, Any]:
     if shutil.which("ffprobe") is None:
         raise RuntimeError("ffprobe is required to validate real stimulus media")
@@ -610,6 +644,17 @@ def _events_dataframe_for_block(model: Any, block: dict[str, Any], working_dir: 
             extensions_by_mime=VIDEO_EXTENSIONS_BY_MIME,
             fallback_extension=".mp4",
         )
+        trim_start_ms = int(block.get("trim_start_ms") or 0)
+        source_duration_ms = int(block.get("source_duration_ms") or 0)
+        duration_ms = int(block.get("duration_ms") or 0)
+        if trim_start_ms > 0 or (source_duration_ms and duration_ms < source_duration_ms):
+            trimmed_path = working_dir / "inputs" / f"{_safe_file_stem(block, 'video')}-trimmed.mp4"
+            video_path = trim_video_for_tribe(
+                video_path,
+                trimmed_path,
+                start_ms=trim_start_ms,
+                duration_ms=duration_ms,
+            )
         return model.get_events_dataframe(video_path=str(video_path))
 
     raise ValueError("Real TRIBE inference supports image, text, audio, and video inputs.")

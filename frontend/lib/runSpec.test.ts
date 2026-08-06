@@ -54,14 +54,15 @@ describe("runSpec", () => {
       makeBlock({
         type: "video",
         duration_ms: 9000,
-        payload: { s3_key: "uploads/clip.mp4", mime_type: "video/mp4", duration_ms: 9000 }
+        payload: { s3_key: "uploads/clip.mp4", mime_type: "video/mp4", duration_ms: 9000, trim_start_ms: 500 }
       })
     ]);
 
     expect(input.blocks[0]).toMatchObject({
       type: "video",
       s3_key: "uploads/clip.mp4",
-      source_duration_ms: 9000
+      source_duration_ms: 9000,
+      trim_start_ms: 500
     });
   });
 

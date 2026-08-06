@@ -66,6 +66,7 @@ def block_to_run_spec(block: Block) -> dict[str, Any]:
             "s3_key": _required_payload_string(block, "s3_key", "video blocks require s3_key"),
             "mime_type": _required_payload_string(block, "mime_type", "video blocks require mime_type"),
             "source_duration_ms": block.payload.get("duration_ms"),
+            "trim_start_ms": block.payload.get("trim_start_ms", 0),
         }
 
     return {

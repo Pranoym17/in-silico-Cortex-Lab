@@ -72,3 +72,46 @@ def test_run_request_rejects_audio_duration_mismatch():
             }
         )
 
+
+def test_run_request_accepts_trimmed_video_range():
+    request = RunExperimentRequest.model_validate(
+        {
+            "blocks": [
+                {
+                    "id": "video-1",
+                    "type": "video",
+                    "start_ms": 0,
+                    "duration_ms": 4_000,
+                    "source_duration_ms": 10_000,
+                    "trim_start_ms": 5_000,
+                    "content_hash": "sha256:abc123",
+                    "s3_key": "uploads/video.mp4",
+                    "mime_type": "video/mp4",
+                }
+            ]
+        }
+    )
+
+    assert request.blocks[0].trim_start_ms == 5_000
+
+
+def test_run_request_rejects_video_trim_outside_source_duration():
+    with pytest.raises(ValidationError, match="trim range"):
+        RunExperimentRequest.model_validate(
+            {
+                "blocks": [
+                    {
+                        "id": "video-1",
+                        "type": "video",
+                        "start_ms": 0,
+                        "duration_ms": 6_000,
+                        "source_duration_ms": 10_000,
+                        "trim_start_ms": 5_000,
+                        "content_hash": "sha256:abc123",
+                        "s3_key": "uploads/video.mp4",
+                        "mime_type": "video/mp4",
+                    }
+                ]
+            }
+        )
+

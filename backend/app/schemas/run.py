@@ -59,13 +59,14 @@ class VideoBlock(BaseStimulusBlock):
     s3_key: str
     mime_type: Literal["video/mp4", "video/webm", "video/quicktime"]
     source_duration_ms: int | None = Field(default=None, gt=0)
+    trim_start_ms: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def validate_source_duration(self) -> "VideoBlock":
         if not 500 <= self.duration_ms <= 10000:
             raise ValueError("video block duration must be between 500ms and 10000ms")
-        if self.source_duration_ms is not None and abs(self.duration_ms - self.source_duration_ms) > 250:
-            raise ValueError("video block duration must match the uploaded media duration")
+        if self.source_duration_ms is not None and self.trim_start_ms + self.duration_ms > self.source_duration_ms + 250:
+            raise ValueError("video trim range must fit inside the uploaded media duration")
         return self
 
 

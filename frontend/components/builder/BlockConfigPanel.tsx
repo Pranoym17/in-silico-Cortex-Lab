@@ -45,6 +45,7 @@ export function BlockConfigPanel({
   const [filename, setFilename] = useState("");
   const [audioMimeType, setAudioMimeType] = useState("audio/wav");
   const [videoMimeType, setVideoMimeType] = useState("video/mp4");
+  const [videoTrimStartMs, setVideoTrimStartMs] = useState(0);
   const [channels, setChannels] = useState(1);
   const [sampleRateHz, setSampleRateHz] = useState(16000);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -116,6 +117,7 @@ export function BlockConfigPanel({
       setFilename("");
       setAudioMimeType("audio/wav");
       setVideoMimeType("video/mp4");
+      setVideoTrimStartMs(0);
       setChannels(1);
       setSampleRateHz(16000);
       setUploadError(null);
@@ -150,6 +152,7 @@ export function BlockConfigPanel({
     setFilename(typeof block.payload.filename === "string" ? block.payload.filename : "");
     setAudioMimeType(typeof block.payload.mime_type === "string" ? block.payload.mime_type : "audio/wav");
     setVideoMimeType(typeof block.payload.mime_type === "string" ? block.payload.mime_type : "video/mp4");
+    setVideoTrimStartMs(typeof block.payload.trim_start_ms === "number" ? block.payload.trim_start_ms : 0);
     setChannels(typeof block.payload.channels === "number" ? block.payload.channels : 1);
     setSampleRateHz(typeof block.payload.sample_rate_hz === "number" ? block.payload.sample_rate_hz : 16000);
     setUploadError(null);
@@ -190,7 +193,8 @@ export function BlockConfigPanel({
         source: typeof basePayload.source === "string" ? basePayload.source : "upload",
         filename,
         s3_key: s3Key,
-        mime_type: videoMimeType
+        mime_type: videoMimeType,
+        trim_start_ms: videoTrimStartMs
       };
     }
 
@@ -551,6 +555,17 @@ export function BlockConfigPanel({
               </select>
             </label>
             <p>Videos are limited to 10 seconds for launch inference.</p>
+            <label>
+              Trim start (ms)
+              <input
+                min={0}
+                onChange={(event) => setVideoTrimStartMs(Math.max(0, Number(event.target.value)))}
+                step={100}
+                type="number"
+                value={videoTrimStartMs}
+              />
+            </label>
+            <p>Block duration is the selected clip length. The selected range must remain inside the uploaded video.</p>
           </>
         ) : null}
         <label>

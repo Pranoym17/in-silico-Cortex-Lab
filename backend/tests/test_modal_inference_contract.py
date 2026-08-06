@@ -504,6 +504,43 @@ def test_real_tribe_stream_converts_image_to_supported_video(monkeypatch):
     assert events[3]["type"] == "chunk"
 
 
+def test_real_tribe_stream_trims_uploaded_video_before_inference(monkeypatch):
+    model = FakeTribeModel()
+    working_dir = _working_dir("trimmed-video")
+    video_path = working_dir / "stimulus.mp4"
+    video_path.write_bytes(b"mp4")
+    trims = []
+
+    def fake_trim_video_for_tribe(source, destination, *, start_ms, duration_ms):
+        trims.append((source, destination, start_ms, duration_ms))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"trimmed-mp4")
+        return destination
+
+    monkeypatch.setattr(tribe_inference, "trim_video_for_tribe", fake_trim_video_for_tribe)
+    spec = {
+        "blocks": [
+            {
+                "id": "video-real",
+                "type": "video",
+                "start_ms": 0,
+                "duration_ms": 2000,
+                "source_duration_ms": 8000,
+                "trim_start_ms": 3000,
+                "content_hash": "sha256:abc123",
+                "local_path": str(video_path),
+                "mime_type": "video/mp4",
+            }
+        ]
+    }
+
+    list(tribe_inference.run_real_tribe_stream(spec, model=model, working_dir=working_dir))
+
+    expected_path = working_dir / "inputs" / "video-real-trimmed.mp4"
+    assert trims == [(video_path, expected_path, 3000, 2000)]
+    assert model.video_paths == [str(expected_path)]
+
+
 def test_real_tribe_stream_uses_model_repetition_time_for_sample_rate():
     model = FakeTribeModel()
     model.data = type("FakeData", (), {"TR": 2.0})()

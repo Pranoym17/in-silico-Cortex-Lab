@@ -36,6 +36,7 @@ export type VideoRunBlock = RunBlock & {
   s3_key: string;
   mime_type: string;
   source_duration_ms?: number;
+  trim_start_ms: number;
 };
 
 export type RunExperimentInput = {
@@ -107,7 +108,8 @@ export function toRunBlock(block: StimulusBlock): ImageRunBlock | TextRunBlock |
       type: "video",
       s3_key: requireString(block.payload.s3_key, "Video blocks need an S3 object key before running."),
       mime_type: requireString(block.payload.mime_type, "Video blocks need a MIME type before running."),
-      source_duration_ms: typeof block.payload.duration_ms === "number" ? block.payload.duration_ms : undefined
+      source_duration_ms: typeof block.payload.duration_ms === "number" ? block.payload.duration_ms : undefined,
+      trim_start_ms: typeof block.payload.trim_start_ms === "number" ? block.payload.trim_start_ms : 0
     };
   }
 
