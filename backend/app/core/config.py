@@ -35,10 +35,11 @@ class Settings(BaseSettings):
     modal_environment_name: str | None = None
     modal_call_timeout_seconds: int = 300
     modal_call_max_attempts: int = 2
-    optimizer_provider: Literal["fake", "anthropic"] = "fake"
+    optimizer_provider: Literal["fake", "anthropic", "real"] = "fake"
     anthropic_api_key: str | None = None
     optimizer_job_ttl_seconds: int = 86_400
     optimizer_max_candidates_per_job: int = 100
+    optimizer_real_max_candidates_per_job: int = 12
     ml_cache_enabled: bool = True
     ml_cache_ttl_seconds: int = 2_592_000
     cognitive_classifier_mode: Literal["rules", "artifact"] = "rules"

@@ -2,11 +2,13 @@ from dataclasses import dataclass, field
 import hashlib
 import json
 import logging
+from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 from uuid import UUID, uuid4
 
 import redis
+import numpy as np
 from pydantic import ValidationError
 
 from app.core.config import get_settings
@@ -87,11 +89,18 @@ def _load_persisted_record(job_id: UUID) -> OptimizerJobRecord | None:
 
 def start_optimizer_job(request: OptimizerRequest) -> OptimizerStartResponse:
     settings = get_settings()
-    if request.generations * request.candidates_per_generation > settings.optimizer_max_candidates_per_job:
-        raise ValueError(f"Optimizer request exceeds the {settings.optimizer_max_candidates_per_job}-candidate safety limit.")
+    requested_candidates = request.generations * request.candidates_per_generation
+    limit = settings.optimizer_real_max_candidates_per_job if settings.optimizer_provider == "real" else settings.optimizer_max_candidates_per_job
+    if requested_candidates > limit:
+        raise ValueError(f"Optimizer request exceeds the {limit}-candidate safety limit.")
     job_id = uuid4()
     record = OptimizerJobRecord(id=job_id, request=request)
     _persist_record(record)
+    if settings.optimizer_provider == "real":
+        from app.tasks.optimizer_task import run_optimizer
+
+        run_optimizer.delay(str(job_id))
+        return OptimizerStartResponse(optimizer_job_id=job_id, status="queued", stream_url=f"/api/ml/optimize/{job_id}/stream")
     run_configured_optimizer(record)
     return OptimizerStartResponse(
         optimizer_job_id=job_id,
@@ -121,7 +130,9 @@ def run_configured_optimizer(record: OptimizerJobRecord) -> None:
         replay_cached_result(record, cached)
         return
 
-    if provider == "anthropic":
+    if provider == "real":
+        run_real_optimizer(record)
+    elif provider == "anthropic":
         run_anthropic_optimizer(record)
     else:
         run_fake_optimizer(record)
@@ -129,6 +140,79 @@ def run_configured_optimizer(record: OptimizerJobRecord) -> None:
     if record.result is not None:
         set_cached_optimizer_result(record.request, provider, record.result)
     _persist_record(record)
+
+
+def run_real_optimizer(record: OptimizerJobRecord) -> None:
+    record.status = "running"
+    request = record.request
+    record.events.append(("queued", {"optimizer_job_id": str(record.id), "status": "queued", "target_region": request.target_region, "direction": request.direction, "scoring": "real_tribe"}))
+    _persist_record(record)
+    best_score = float("-inf")
+    best_stimulus = ""
+    generations: list[OptimizerGenerationEvent] = []
+    for generation in range(1, request.generations + 1):
+        if _cancelled_in_store(record.id):
+            record.status = "cancelled"
+            _persist_record(record)
+            return
+        texts = fake_candidates(request, generation)
+        candidates: list[OptimizerCandidate] = []
+        for index, prototype in enumerate(texts):
+            if _cancelled_in_store(record.id):
+                record.status = "cancelled"
+                _persist_record(record)
+                return
+            try:
+                score = score_real_candidate(prototype.text, request, record.id, generation, index)
+            except Exception as exc:
+                fail_optimizer(record, "real_scoring_failed", f"Real TRIBE optimizer scoring failed: {exc}")
+                return
+            candidates.append(OptimizerCandidate(text=prototype.text, score=score))
+        generation_best = max(candidates, key=lambda candidate: candidate.score)
+        if generation_best.score > best_score:
+            best_score, best_stimulus = generation_best.score, generation_best.text
+        event = OptimizerGenerationEvent(optimizer_job_id=record.id, generation=generation, best_score=best_score, best_stimulus=best_stimulus, candidates=candidates)
+        generations.append(event)
+        record.events.append(("generation", event.model_dump(mode="json")))
+        _persist_record(record)
+    record.status = "complete"
+    record.result = OptimizerResult(optimizer_job_id=record.id, status="complete", target_region=request.target_region, direction=request.direction, best_score=best_score, best_stimulus=best_stimulus, generations=generations)
+    record.events.append(("complete", record.result.model_dump(mode="json")))
+    _persist_record(record)
+
+
+def _cancelled_in_store(job_id: UUID) -> bool:
+    stored = _load_persisted_record(job_id)
+    return stored is not None and stored.status == "cancelled"
+
+
+def score_real_candidate(text: str, request: OptimizerRequest, job_id: UUID, generation: int, index: int) -> float:
+    """Run a text candidate through deployed TRIBE and score mean signed activation in its atlas region."""
+    import modal
+
+    normalized_target = request.target_region.lower().replace(" ", "").replace("-", "")
+    atlas = json.loads((Path(__file__).resolve().parents[3] / "frontend" / "public" / "brain" / "atlas-desikan-killiany.json").read_text(encoding="utf-8"))
+    indices = [int(vertex) for vertex, label in atlas.items() if str(label).lower().replace(" ", "").replace("-", "") == normalized_target]
+    if not indices:
+        raise ValueError(f"Unknown atlas region: {request.target_region}")
+    spec = {
+        "job_id": f"optimizer-{job_id}-{generation}-{index}",
+        "blocks": [{"id": "candidate", "type": "text", "start_ms": 0, "duration_ms": 4000, "content_hash": f"sha256:{hashlib.sha256(text.encode()).hexdigest()}", "text": text, "voice": "tribe_official_gtts"}],
+        "settings": {"hrf_offset_ms": 5000, "target_sample_rate_hz": 2, "surface": "fsaverage5", "atlas": "desikan-killiany"},
+    }
+    settings = get_settings()
+    function = modal.Function.from_name(settings.modal_app_name, settings.modal_function_name, environment_name=settings.modal_environment_name)
+    frames: list[np.ndarray] = []
+    for event in function.remote_gen(spec):
+        if event.get("type") == "chunk":
+            shape = event.get("shape")
+            if not isinstance(shape, list) or len(shape) != 2 or shape[1] != 20_484:
+                raise ValueError("TRIBE optimizer response violated the 20,484-vertex contract")
+            frames.append(np.frombuffer(event["activations"], dtype="<f4").reshape(shape).copy())
+    if not frames:
+        raise ValueError("TRIBE returned no activation frames for optimizer candidate")
+    regional_mean = float(np.concatenate(frames, axis=0)[:, indices].mean())
+    return regional_mean if request.direction == "maximize" else -regional_mean
 
 
 def run_fake_optimizer(record: OptimizerJobRecord) -> None:

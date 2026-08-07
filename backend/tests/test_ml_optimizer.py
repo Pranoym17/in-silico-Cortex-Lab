@@ -112,6 +112,19 @@ def test_cached_optimizer_result_is_replayed_with_new_job_id(monkeypatch):
 
 def test_anthropic_provider_fails_without_api_key(monkeypatch):
     ml_optimizer.get_settings.cache_clear()
+
+
+def test_real_provider_enqueues_worker(monkeypatch):
+    ml_optimizer.get_settings.cache_clear()
+    monkeypatch.setenv("OPTIMIZER_PROVIDER", "real")
+    dispatched: list[str] = []
+    monkeypatch.setattr("app.tasks.optimizer_task.run_optimizer.delay", lambda job_id: dispatched.append(job_id))
+
+    response = start_optimizer_job(OptimizerRequest(target_region="Left Fusiform", direction="maximize", generations=1, candidates_per_generation=1))
+
+    assert response.status == "queued"
+    assert dispatched == [str(response.optimizer_job_id)]
+    ml_optimizer.get_settings.cache_clear()
     monkeypatch.setenv("OPTIMIZER_PROVIDER", "anthropic")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
