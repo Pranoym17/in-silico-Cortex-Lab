@@ -200,9 +200,10 @@ def generate() -> list[dict]:
         [207.65, 246.94, 311.13, 415.30], [246.94, 311.13, 369.99, 493.88], [196.00, 293.66, 392.00, 493.88],
         [220.00, 277.18, 329.63, 440.00], [261.63, 392.00, 493.88, 659.25], [174.61, 261.63, 349.23, 523.25],
     ]
+    music_ids = ["music-major-01", "music-minor-01", *[f"music-{index:02}" for index in range(3, 13)]]
     assets.extend(
-        [write_tone(f"music-{index + 1:02}", f"Procedural arpeggio {index + 1}", notes, ["music", "instrumental"])
-         for index, notes in enumerate(music_sequences)]
+        [write_tone(identifier, f"Procedural arpeggio {index + 1}", notes, ["music", "instrumental"])
+         for index, (identifier, notes) in enumerate(zip(music_ids, music_sequences, strict=True))]
     )
     assets.extend(
         [

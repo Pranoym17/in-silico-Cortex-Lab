@@ -4285,7 +4285,7 @@
       "generated": true
     },
     {
-      "id": "music-01",
+      "id": "music-major-01",
       "title": "Procedural arpeggio 1",
       "category": "audio",
       "modality": "audio",
@@ -4293,8 +4293,8 @@
         "music",
         "instrumental"
       ],
-      "public_path": "/stimuli/v1/audio/music-01.wav",
-      "object_key": "stimulus-library/v1/audio/music-01.wav",
+      "public_path": "/stimuli/v1/audio/music-major-01.wav",
+      "object_key": "stimulus-library/v1/audio/music-major-01.wav",
       "mime_type": "audio/wav",
       "sha256": "4271f27dd2ca2e749caec7845c6353f3848e94611531965ba32df928b02529f5",
       "license": "CC0-1.0",
@@ -4308,7 +4308,7 @@
       "sample_rate_hz": 16000
     },
     {
-      "id": "music-02",
+      "id": "music-minor-01",
       "title": "Procedural arpeggio 2",
       "category": "audio",
       "modality": "audio",
@@ -4316,8 +4316,8 @@
         "music",
         "instrumental"
       ],
-      "public_path": "/stimuli/v1/audio/music-02.wav",
-      "object_key": "stimulus-library/v1/audio/music-02.wav",
+      "public_path": "/stimuli/v1/audio/music-minor-01.wav",
+      "object_key": "stimulus-library/v1/audio/music-minor-01.wav",
       "mime_type": "audio/wav",
       "sha256": "25cebaa6ee2bd0adec19501ce68e623e0a6e17123bd4b5c9971a3bc51a3448b3",
       "license": "CC0-1.0",

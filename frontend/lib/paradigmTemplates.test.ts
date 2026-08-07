@@ -39,7 +39,7 @@ describe("PARADIGM_TEMPLATES", () => {
   });
 
   it("ships a searchable CC0 catalog of approximately 200 stimuli", () => {
-    expect(STIMULUS_ASSETS).toHaveLength(205);
+    expect(STIMULUS_ASSETS).toHaveLength(215);
     expect(STIMULUS_ASSETS.every((asset) => asset.license === "CC0-1.0")).toBe(true);
     expect(STIMULUS_ASSETS.every((asset) => asset.redistribution_permitted)).toBe(true);
     expect(searchStimulusAssets("face", "faces").length).toBeGreaterThanOrEqual(40);
