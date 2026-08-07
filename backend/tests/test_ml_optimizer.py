@@ -1,4 +1,8 @@
 from uuid import UUID
+import sys
+from types import SimpleNamespace
+
+import numpy as np
 
 from app.schemas.ml import OptimizerRequest
 from app.services import ml_optimizer
@@ -9,6 +13,7 @@ from app.services.ml_optimizer import (
     fake_candidates,
     get_optimizer_job,
     optimizer_cache_key,
+    score_real_candidate,
     start_optimizer_job,
 )
 
@@ -126,6 +131,23 @@ def test_anthropic_provider_fails_without_api_key(monkeypatch):
 
 def test_real_provider_enqueues_worker(monkeypatch):
     ml_optimizer.get_settings.cache_clear()
+
+
+def test_real_candidate_score_uses_selected_atlas_region(monkeypatch):
+    frame = np.zeros((1, 20_484), dtype="<f4")
+    frame[0, 10] = 2.5  # atlas vertex 10 is Left-superiortemporal
+
+    class FakeFunction:
+        @staticmethod
+        def from_name(*_args, **_kwargs):
+            return SimpleNamespace(remote_gen=lambda _spec: iter([{"type": "chunk", "shape": [1, 20_484], "activations": frame.tobytes()}]))
+
+    monkeypatch.setitem(sys.modules, "modal", SimpleNamespace(Function=FakeFunction))
+    request = OptimizerRequest(target_region="Left Superior Temporal", direction="maximize", generations=1, candidates_per_generation=1)
+
+    score = score_real_candidate("A short auditory sentence.", request, UUID("00000000-0000-0000-0000-000000000010"), 1, 0)
+
+    assert score > 0
     monkeypatch.setenv("OPTIMIZER_PROVIDER", "real")
     dispatched: list[str] = []
     monkeypatch.setattr("app.tasks.optimizer_task.run_optimizer.delay", lambda job_id: dispatched.append(job_id))
