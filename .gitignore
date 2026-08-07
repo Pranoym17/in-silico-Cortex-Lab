@@ -4,6 +4,7 @@ logs
 .dev-logs/
 .tmp_pytest/
 .tmp_*/
+.tmp/
 backend/tmp_*/
 evidence/
 evidence-inputs/*.npz

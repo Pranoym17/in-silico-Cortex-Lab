@@ -18,13 +18,15 @@ class CognitiveClassifierArtifact:
     labels: tuple[str, ...]
     weights: tuple[NDArray[np.float32], ...]
     biases: tuple[NDArray[np.float32], ...]
+    mean: NDArray[np.float32]
+    std: NDArray[np.float32]
 
     def predict_proba(self, activations: NDArray[np.float32]) -> NDArray[np.float32]:
         if activations.ndim != 2 or activations.shape[1] != self.weights[0].shape[0]:
             raise ClassifierArtifactError(
                 f"Classifier requires activation frames shaped [timesteps, {self.weights[0].shape[0]}]."
             )
-        values = np.asarray(activations, dtype=np.float32)
+        values = (np.asarray(activations, dtype=np.float32) - self.mean) / self.std
         for index, (weight, bias) in enumerate(zip(self.weights, self.biases, strict=True)):
             values = values @ weight + bias
             if index < len(self.weights) - 1:
@@ -49,6 +51,8 @@ def load_cognitive_classifier_artifact(
             labels = tuple(str(value) for value in archive["labels"].tolist())
             weights = tuple(np.asarray(archive[f"w{index}"], dtype=np.float32) for index in range(1, len(expected_widths)))
             biases = tuple(np.asarray(archive[f"b{index}"], dtype=np.float32) for index in range(1, len(expected_widths)))
+            mean = np.asarray(archive["mean"], dtype=np.float32)
+            std = np.asarray(archive["std"], dtype=np.float32)
     except (KeyError, OSError, ValueError) as exc:
         raise ClassifierArtifactError(f"Cognitive classifier artifact is invalid: {exc}") from exc
 
@@ -64,7 +68,11 @@ def load_cognitive_classifier_artifact(
             raise ClassifierArtifactError(f"b{index} must have shape ({output_width},).")
         if not np.isfinite(weight).all() or not np.isfinite(bias).all():
             raise ClassifierArtifactError("Classifier weights and biases must be finite.")
-    return CognitiveClassifierArtifact(version=version, labels=labels, weights=weights, biases=biases)
+    if mean.shape != (expected_widths[0],) or std.shape != (expected_widths[0],):
+        raise ClassifierArtifactError(f"mean and std must each have shape ({expected_widths[0]},).")
+    if not np.isfinite(mean).all() or not np.isfinite(std).all() or np.any(std <= 0):
+        raise ClassifierArtifactError("Classifier normalization statistics must be finite with positive standard deviations.")
+    return CognitiveClassifierArtifact(version=version, labels=labels, weights=weights, biases=biases, mean=mean, std=std)
 
 
 def _required_scalar_string(archive: np.lib.npyio.NpzFile, key: str) -> str:

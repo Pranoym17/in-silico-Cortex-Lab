@@ -8,6 +8,8 @@ def write_artifact(path, *, widths=(4, 3, 2), labels=("rest", "active")):
     values = {
         "version": np.array("test-v1"),
         "labels": np.array(labels),
+        "mean": np.zeros(widths[0], dtype=np.float32),
+        "std": np.ones(widths[0], dtype=np.float32),
     }
     for index, (input_width, output_width) in enumerate(zip(widths, widths[1:]), start=1):
         values[f"w{index}"] = np.full((input_width, output_width), 0.1, dtype=np.float32)
