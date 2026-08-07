@@ -194,10 +194,18 @@ def generate() -> list[dict]:
         assets.append(save_image(f"word-{index + 1:03}", "words", f"Rendered word {word} {index + 1}", word_image(word), ["word", "reading"]))
     for index in range(40):
         assets.append(save_image(f"pattern-{index + 1:03}", "patterns", f"Abstract pattern {index + 1}", pattern, ["pattern", "retinotopy"]))
+    music_sequences = [
+        [261.63, 329.63, 392.00, 523.25], [220.00, 261.63, 329.63, 440.00], [196.00, 246.94, 293.66, 392.00],
+        [233.08, 293.66, 349.23, 466.16], [174.61, 220.00, 261.63, 349.23], [293.66, 369.99, 440.00, 587.33],
+        [207.65, 246.94, 311.13, 415.30], [246.94, 311.13, 369.99, 493.88], [196.00, 293.66, 392.00, 493.88],
+        [220.00, 277.18, 329.63, 440.00], [261.63, 392.00, 493.88, 659.25], [174.61, 261.63, 349.23, 523.25],
+    ]
+    assets.extend(
+        [write_tone(f"music-{index + 1:02}", f"Procedural arpeggio {index + 1}", notes, ["music", "instrumental"])
+         for index, notes in enumerate(music_sequences)]
+    )
     assets.extend(
         [
-            write_tone("music-major-01", "Major arpeggio", [261.63, 329.63, 392.00, 523.25], ["music", "instrumental"]),
-            write_tone("music-minor-01", "Minor arpeggio", [220.00, 261.63, 329.63, 440.00], ["music", "instrumental"]),
             write_tone("auditory-control-01", "Auditory control tones", [180.0, 240.0, 300.0], ["audio", "control"]),
             write_tone("auditory-control-02", "Auditory control pulses", [320.0, 160.0], ["audio", "control"]),
         ]

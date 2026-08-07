@@ -10,10 +10,10 @@ CATALOG_PATH = ROOT / "frontend" / "public" / "stimuli" / "v1" / "catalog.json"
 def test_catalog_files_hashes_and_licenses_are_complete():
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
 
-    assert catalog["asset_count"] == 205
-    assert len(catalog["assets"]) == 205
+    assert catalog["asset_count"] == 215
+    assert len(catalog["assets"]) == 215
     assert catalog["license_policy"] == "cc0-public-domain"
-    assert len({asset["id"] for asset in catalog["assets"]}) == 205
+    assert len({asset["id"] for asset in catalog["assets"]}) == 215
 
     for asset in catalog["assets"]:
         path = ROOT / "frontend" / "public" / asset["public_path"].removeprefix("/")

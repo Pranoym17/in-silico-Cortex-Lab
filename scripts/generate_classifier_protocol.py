@@ -28,6 +28,12 @@ TEXTS = {
         "A patient reader considered the meaning of each sentence.",
         "The musician listened for changes in the melody.",
         "The researcher compared patterns across repeated trials.",
+        "The student summarized a chapter about memory and attention.",
+        "A museum guide explained the history behind an old painting.",
+        "The physician described each stage of the treatment plan.",
+        "A traveler read an account of a distant mountain village.",
+        "The editor considered the meaning of a difficult paragraph.",
+        "A colleague explained the results of a carefully planned study.",
     ],
     "Auditory - Speech": [
         "A speaker described a familiar walk through the city.",
@@ -36,6 +42,12 @@ TEXTS = {
         "The recorded voice described a bright morning sky.",
         "A short spoken story can engage auditory language systems.",
         "The participant heard a clear sequence of everyday words.",
+        "The lecturer paused briefly before describing the visual task.",
+        "A familiar voice named objects in a calm, steady rhythm.",
+        "The guide gave clear directions through a small museum.",
+        "A radio host introduced a short report about the weather.",
+        "The listener followed a simple explanation of the next step.",
+        "A teacher read a sentence aloud with careful emphasis.",
     ],
 }
 
@@ -137,8 +149,8 @@ def main() -> int:
     parser.add_argument("--labels-output", type=Path, required=True)
     parser.add_argument("--per-label", type=int, default=2)
     args = parser.parse_args()
-    if args.per_label < 2 or args.per_label > 2:
-        parser.error("per-label must be 2 until additional licensed music stimuli are added to the catalog")
+    if args.per_label < 2 or args.per_label > 12:
+        parser.error("per-label must be between 2 and 12 for the checked-in balanced pilot catalog")
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     spec, metadata = build_protocol(catalog, args.per_label)
     args.output.parent.mkdir(parents=True, exist_ok=True)
