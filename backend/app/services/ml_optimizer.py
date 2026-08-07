@@ -38,10 +38,60 @@ def clear_optimizer_jobs() -> None:
     _OPTIMIZER_JOBS.clear()
 
 
+def _job_key(job_id: UUID) -> str:
+    return f"cortex:ml:optimizer:job:{job_id}"
+
+
+def _persist_record(record: OptimizerJobRecord) -> None:
+    """Persist the replayable stream so an API restart does not erase optimizer state."""
+    _OPTIMIZER_JOBS[record.id] = record
+    payload = json.dumps(
+        {
+            "id": str(record.id),
+            "request": record.request.model_dump(mode="json"),
+            "status": record.status,
+            "events": record.events,
+            "result": record.result.model_dump(mode="json") if record.result else None,
+        },
+        separators=(",", ":"),
+    )
+    try:
+        _redis_client().setex(_job_key(record.id), get_settings().optimizer_job_ttl_seconds, payload)
+    except Exception as exc:
+        logger.warning("optimizer_job_persist_error", extra={"optimizer_job_id": str(record.id)}, exc_info=exc)
+
+
+def _load_persisted_record(job_id: UUID) -> OptimizerJobRecord | None:
+    try:
+        raw = _redis_client().get(_job_key(job_id))
+    except Exception as exc:
+        logger.warning("optimizer_job_load_error", extra={"optimizer_job_id": str(job_id)}, exc_info=exc)
+        return None
+    if raw is None:
+        return None
+    try:
+        data = json.loads(raw)
+        result = OptimizerResult.model_validate(data["result"]) if data.get("result") else None
+        events = [(str(name), dict(payload)) for name, payload in data.get("events", [])]
+        return OptimizerJobRecord(
+            id=UUID(data["id"]),
+            request=OptimizerRequest.model_validate(data["request"]),
+            status=str(data["status"]),
+            events=events,
+            result=result,
+        )
+    except (KeyError, TypeError, ValueError, ValidationError) as exc:
+        logger.warning("optimizer_job_corrupt", extra={"optimizer_job_id": str(job_id)}, exc_info=exc)
+        return None
+
+
 def start_optimizer_job(request: OptimizerRequest) -> OptimizerStartResponse:
+    settings = get_settings()
+    if request.generations * request.candidates_per_generation > settings.optimizer_max_candidates_per_job:
+        raise ValueError(f"Optimizer request exceeds the {settings.optimizer_max_candidates_per_job}-candidate safety limit.")
     job_id = uuid4()
     record = OptimizerJobRecord(id=job_id, request=request)
-    _OPTIMIZER_JOBS[job_id] = record
+    _persist_record(record)
     run_configured_optimizer(record)
     return OptimizerStartResponse(
         optimizer_job_id=job_id,
@@ -51,7 +101,17 @@ def start_optimizer_job(request: OptimizerRequest) -> OptimizerStartResponse:
 
 
 def get_optimizer_job(job_id: UUID) -> OptimizerJobRecord | None:
-    return _OPTIMIZER_JOBS.get(job_id)
+    return _OPTIMIZER_JOBS.get(job_id) or _load_persisted_record(job_id)
+
+
+def cancel_optimizer_job(job_id: UUID) -> OptimizerJobRecord | None:
+    record = get_optimizer_job(job_id)
+    if record is None or record.status in {"complete", "failed", "cancelled"}:
+        return record
+    record.status = "cancelled"
+    record.events.append(("cancelled", {"optimizer_job_id": str(record.id), "status": "cancelled"}))
+    _persist_record(record)
+    return record
 
 
 def run_configured_optimizer(record: OptimizerJobRecord) -> None:
@@ -68,6 +128,7 @@ def run_configured_optimizer(record: OptimizerJobRecord) -> None:
 
     if record.result is not None:
         set_cached_optimizer_result(record.request, provider, record.result)
+    _persist_record(record)
 
 
 def run_fake_optimizer(record: OptimizerJobRecord) -> None:
@@ -90,6 +151,8 @@ def run_fake_optimizer(record: OptimizerJobRecord) -> None:
     generations: list[OptimizerGenerationEvent] = []
 
     for generation in range(1, request.generations + 1):
+        if record.status == "cancelled":
+            return
         candidates = fake_candidates(request, generation)
         generation_best = max(candidates, key=lambda candidate: candidate.score)
         if generation_best.score > best_score:
@@ -105,6 +168,7 @@ def run_fake_optimizer(record: OptimizerJobRecord) -> None:
         )
         generations.append(event)
         record.events.append(("generation", event.model_dump(mode="json")))
+        _persist_record(record)
 
     record.status = "complete"
     record.result = OptimizerResult(
@@ -117,6 +181,7 @@ def run_fake_optimizer(record: OptimizerJobRecord) -> None:
         generations=generations,
     )
     record.events.append(("complete", record.result.model_dump(mode="json")))
+    _persist_record(record)
 
 
 def fake_candidates(request: OptimizerRequest, generation: int) -> list[OptimizerCandidate]:
@@ -161,6 +226,8 @@ def run_anthropic_optimizer(record: OptimizerJobRecord) -> None:
     generations: list[OptimizerGenerationEvent] = []
     exemplars: list[str] = []
     for generation in range(1, request.generations + 1):
+        if record.status == "cancelled":
+            return
         try:
             texts = anthropic_candidate_texts(request, generation, exemplars)
         except Exception as exc:
@@ -187,6 +254,7 @@ def run_anthropic_optimizer(record: OptimizerJobRecord) -> None:
         )
         generations.append(event)
         record.events.append(("generation", event.model_dump(mode="json")))
+        _persist_record(record)
 
     record.status = "complete"
     record.result = OptimizerResult(
@@ -199,6 +267,7 @@ def run_anthropic_optimizer(record: OptimizerJobRecord) -> None:
         generations=generations,
     )
     record.events.append(("complete", record.result.model_dump(mode="json")))
+    _persist_record(record)
 
 
 def anthropic_candidate_texts(request: OptimizerRequest, generation: int, exemplars: list[str]) -> list[str]:
@@ -268,6 +337,7 @@ def fail_optimizer(record: OptimizerJobRecord, code: str, message: str) -> None:
             },
         )
     )
+    _persist_record(record)
 
 
 def replay_cached_result(record: OptimizerJobRecord, cached: OptimizerResult) -> None:
@@ -305,6 +375,7 @@ def replay_cached_result(record: OptimizerJobRecord, cached: OptimizerResult) ->
         generations=generations,
     )
     record.events.append(("complete", record.result.model_dump(mode="json")))
+    _persist_record(record)
 
 
 def optimizer_cache_key(request: OptimizerRequest, provider: str) -> str:

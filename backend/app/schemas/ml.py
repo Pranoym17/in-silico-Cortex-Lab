@@ -56,6 +56,14 @@ class OptimizerStartResponse(BaseModel):
     stream_url: str
 
 
+class OptimizerJobStatusResponse(BaseModel):
+    optimizer_job_id: UUID
+    status: str
+    target_region: str
+    direction: str
+    result: "OptimizerResult | None" = None
+
+
 class OptimizerCandidate(BaseModel):
     text: str
     score: float

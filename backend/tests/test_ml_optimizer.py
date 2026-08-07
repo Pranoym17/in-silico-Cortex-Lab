@@ -4,6 +4,7 @@ from app.schemas.ml import OptimizerRequest
 from app.services import ml_optimizer
 from app.services.ml_optimizer import (
     anthropic_candidate_texts,
+    cancel_optimizer_job,
     clear_optimizer_jobs,
     fake_candidates,
     get_optimizer_job,
@@ -46,6 +47,53 @@ def test_optimizer_cache_key_is_stable():
 
     assert optimizer_cache_key(request, "fake") == optimizer_cache_key(request, "fake")
     assert optimizer_cache_key(request, "fake") != optimizer_cache_key(request, "anthropic")
+
+
+def test_optimizer_record_survives_local_memory_reset(monkeypatch):
+    stored: dict[str, str] = {}
+
+    class FakeRedis:
+        def setex(self, key, _ttl, value):
+            stored[key] = value
+
+        def get(self, key):
+            return stored.get(key)
+
+    monkeypatch.setattr(ml_optimizer, "_redis_client", lambda: FakeRedis())
+    response = start_optimizer_job(OptimizerRequest(target_region="Left Fusiform", direction="maximize", generations=1, candidates_per_generation=1))
+    clear_optimizer_jobs()
+
+    recovered = get_optimizer_job(response.optimizer_job_id)
+
+    assert recovered is not None
+    assert recovered.status == "complete"
+    assert recovered.result is not None
+    assert recovered.result.best_stimulus
+
+
+def test_cancel_optimizer_job_persists_terminal_status(monkeypatch):
+    stored: dict[str, str] = {}
+
+    class FakeRedis:
+        def setex(self, key, _ttl, value):
+            stored[key] = value
+
+        def get(self, key):
+            return stored.get(key)
+
+    monkeypatch.setattr(ml_optimizer, "_redis_client", lambda: FakeRedis())
+    record = ml_optimizer.OptimizerJobRecord(
+        id=UUID("00000000-0000-0000-0000-000000000099"),
+        request=OptimizerRequest(target_region="Left Fusiform", direction="maximize"),
+        status="running",
+    )
+    ml_optimizer._persist_record(record)
+
+    cancelled = cancel_optimizer_job(record.id)
+
+    assert cancelled is not None
+    assert cancelled.status == "cancelled"
+    assert cancelled.events[-1][0] == "cancelled"
 
 
 def test_cached_optimizer_result_is_replayed_with_new_job_id(monkeypatch):

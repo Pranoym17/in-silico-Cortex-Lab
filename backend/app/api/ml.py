@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import require_user
 from app.core.database import get_db
 from app.models.user import User
-from app.schemas.ml import CognitiveStatesResponse, OptimizerRequest, OptimizerStartResponse, RsaRequest, RsaResponse
+from app.schemas.ml import CognitiveStatesResponse, OptimizerJobStatusResponse, OptimizerRequest, OptimizerStartResponse, RsaRequest, RsaResponse
 from app.services.ml_cognitive_states import get_cognitive_states
-from app.services.ml_optimizer import get_optimizer_job, start_optimizer_job
+from app.services.ml_optimizer import cancel_optimizer_job, get_optimizer_job, start_optimizer_job
 from app.services.ml_rsa import run_rsa
 from app.services.sse import encode_sse
 
@@ -44,7 +44,36 @@ async def start_optimizer_route(
     body: OptimizerRequest,
     _: User = Depends(require_user),
 ) -> OptimizerStartResponse:
-    return start_optimizer_job(body)
+    try:
+        return start_optimizer_job(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+def optimizer_status_response(record) -> OptimizerJobStatusResponse:
+    return OptimizerJobStatusResponse(
+        optimizer_job_id=record.id,
+        status=record.status,
+        target_region=record.request.target_region,
+        direction=record.request.direction,
+        result=record.result,
+    )
+
+
+@router.get("/optimize/{optimizer_job_id}", response_model=OptimizerJobStatusResponse)
+async def get_optimizer_route(optimizer_job_id: UUID, _: User = Depends(require_user)) -> OptimizerJobStatusResponse:
+    record = get_optimizer_job(optimizer_job_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Optimizer job not found")
+    return optimizer_status_response(record)
+
+
+@router.post("/optimize/{optimizer_job_id}/cancel", response_model=OptimizerJobStatusResponse)
+async def cancel_optimizer_route(optimizer_job_id: UUID, _: User = Depends(require_user)) -> OptimizerJobStatusResponse:
+    record = cancel_optimizer_job(optimizer_job_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Optimizer job not found")
+    return optimizer_status_response(record)
 
 
 @router.get("/optimize/{optimizer_job_id}/stream")
