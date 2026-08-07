@@ -18,11 +18,17 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--app", default="cortex-lab-tribe-inference")
     parser.add_argument("--function", default="run_real")
+    parser.add_argument("--max-blocks", type=int, default=0, help="Capture only the first N blocks for bounded shard runs.")
     args = parser.parse_args()
 
     import modal
 
     spec = json.loads(args.spec.read_text(encoding="utf-8"))
+    if args.max_blocks:
+        blocks = spec.get("blocks")
+        if not isinstance(blocks, list) or args.max_blocks < 1:
+            parser.error("--max-blocks requires a positive block count in the input spec")
+        spec["blocks"] = blocks[: args.max_blocks]
     chunks: list[tuple[int, np.ndarray]] = []
     metadata: list[dict] = []
     completed = False
