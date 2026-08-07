@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 import numpy as np
+import pytest
 
 from app.services.ml_cognitive_states import (
     block_for_timestep,
@@ -8,6 +9,16 @@ from app.services.ml_cognitive_states import (
     label_for_block,
     score_from_activation,
 )
+from app.core.config import get_settings
+
+
+@pytest.fixture(autouse=True)
+def rules_classifier_mode(monkeypatch):
+    monkeypatch.setenv("COGNITIVE_CLASSIFIER_MODE", "rules")
+    monkeypatch.delenv("COGNITIVE_CLASSIFIER_ARTIFACT_PATH", raising=False)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 def run_spec():
