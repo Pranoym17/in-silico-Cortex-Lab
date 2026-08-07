@@ -18,7 +18,7 @@ def load_shard(path: Path) -> tuple[np.ndarray, dict]:
         raise ValueError(f"Missing metadata sidecar for {path}")
     with np.load(path, allow_pickle=False) as archive:
         matrix = np.asarray(archive["activations"], dtype=np.float32)
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8-sig"))
     if matrix.ndim != 2 or matrix.shape[1] != EXPECTED_VERTICES:
         raise ValueError(f"{path} is not a [timesteps, {EXPECTED_VERTICES}] reference matrix")
     stimuli = metadata.get("stimuli")
