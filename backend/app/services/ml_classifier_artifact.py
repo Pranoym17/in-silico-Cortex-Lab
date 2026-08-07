@@ -1,8 +1,11 @@
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
+
+from app.core.config import get_settings
 
 
 EXPECTED_LAYER_WIDTHS = (20_484, 512, 256, 128, 8)
@@ -41,18 +44,16 @@ def load_cognitive_classifier_artifact(
     *,
     expected_widths: tuple[int, ...] = EXPECTED_LAYER_WIDTHS,
 ) -> CognitiveClassifierArtifact:
-    artifact_path = Path(path)
-    if not artifact_path.is_file():
-        raise ClassifierArtifactError(f"Cognitive classifier artifact was not found: {artifact_path}")
-
     try:
-        with np.load(artifact_path, allow_pickle=False) as archive:
+        with np.load(_artifact_source(path), allow_pickle=False) as archive:
             version = _required_scalar_string(archive, "version")
             labels = tuple(str(value) for value in archive["labels"].tolist())
             weights = tuple(np.asarray(archive[f"w{index}"], dtype=np.float32) for index in range(1, len(expected_widths)))
             biases = tuple(np.asarray(archive[f"b{index}"], dtype=np.float32) for index in range(1, len(expected_widths)))
             mean = np.asarray(archive["mean"], dtype=np.float32)
             std = np.asarray(archive["std"], dtype=np.float32)
+    except ClassifierArtifactError:
+        raise
     except (KeyError, OSError, ValueError) as exc:
         raise ClassifierArtifactError(f"Cognitive classifier artifact is invalid: {exc}") from exc
 
@@ -73,6 +74,30 @@ def load_cognitive_classifier_artifact(
     if not np.isfinite(mean).all() or not np.isfinite(std).all() or np.any(std <= 0):
         raise ClassifierArtifactError("Classifier normalization statistics must be finite with positive standard deviations.")
     return CognitiveClassifierArtifact(version=version, labels=labels, weights=weights, biases=biases, mean=mean, std=std)
+
+
+def _artifact_source(path: str | Path):
+    value = str(path)
+    if value.startswith("s3://"):
+        bucket_and_key = value.removeprefix("s3://").split("/", 1)
+        if len(bucket_and_key) != 2 or not all(bucket_and_key):
+            raise ClassifierArtifactError("S3 classifier artifact paths must be s3://bucket/key.")
+        try:
+            import boto3
+
+            settings = get_settings()
+            client_kwargs = {"region_name": settings.aws_region}
+            if settings.aws_access_key_id and settings.aws_secret_access_key:
+                client_kwargs["aws_access_key_id"] = settings.aws_access_key_id
+                client_kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
+            response = boto3.client("s3", **client_kwargs).get_object(Bucket=bucket_and_key[0], Key=bucket_and_key[1])
+            return BytesIO(response["Body"].read())
+        except Exception as exc:
+            raise ClassifierArtifactError(f"Cognitive classifier artifact could not be downloaded from S3: {exc}") from exc
+    artifact_path = Path(value)
+    if not artifact_path.is_file():
+        raise ClassifierArtifactError(f"Cognitive classifier artifact was not found: {artifact_path}")
+    return artifact_path
 
 
 def _required_scalar_string(archive: np.lib.npyio.NpzFile, key: str) -> str:

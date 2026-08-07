@@ -35,3 +35,22 @@ def test_load_classifier_artifact_rejects_wrong_weight_shape(tmp_path):
 
     with pytest.raises(ClassifierArtifactError, match="w1 must have shape"):
         load_cognitive_classifier_artifact(path, expected_widths=(5, 3, 2))
+
+
+def test_load_classifier_artifact_reads_s3_uri(monkeypatch, tmp_path):
+    path = tmp_path / "classifier.npz"
+    write_artifact(path)
+
+    class FakeBody:
+        def read(self):
+            return path.read_bytes()
+
+    class FakeClient:
+        def get_object(self, **kwargs):
+            assert kwargs == {"Bucket": "models", "Key": "classifier.npz"}
+            return {"Body": FakeBody()}
+
+    monkeypatch.setattr("boto3.client", lambda _service, **_kwargs: FakeClient())
+    classifier = load_cognitive_classifier_artifact("s3://models/classifier.npz", expected_widths=(4, 3, 2))
+
+    assert classifier.version == "test-v1"
