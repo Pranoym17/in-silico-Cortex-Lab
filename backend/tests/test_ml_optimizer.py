@@ -112,6 +112,16 @@ def test_cached_optimizer_result_is_replayed_with_new_job_id(monkeypatch):
 
 def test_anthropic_provider_fails_without_api_key(monkeypatch):
     ml_optimizer.get_settings.cache_clear()
+    monkeypatch.setenv("OPTIMIZER_PROVIDER", "anthropic")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    response = start_optimizer_job(OptimizerRequest(target_region="Left Fusiform", direction="maximize"))
+    record = get_optimizer_job(response.optimizer_job_id)
+
+    assert response.status == "failed"
+    assert record.events[-1][0] == "error"
+    assert record.events[-1][1]["code"] == "anthropic_api_key_missing"
+    ml_optimizer.get_settings.cache_clear()
 
 
 def test_real_provider_enqueues_worker(monkeypatch):
@@ -124,16 +134,6 @@ def test_real_provider_enqueues_worker(monkeypatch):
 
     assert response.status == "queued"
     assert dispatched == [str(response.optimizer_job_id)]
-    ml_optimizer.get_settings.cache_clear()
-    monkeypatch.setenv("OPTIMIZER_PROVIDER", "anthropic")
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-
-    response = start_optimizer_job(OptimizerRequest(target_region="Left Fusiform", direction="maximize"))
-    record = get_optimizer_job(response.optimizer_job_id)
-
-    assert response.status == "failed"
-    assert record.events[-1][0] == "error"
-    assert record.events[-1][1]["code"] == "anthropic_api_key_missing"
     ml_optimizer.get_settings.cache_clear()
 
 
