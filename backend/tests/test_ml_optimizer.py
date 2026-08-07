@@ -3,6 +3,7 @@ import sys
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from app.schemas.ml import OptimizerRequest
 from app.services import ml_optimizer
@@ -18,8 +19,14 @@ from app.services.ml_optimizer import (
 )
 
 
-def setup_function():
+@pytest.fixture(autouse=True)
+def optimizer_test_settings(monkeypatch):
+    monkeypatch.setenv("OPTIMIZER_PROVIDER", "fake")
+    monkeypatch.setenv("OPTIMIZER_MAX_CANDIDATES_PER_JOB", "100")
+    ml_optimizer.get_settings.cache_clear()
+    yield
     clear_optimizer_jobs()
+    ml_optimizer.get_settings.cache_clear()
 
 
 def test_fake_candidates_are_deterministic():
