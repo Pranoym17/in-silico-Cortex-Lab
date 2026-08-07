@@ -71,6 +71,23 @@ describe("brain asset validation", () => {
     ).toThrow("Brain mesh manifest right vertex start is invalid");
   });
 
+  it("requires explicit ordering evidence for inflated surfaces", () => {
+    expect(() =>
+      validateBrainManifest({
+        ...manifest,
+        surfaces: { inflated: { left: "/brain/left-inflated.gltf", right: "/brain/right-inflated.gltf" } }
+      })
+    ).toThrow("Inflated mesh surface requires verified vertex ordering");
+
+    expect(
+      validateBrainManifest({
+        ...manifest,
+        surface_ordering_verified: true,
+        surfaces: { inflated: { left: "/brain/left-inflated.gltf", right: "/brain/right-inflated.gltf" } }
+      }).surfaces?.inflated.left
+    ).toBe("/brain/left-inflated.gltf");
+  });
+
   it("rejects invalid coordinate metadata", () => {
     expect(() => validateBrainManifest({ ...manifest, coordinate_units: "meters" })).toThrow(
       "Brain mesh manifest coordinate units must be millimeters"

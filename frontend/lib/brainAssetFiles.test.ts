@@ -26,5 +26,7 @@ describe("checked-in brain fixture assets", () => {
     expect(manifest.vertex_count).toBe(Object.keys(atlas).length);
     expect(readGltfVertexCount("fsaverage5_left.gltf")).toBe(manifest.left_vertex_count);
     expect(readGltfVertexCount("fsaverage5_right.gltf")).toBe(manifest.right_vertex_count);
+    expect(readGltfVertexCount("fsaverage5_left_inflated.gltf")).toBe(manifest.left_vertex_count);
+    expect(readGltfVertexCount("fsaverage5_right_inflated.gltf")).toBe(manifest.right_vertex_count);
   });
 });

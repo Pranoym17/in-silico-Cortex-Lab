@@ -27,6 +27,17 @@
   "ordering_rule": "left source vertex order, then right source vertex order",
   "right_vertex_count": 10242,
   "source": "nilearn-fsaverage5",
+  "surface_ordering_verified": true,
+  "surfaces": {
+    "pial": {
+      "left": "/brain/fsaverage5_left.gltf",
+      "right": "/brain/fsaverage5_right.gltf"
+    },
+    "inflated": {
+      "left": "/brain/fsaverage5_left_inflated.gltf",
+      "right": "/brain/fsaverage5_right_inflated.gltf"
+    }
+  },
   "surface": "fsaverage5",
   "total_vertex_count": 20484,
   "vertex_count": 20484,

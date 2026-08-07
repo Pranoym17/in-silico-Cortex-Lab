@@ -23,6 +23,8 @@ export type BrainMeshManifest = {
   atlas: "desikan-killiany";
   gltf: Record<HemisphereKey, string>;
   hemispheres: Record<HemisphereKey, BrainHemisphereManifest>;
+  surfaces?: Partial<Record<"pial" | "inflated", Record<HemisphereKey, string>>>;
+  surface_ordering_verified?: boolean;
 };
 
 export type DesikanKillianyAtlas = Record<string, string>;
@@ -102,6 +104,19 @@ export function validateBrainManifest(value: unknown): BrainMeshManifest {
 
   validateHemisphere("left", manifest.hemispheres.left, manifest.left_vertex_count, 0);
   validateHemisphere("right", manifest.hemispheres.right, manifest.right_vertex_count, manifest.left_vertex_count);
+  if (manifest.surfaces !== undefined) {
+    for (const [surface, paths] of Object.entries(manifest.surfaces)) {
+      if ((surface !== "pial" && surface !== "inflated") || !isRecord(paths)) {
+        throw new Error("Brain mesh manifest surface variants are invalid");
+      }
+      if (typeof paths.left !== "string" || typeof paths.right !== "string") {
+        throw new Error(`Brain mesh manifest ${surface} surface must include both hemispheres`);
+      }
+    }
+    if (manifest.surfaces.inflated && manifest.surface_ordering_verified !== true) {
+      throw new Error("Inflated mesh surface requires verified vertex ordering");
+    }
+  }
   return manifest as BrainMeshManifest;
 }
 

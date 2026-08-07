@@ -105,6 +105,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [showLeft, setShowLeft] = useState(true);
   const [showRight, setShowRight] = useState(true);
+  const [surface, setSurface] = useState<"pial" | "inflated">("pial");
   const [useManualDomain, setUseManualDomain] = useState(false);
   const [manualMin, setManualMin] = useState("-1");
   const [manualMax, setManualMax] = useState("1");
@@ -663,6 +664,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               chunk={renderableChunk}
               frameIndex={selectedFrameIndex}
               manifest={manifest}
+              surface={surface}
               onVertexClick={selectVertex}
               onVertexHover={(vertexIndex, position) => {
                 if (!regionModeEnabled) {
@@ -721,6 +723,16 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
             <p>Job: {jobId}</p>
           </div>
           <div className="viewer-controls">
+            {manifest?.surfaces?.inflated ? (
+              <div className="viewer-control-row" role="group" aria-label="Brain surface">
+                <button aria-pressed={surface === "pial"} onClick={() => setSurface("pial")} type="button">
+                  Pial
+                </button>
+                <button aria-pressed={surface === "inflated"} onClick={() => setSurface("inflated")} type="button">
+                  Inflated
+                </button>
+              </div>
+            ) : null}
             <div className="viewer-control-row">
               <button type="button" onClick={() => setIsPlaying((value) => !value)}>
                 {isPlaying ? "Pause" : "Play"}

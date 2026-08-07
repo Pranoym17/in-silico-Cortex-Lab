@@ -20,6 +20,7 @@ type BrainSceneProps = {
   showLeft?: boolean;
   showRight?: boolean;
   colorDomain?: ActivationDomain | null;
+  surface?: "pial" | "inflated";
   onVertexClick?: (vertexIndex: number) => void;
   onVertexHover?: (vertexIndex: number | null, position: BrainPointerPosition | null) => void;
 };
@@ -40,6 +41,7 @@ export function BrainScene({
   showLeft = true,
   showRight = true,
   colorDomain = null,
+  surface = "pial",
   onVertexClick,
   onVertexHover
 }: BrainSceneProps) {
@@ -79,7 +81,7 @@ export function BrainScene({
                     manifest={manifest}
                     onVertexClick={onVertexClick}
                     onVertexHover={onVertexHover}
-                    path={manifest.hemispheres.left.path}
+                    path={manifest.surfaces?.[surface]?.left ?? manifest.hemispheres.left.path}
                   />
                 ) : null}
                 {showRight ? (
@@ -89,7 +91,7 @@ export function BrainScene({
                     manifest={manifest}
                     onVertexClick={onVertexClick}
                     onVertexHover={onVertexHover}
-                    path={manifest.hemispheres.right.path}
+                    path={manifest.surfaces?.[surface]?.right ?? manifest.hemispheres.right.path}
                   />
                 ) : null}
               </Center>
