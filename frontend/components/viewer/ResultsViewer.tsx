@@ -22,7 +22,8 @@ import {
   listExperimentJobs,
   RsaResult,
   runRsa,
-  startOptimizer
+  startOptimizer,
+  createOptimizerWinnerExperiment
 } from "@/lib/api";
 import {
   ActivationDomain,
@@ -97,6 +98,8 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
   const [optimizerResult, setOptimizerResult] = useState<OptimizerCompleteEvent | null>(null);
   const [optimizerError, setOptimizerError] = useState<string | null>(null);
   const [isRunningOptimizer, setIsRunningOptimizer] = useState(false);
+  const [optimizerJobId, setOptimizerJobId] = useState<string | null>(null);
+  const [isCreatingWinnerExperiment, setIsCreatingWinnerExperiment] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDownloadingResult, setIsDownloadingResult] = useState(false);
   const [isExportingScreenshot, setIsExportingScreenshot] = useState(false);
@@ -281,6 +284,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     setOptimizerSeed("");
     setOptimizerGeneration(null);
     setOptimizerResult(null);
+    setOptimizerJobId(null);
     setOptimizerError(null);
     setIsRunningOptimizer(false);
     setIsCancelling(false);
@@ -587,6 +591,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
         },
         accessToken
       );
+      setOptimizerJobId(started.optimizer_job_id);
       await streamOptimizerEvents({
         optimizerJobId: started.optimizer_job_id,
         token: accessToken,
@@ -604,6 +609,19 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
       setOptimizerError(caught instanceof Error ? caught.message : "Optimizer failed");
     } finally {
       setIsRunningOptimizer(false);
+    }
+  }
+
+  async function createWinnerExperiment() {
+    if (!accessToken || !optimizerJobId || !optimizerResult) return;
+    setIsCreatingWinnerExperiment(true);
+    try {
+      const created = await createOptimizerWinnerExperiment(optimizerJobId, accessToken);
+      window.location.assign(`/builder/${created.experiment_id}`);
+    } catch (caught) {
+      setOptimizerError(caught instanceof Error ? caught.message : "Could not create optimizer experiment");
+    } finally {
+      setIsCreatingWinnerExperiment(false);
     }
   }
 
@@ -1176,6 +1194,9 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 <strong>Best stimulus</strong>
                 <p>{optimizerResult.best_stimulus}</p>
                 <span>Score {formatStatValue(optimizerResult.best_score)}</span>
+                <button disabled={isCreatingWinnerExperiment || !optimizerJobId} onClick={createWinnerExperiment} type="button">
+                  {isCreatingWinnerExperiment ? "Creating draft" : "Run as Experiment"}
+                </button>
               </div>
             ) : (
               <p>Select or type a target region to search for a text stimulus.</p>

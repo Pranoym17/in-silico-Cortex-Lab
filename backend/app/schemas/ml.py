@@ -64,6 +64,11 @@ class OptimizerJobStatusResponse(BaseModel):
     result: "OptimizerResult | None" = None
 
 
+class OptimizerWinnerExperimentResponse(BaseModel):
+    experiment_id: UUID
+    block_id: UUID
+
+
 class OptimizerCandidate(BaseModel):
     text: str
     score: float

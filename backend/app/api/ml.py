@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import require_user
 from app.core.database import get_db
 from app.models.user import User
-from app.schemas.ml import CognitiveStatesResponse, OptimizerJobStatusResponse, OptimizerRequest, OptimizerStartResponse, RsaRequest, RsaResponse
+import hashlib
+
+from app.models.block import Block, BlockType
+from app.models.experiment import Experiment
+from app.schemas.ml import CognitiveStatesResponse, OptimizerJobStatusResponse, OptimizerRequest, OptimizerStartResponse, OptimizerWinnerExperimentResponse, RsaRequest, RsaResponse
 from app.services.ml_cognitive_states import get_cognitive_states
 from app.services.ml_optimizer import cancel_optimizer_job, get_optimizer_job, start_optimizer_job
 from app.services.ml_rsa import run_rsa
@@ -74,6 +78,34 @@ async def cancel_optimizer_route(optimizer_job_id: UUID, _: User = Depends(requi
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Optimizer job not found")
     return optimizer_status_response(record)
+
+
+@router.post("/optimize/{optimizer_job_id}/winner-experiment", response_model=OptimizerWinnerExperimentResponse, status_code=status.HTTP_201_CREATED)
+async def create_winner_experiment_route(
+    optimizer_job_id: UUID,
+    user: User = Depends(require_user),
+    session: AsyncSession = Depends(get_db),
+) -> OptimizerWinnerExperimentResponse:
+    record = get_optimizer_job(optimizer_job_id)
+    if record is None or record.result is None or record.status != "complete":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Optimizer winner is not available")
+    text = record.result.best_stimulus
+    experiment = Experiment(owner_id=user.id, name=f"Optimizer: {record.request.target_region}", description="Draft created from a real TRIBE optimizer winner.")
+    session.add(experiment)
+    await session.flush()
+    block = Block(
+        experiment_id=experiment.id,
+        type=BlockType.text,
+        condition=f"Optimizer {record.request.direction}: {record.request.target_region}",
+        start_ms=0,
+        duration_ms=4_000,
+        content_hash=f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}",
+        payload={"text": text, "voice": "tribe_official_gtts", "optimizer_job_id": str(record.id), "optimizer_score": record.result.best_score},
+    )
+    session.add(block)
+    await session.commit()
+    await session.refresh(block)
+    return OptimizerWinnerExperimentResponse(experiment_id=experiment.id, block_id=block.id)
 
 
 @router.get("/optimize/{optimizer_job_id}/stream")

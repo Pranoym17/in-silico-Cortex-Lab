@@ -435,6 +435,10 @@ export function startOptimizer(input: OptimizerRequest, token?: string | null) {
   });
 }
 
+export function createOptimizerWinnerExperiment(optimizerJobId: string, token?: string | null) {
+  return apiJson<{ experiment_id: string; block_id: string }>(`/api/ml/optimize/${optimizerJobId}/winner-experiment`, token, { method: "POST" });
+}
+
 export function listLibraryEntries(params: LibraryListParams = {}) {
   const search = new URLSearchParams();
 
