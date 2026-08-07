@@ -18,17 +18,28 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--app", default="cortex-lab-tribe-inference")
     parser.add_argument("--function", default="run_real")
-    parser.add_argument("--max-blocks", type=int, default=0, help="Capture only the first N blocks for bounded shard runs.")
+    parser.add_argument("--start-block", type=int, default=0, help="Zero-based first block to capture.")
+    parser.add_argument("--max-blocks", type=int, default=0, help="Maximum blocks to capture from --start-block; zero captures through the end.")
     args = parser.parse_args()
 
     import modal
 
     spec = json.loads(args.spec.read_text(encoding="utf-8"))
+    if args.start_block < 0:
+        parser.error("--start-block cannot be negative")
     if args.max_blocks:
         blocks = spec.get("blocks")
         if not isinstance(blocks, list) or args.max_blocks < 1:
             parser.error("--max-blocks requires a positive block count in the input spec")
-        spec["blocks"] = blocks[: args.max_blocks]
+        selected = blocks[args.start_block : args.start_block + args.max_blocks]
+    else:
+        blocks = spec.get("blocks")
+        if not isinstance(blocks, list):
+            parser.error("input spec must contain a blocks array")
+        selected = blocks[args.start_block :]
+    if not selected:
+        parser.error("the selected block range is empty")
+    spec["blocks"] = selected
     chunks: list[tuple[int, np.ndarray]] = []
     metadata: list[dict] = []
     completed = False
@@ -54,7 +65,17 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(args.output, activations=activations)
     args.output.with_suffix(".metadata.json").write_text(
-        json.dumps({"spec": spec, "stimuli": metadata, "shape": list(activations.shape)}, indent=2, sort_keys=True),
+        json.dumps(
+            {
+                "spec": spec,
+                "stimuli": metadata,
+                "shape": list(activations.shape),
+                "source_block_start": args.start_block,
+                "source_block_count": len(selected),
+            },
+            indent=2,
+            sort_keys=True,
+        ),
         encoding="utf-8",
     )
     print(f"Reference fixture: {args.output}")
