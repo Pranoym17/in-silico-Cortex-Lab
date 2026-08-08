@@ -88,7 +88,18 @@ class RedisJobEventBroker:
     def __init__(self, history_limit: int = 100) -> None:
         settings = get_settings()
         self.history_limit = history_limit
-        self._client = redis_async.Redis.from_url(settings.redis_url, decode_responses=True)
+        self._redis_url = settings.redis_url
+        self._clients: dict[int, redis_async.Redis] = {}
+
+    @property
+    def _client(self) -> redis_async.Redis:
+        """Redis asyncio connections cannot cross Celery's per-task event loops."""
+        loop_id = id(asyncio.get_running_loop())
+        client = self._clients.get(loop_id)
+        if client is None:
+            client = redis_async.Redis.from_url(self._redis_url, decode_responses=True)
+            self._clients[loop_id] = client
+        return client
 
     async def publish(self, job_id: UUID, event: str, data: dict[str, Any]) -> JobStreamEvent:
         event_id = int(await self._client.incr(self._event_id_key(job_id)))
