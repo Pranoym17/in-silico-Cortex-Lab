@@ -1129,6 +1129,10 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                     <strong>{rsaResult.job_id_b.slice(0, 8)}</strong>
                   </div>
                 </div>
+                <div className="rsa-controls">
+                  <button onClick={() => downloadRsaJson(rsaResult)} type="button">Download JSON</button>
+                  <button onClick={() => downloadRsaCsv(rsaResult)} type="button">Download CSV</button>
+                </div>
                 <div className="rsa-grid">
                   <RsaHeatmap title="Current RDM" labels={rsaResult.labels_a} matrix={rsaResult.rdm_a} />
                   <RsaHeatmap title="Compared RDM" labels={rsaResult.labels_b} matrix={rsaResult.rdm_b} />
@@ -1310,6 +1314,35 @@ function CognitiveStateTimeline({
 
 function uniqueLabels(states: readonly { label: string }[]) {
   return Array.from(new Set(states.map((state) => state.label))).slice(0, 6);
+}
+
+function downloadRsaJson(result: RsaResult) {
+  downloadTextFile(
+    JSON.stringify({ exported_at: new Date().toISOString(), analysis: "RSA", ...result }, null, 2),
+    `cortexlab-rsa-${result.job_id_a.slice(0, 8)}-${result.job_id_b.slice(0, 8)}.json`,
+    "application/json"
+  );
+}
+
+function downloadRsaCsv(result: RsaResult) {
+  const rows = ["analysis,job_id,row_label,column_label,value"];
+  for (const [name, jobId, labels, matrix] of [["rdm_a", result.job_id_a, result.labels_a, result.rdm_a], ["rdm_b", result.job_id_b, result.labels_b, result.rdm_b]] as const) {
+    matrix.forEach((row, rowIndex) => row.forEach((value, columnIndex) => rows.push([name, jobId, csvCell(labels[rowIndex]), csvCell(labels[columnIndex]), String(value)].join(","))));
+  }
+  downloadTextFile(rows.join("\n"), `cortexlab-rsa-${result.job_id_a.slice(0, 8)}-${result.job_id_b.slice(0, 8)}.csv`, "text/csv");
+}
+
+function csvCell(value: string) {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function downloadTextFile(content: string, filename: string, type: string) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function cognitiveStateColor(label: string) {
