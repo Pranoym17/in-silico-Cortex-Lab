@@ -585,8 +585,8 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
         {
           target_region: optimizerTarget.trim(),
           direction: optimizerDirection,
-          generations: 5,
-          candidates_per_generation: 8,
+          generations: 1,
+          candidates_per_generation: 1,
           seed_prompt: optimizerSeed.trim() || null
         },
         accessToken
