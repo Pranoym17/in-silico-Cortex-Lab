@@ -11,7 +11,7 @@ def test_public_entry_hides_internal_identifiers():
         id=uuid4(), experiment_id=uuid4(), owner_id=uuid4(), slug="safe-entry", title="Safe", description=None,
         tags=[], featured=False, run_count=0, published_at=now, created_at=now, updated_at=now,
     )
-    response = public_entry_response(entry, SimpleNamespace(display_name=None, avatar_url=None))
+    response = public_entry_response(entry)
     payload = response.model_dump()
     assert "owner_id" not in payload
     assert "experiment_id" not in payload

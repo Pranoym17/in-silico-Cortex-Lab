@@ -28,6 +28,13 @@ class LibraryEntryResponse(BaseModel):
 
 
 
+class PublishedLibraryEntryResponse(LibraryEntryResponse):
+    experiment_id: UUID
+    owner_id: UUID
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PublicAuthorResponse(BaseModel):
     display_name: str
     avatar_url: str | None = None

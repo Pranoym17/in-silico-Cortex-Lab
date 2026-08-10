@@ -10,7 +10,7 @@ from app.models.user import User
 from app.schemas.block import BlockCreate, BlockReorderRequest, BlockResponse, BlockUpdate, TemplateApplyRequest
 from app.schemas.experiment import ExperimentCreate, ExperimentResponse, ExperimentUpdate
 from app.schemas.job import JobResponse
-from app.schemas.library import LibraryEntryResponse, LibraryPublishRequest
+from app.schemas.library import LibraryPublishRequest, PublishedLibraryEntryResponse
 from app.schemas.run import RunExperimentRequest, RunExperimentResponse
 from app.services.blocks import apply_template, create_block, delete_block, list_blocks, reorder_blocks, update_block
 from app.services.experiments import (
@@ -76,7 +76,7 @@ async def delete_experiment_route(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/{experiment_id}/publish", response_model=LibraryEntryResponse)
+@router.post("/{experiment_id}/publish", response_model=PublishedLibraryEntryResponse)
 async def publish_experiment_route(
     experiment_id: UUID,
     body: LibraryPublishRequest,
