@@ -9,7 +9,7 @@ from jose import jwt
 
 from app.core.config import get_settings
 from app.main import app
-from app.schemas.library import LibraryDetailResponse, LibraryForkResponse, LibraryListResponse, PublicLibraryExperimentBlock
+from app.schemas.library import LibraryDetailResponse, LibraryEntryResponse, LibraryForkResponse, LibraryListResponse, PublicAuthorResponse, PublicEmbedResponse, PublicExperimentReportResponse, PublicLibraryExperimentBlock, PublicResultResponse
 
 
 def make_token() -> str:
@@ -45,8 +45,6 @@ def make_library_entry(**overrides):
     now = datetime.now(UTC)
     data = {
         "id": uuid4(),
-        "experiment_id": uuid4(),
-        "owner_id": uuid4(),
         "slug": "ffa-face-localizer",
         "title": "FFA face localizer",
         "description": "Faces versus houses",
@@ -58,7 +56,7 @@ def make_library_entry(**overrides):
         "updated_at": now,
     }
     data.update(overrides)
-    return SimpleNamespace(**data)
+    return LibraryEntryResponse(**data)
 
 
 @pytest.fixture
@@ -103,6 +101,7 @@ async def test_get_library_detail(monkeypatch):
         assert slug == "ffa-face-localizer"
         return LibraryDetailResponse(
             entry=entry,
+            author=PublicAuthorResponse(display_name="Cortex Lab researcher"),
             experiment_name="FFA pilot",
             experiment_description="Faces versus houses",
             blocks=[
@@ -125,6 +124,9 @@ async def test_get_library_detail(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["entry"]["slug"] == "ffa-face-localizer"
+    assert body["author"]["display_name"] == "Cortex Lab researcher"
+    assert "owner_id" not in body["entry"]
+    assert "experiment_id" not in body["entry"]
     assert body["experiment_name"] == "FFA pilot"
     assert body["blocks"] == [
         {
@@ -150,6 +152,49 @@ async def test_get_library_detail_not_found(monkeypatch):
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Library entry not found"}
+
+
+@pytest.mark.asyncio
+async def test_public_result_report_and_embed_do_not_require_authentication(monkeypatch):
+    entry = make_library_entry()
+    author = PublicAuthorResponse(display_name="Researcher")
+    result = PublicResultResponse(
+        format="npz", dtype="float32", shape=[2, 20_484], vertex_count=20_484, timestep_count=2,
+        model_name="tribev2", model_version="v2", metadata={"vertex_space": "fsaverage5"},
+        download_url="https://signed.example/result", expires_in_seconds=900,
+    )
+
+    async def fake_get_public_result(session, slug):
+        assert slug == entry.slug
+        return result
+
+    async def fake_get_public_report(session, slug):
+        assert slug == entry.slug
+        return PublicExperimentReportResponse(
+            slug=slug, title=entry.title, author=author, published_at=entry.published_at,
+            tags=entry.tags, blocks=[], result=result, limitations=["Simulated output"],
+        )
+
+    async def fake_get_public_embed(session, slug):
+        assert slug == entry.slug
+        return PublicEmbedResponse(slug=slug, title=entry.title, iframe_path=f"/embed/{slug}", viewer_available=True)
+
+    monkeypatch.setattr("app.api.library.get_public_result", fake_get_public_result)
+    monkeypatch.setattr("app.api.library.get_public_report", fake_get_public_report)
+    monkeypatch.setattr("app.api.library.get_public_embed", fake_get_public_embed)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        result_response = await client.get(f"/api/library/{entry.slug}/result")
+        report_response = await client.get(f"/api/library/{entry.slug}/report")
+        embed_response = await client.get(f"/api/library/{entry.slug}/embed")
+
+    assert result_response.status_code == 200
+    assert result_response.json()["vertex_count"] == 20_484
+    assert "s3_key" not in result_response.json()
+    assert report_response.status_code == 200
+    assert report_response.json()["author"]["display_name"] == "Researcher"
+    assert embed_response.status_code == 200
+    assert embed_response.json()["iframe_path"] == f"/embed/{entry.slug}"
 
 
 @pytest.mark.asyncio

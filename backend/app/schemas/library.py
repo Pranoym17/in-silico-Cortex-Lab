@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 
 Slug = str
@@ -16,8 +16,6 @@ class LibraryPublishRequest(BaseModel):
 
 class LibraryEntryResponse(BaseModel):
     id: UUID
-    experiment_id: UUID
-    owner_id: UUID
     slug: str
     title: str
     description: str | None = None
@@ -28,7 +26,11 @@ class LibraryEntryResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+
+
+class PublicAuthorResponse(BaseModel):
+    display_name: str
+    avatar_url: str | None = None
 
 
 class LibraryListResponse(BaseModel):
@@ -46,6 +48,7 @@ class PublicLibraryExperimentBlock(BaseModel):
 
 class LibraryDetailResponse(BaseModel):
     entry: LibraryEntryResponse
+    author: PublicAuthorResponse
     experiment_name: str
     experiment_description: str | None = None
     blocks: list[PublicLibraryExperimentBlock]
@@ -53,3 +56,37 @@ class LibraryDetailResponse(BaseModel):
 
 class LibraryForkResponse(BaseModel):
     experiment_id: UUID
+
+
+class PublicResultResponse(BaseModel):
+    format: str
+    dtype: str
+    shape: list[int]
+    vertex_count: int
+    timestep_count: int
+    sample_rate_hz: float | None = None
+    model_name: str
+    model_version: str | None = None
+    metadata: dict
+    completed_at: datetime | None = None
+    download_url: str
+    expires_in_seconds: int
+
+
+class PublicExperimentReportResponse(BaseModel):
+    slug: str
+    title: str
+    description: str | None = None
+    author: PublicAuthorResponse
+    published_at: datetime
+    tags: list[str]
+    blocks: list[PublicLibraryExperimentBlock]
+    result: PublicResultResponse | None = None
+    limitations: list[str]
+
+
+class PublicEmbedResponse(BaseModel):
+    slug: str
+    title: str
+    iframe_path: str
+    viewer_available: bool
