@@ -32,8 +32,23 @@ class LibraryEntry(TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text)
     tags: Mapped[list[str]] = mapped_column(ARRAY(String(64)), default=list, nullable=False)
     featured: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    moderation_status: Mapped[str] = mapped_column(String(32), default="published", nullable=False, index=True)
     run_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     experiment: Mapped["Experiment"] = relationship("Experiment", back_populates="library_entry")
     owner: Mapped["User"] = relationship("User", back_populates="library_entries")
+    flags: Mapped[list["LibraryFlag"]] = relationship("LibraryFlag", back_populates="entry", cascade="all, delete-orphan")
+
+
+class LibraryFlag(TimestampMixin, Base):
+    __tablename__ = "library_flags"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    entry_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("library_entries.id"), index=True, nullable=False)
+    reporter_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=False)
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="open", nullable=False, index=True)
+    admin_note: Mapped[str | None] = mapped_column(Text)
+
+    entry: Mapped["LibraryEntry"] = relationship("LibraryEntry", back_populates="flags")

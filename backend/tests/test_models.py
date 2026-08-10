@@ -3,7 +3,7 @@ from app import models
 
 
 def test_foundation_models_are_registered():
-    assert set(Base.metadata.tables) == {"users", "experiments", "blocks", "jobs", "results", "library_entries"}
+    assert set(Base.metadata.tables) == {"users", "experiments", "blocks", "jobs", "results", "library_entries", "library_flags"}
 
 
 def test_result_model_has_cp9_metadata_columns():

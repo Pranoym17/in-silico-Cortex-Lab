@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.block import Block
 from app.models.experiment import Experiment, ExperimentStatus
 from app.models.job import Job
-from app.models.library import LibraryEntry
+from app.models.library import LibraryEntry, LibraryFlag
 from app.models.result import Result
 from app.models.user import User
 from app.schemas.library import (
@@ -100,7 +100,7 @@ async def list_library_entries(
     search: str | None = None,
     sort: str = "featured",
 ) -> LibraryListResponse:
-    query = select(LibraryEntry, User).join(User, User.id == LibraryEntry.owner_id)
+    query = select(LibraryEntry, User).join(User, User.id == LibraryEntry.owner_id).where(LibraryEntry.moderation_status == "published")
 
     if tag:
         query = query.where(LibraryEntry.tags.any(tag.strip().lower()))
@@ -123,7 +123,7 @@ async def list_library_entries(
         query = query.order_by(LibraryEntry.featured.desc(), LibraryEntry.published_at.desc())
 
     result = await session.execute(query.limit(50))
-    return LibraryListResponse(items=[public_entry_response(entry, owner) for entry, owner in result.all()])
+    return LibraryListResponse(items=[public_entry_response(entry) for entry, _owner in result.all()])
 
 
 async def get_library_detail(session: AsyncSession, slug: str) -> LibraryDetailResponse:
@@ -151,7 +151,7 @@ async def get_library_detail(session: AsyncSession, slug: str) -> LibraryDetailR
         for block in block_result.scalars().all()
     ]
     return LibraryDetailResponse(
-        entry=public_entry_response(entry, owner),
+        entry=public_entry_response(entry),
         author=public_author_response(owner),
         experiment_name=experiment.name,
         experiment_description=experiment.description,
@@ -159,7 +159,7 @@ async def get_library_detail(session: AsyncSession, slug: str) -> LibraryDetailR
     )
 
 
-def public_entry_response(entry: LibraryEntry, owner: User) -> LibraryEntryResponse:
+def public_entry_response(entry: LibraryEntry) -> LibraryEntryResponse:
     """Return only fields intended for anonymous public discovery."""
     return LibraryEntryResponse(
         id=entry.id,
@@ -301,8 +301,38 @@ async def fork_library_entry(session: AsyncSession, owner: User, slug: str) -> L
 
 
 async def get_library_entry_by_slug(session: AsyncSession, slug: str) -> LibraryEntry:
-    result = await session.execute(select(LibraryEntry).where(LibraryEntry.slug == slug))
+    result = await session.execute(select(LibraryEntry).where(LibraryEntry.slug == slug, LibraryEntry.moderation_status == "published"))
     entry = result.scalar_one_or_none()
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Library entry not found")
     return entry
+
+
+async def flag_library_entry(session: AsyncSession, reporter: User, slug: str, reason: str) -> LibraryFlag:
+    entry = await get_library_entry_by_slug(session, slug)
+    flag = LibraryFlag(entry_id=entry.id, reporter_id=reporter.id, reason=reason.strip())
+    session.add(flag)
+    await session.commit()
+    await session.refresh(flag)
+    return flag
+
+
+async def list_open_library_flags(session: AsyncSession) -> list[LibraryFlag]:
+    result = await session.execute(select(LibraryFlag).where(LibraryFlag.status == "open").order_by(LibraryFlag.created_at.asc()))
+    return list(result.scalars().all())
+
+
+async def get_library_entry_for_admin(session: AsyncSession, entry_id: UUID) -> LibraryEntry:
+    result = await session.execute(select(LibraryEntry).where(LibraryEntry.id == entry_id))
+    entry = result.scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Library entry not found")
+    return entry
+
+
+async def get_library_flag_for_admin(session: AsyncSession, flag_id: UUID) -> LibraryFlag:
+    result = await session.execute(select(LibraryFlag).where(LibraryFlag.id == flag_id))
+    flag = result.scalar_one_or_none()
+    if flag is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Library flag not found")
+    return flag

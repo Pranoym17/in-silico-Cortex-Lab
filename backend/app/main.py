@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import experiments, health, jobs, library, ml, uploads, users
+from app.api import admin, experiments, health, jobs, library, ml, uploads, users
 from app.core.config import get_settings
 from app.services.auth import SupabaseAuthMiddleware
 
@@ -26,3 +26,4 @@ app.include_router(library.router, prefix="/api/library", tags=["library"])
 app.include_router(ml.router, prefix="/api/ml", tags=["ml"])
 app.include_router(uploads.router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(users.router, prefix="/api", tags=["users"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])

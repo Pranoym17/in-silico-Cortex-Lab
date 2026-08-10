@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     supabase_jwt_audience: str | None = None
     supabase_jwt_issuer: str | None = None
     frontend_origin: str = "http://localhost:3000"
+    admin_email_addresses: str = ""
     job_execution_mode: Literal["background", "celery", "manual"] = "background"
     inference_provider: Literal["fake", "modal"] = "fake"
     modal_app_name: str = "cortex-lab-tribe-inference"

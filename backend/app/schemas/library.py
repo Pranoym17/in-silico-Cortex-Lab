@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 Slug = str
@@ -90,3 +90,34 @@ class PublicEmbedResponse(BaseModel):
     title: str
     iframe_path: str
     viewer_available: bool
+
+
+class LibraryFlagRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class LibraryFlagResponse(BaseModel):
+    id: UUID
+    status: str
+
+
+class AdminLibraryEntryUpdate(BaseModel):
+    featured: bool | None = None
+    moderation_status: str | None = Field(default=None, pattern="^(published|hidden)$")
+
+
+class AdminLibraryFlagUpdate(BaseModel):
+    status: str = Field(pattern="^(open|reviewed|dismissed)$")
+    admin_note: str | None = Field(default=None, max_length=1000)
+
+
+class AdminLibraryFlagResponse(BaseModel):
+    id: UUID
+    entry_id: UUID
+    reporter_id: UUID
+    reason: str
+    status: str
+    admin_note: str | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
