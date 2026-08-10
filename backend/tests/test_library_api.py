@@ -206,6 +206,14 @@ async def test_fork_library_entry_requires_authentication():
 
 
 @pytest.mark.asyncio
+async def test_reporting_a_public_entry_requires_authentication():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/library/ffa-face-localizer/flags", json={"reason": "Potentially inaccurate content"})
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_fork_library_entry(auth_user, monkeypatch):
     experiment_id = uuid4()
 
