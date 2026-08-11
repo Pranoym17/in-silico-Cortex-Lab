@@ -1,5 +1,5 @@
-import { LibraryDetailClient } from "@/components/library/LibraryDetailClient";
+import { redirect } from "next/navigation";
 
 export default function LibraryDetailPage({ params }: { params: { slug: string } }) {
-  return <LibraryDetailClient slug={params.slug} />;
+  redirect(`/experiments/${params.slug}`);
 }

@@ -8,8 +8,12 @@ import {
   createBlock,
   createExperiment,
   createUploadIntent,
+  flagLibraryEntry,
   forkLibraryEntry,
   getLibraryEntry,
+  getPublicLibraryEmbed,
+  getPublicLibraryReport,
+  getPublicLibraryResult,
   getCognitiveStates,
   getJobResult,
   getJobResultDownload,
@@ -255,6 +259,30 @@ describe("library helpers", () => {
 
     expect(fetchMock.mock.calls[0][0]).toContain("/api/library/ffa-face-localizer");
     expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
+  });
+
+  it("fetches only public result, report, and embed contracts", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+
+    await getPublicLibraryResult("ffa-face-localizer");
+    await getPublicLibraryReport("ffa-face-localizer");
+    await getPublicLibraryEmbed("ffa-face-localizer");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/library/ffa-face-localizer/result");
+    expect(fetchMock.mock.calls[1][0]).toContain("/api/library/ffa-face-localizer/report");
+    expect(fetchMock.mock.calls[2][0]).toContain("/api/library/ffa-face-localizer/embed");
+    expect((fetchMock.mock.calls[0][1]?.headers as Headers).get("authorization")).toBeNull();
+  });
+
+  it("submits a signed-in moderation report", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response('{"status":"open"}', { status: 201 }));
+
+    await flagLibraryEntry("ffa-face-localizer", "Incorrect attribution", "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/library/ffa-face-localizer/flags");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(JSON.stringify({ reason: "Incorrect attribution" }));
+    expect((fetchMock.mock.calls[0][1]?.headers as Headers).get("authorization")).toBe("Bearer token-123");
   });
 
   it("forks a library entry into the signed-in user's experiments", async () => {

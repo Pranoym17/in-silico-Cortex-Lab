@@ -229,8 +229,6 @@ export type LibraryPublishInput = {
 
 export type LibraryEntry = {
   id: string;
-  experiment_id: string;
-  owner_id: string;
   slug: string;
   title: string;
   description: string | null;
@@ -240,6 +238,11 @@ export type LibraryEntry = {
   published_at: string;
   created_at: string;
   updated_at: string;
+};
+
+export type PublishedLibraryEntry = LibraryEntry & {
+  experiment_id: string;
+  owner_id: string;
 };
 
 export type LibraryListParams = Partial<{
@@ -263,6 +266,10 @@ export type PublicLibraryBlock = {
 
 export type LibraryDetail = {
   entry: LibraryEntry;
+  author: {
+    display_name: string;
+    avatar_url: string | null;
+  };
   experiment_name: string;
   experiment_description: string | null;
   blocks: PublicLibraryBlock[];
@@ -270,6 +277,40 @@ export type LibraryDetail = {
 
 export type LibraryForkResponse = {
   experiment_id: string;
+};
+
+export type PublicResult = {
+  format: string;
+  dtype: string;
+  shape: number[];
+  vertex_count: number;
+  timestep_count: number;
+  sample_rate_hz: number | null;
+  model_name: string;
+  model_version: string | null;
+  metadata: Record<string, unknown>;
+  completed_at: string | null;
+  download_url: string;
+  expires_in_seconds: number;
+};
+
+export type PublicExperimentReport = {
+  slug: string;
+  title: string;
+  description: string | null;
+  author: LibraryDetail["author"];
+  published_at: string;
+  tags: string[];
+  blocks: PublicLibraryBlock[];
+  result: PublicResult | null;
+  limitations: string[];
+};
+
+export type PublicEmbed = {
+  slug: string;
+  title: string;
+  iframe_path: string;
+  viewer_available: boolean;
 };
 
 export async function apiFetch(path: string, token?: string | null, init: RequestInit = {}) {
@@ -334,7 +375,7 @@ export function archiveExperiment(id: string, token?: string | null) {
 }
 
 export function publishExperiment(id: string, input: LibraryPublishInput, token?: string | null) {
-  return apiJson<LibraryEntry>(`/api/experiments/${id}/publish`, token, {
+  return apiJson<PublishedLibraryEntry>(`/api/experiments/${id}/publish`, token, {
     method: "POST",
     body: JSON.stringify(input)
   });
@@ -454,6 +495,25 @@ export function listLibraryEntries(params: LibraryListParams = {}) {
 
 export function getLibraryEntry(slug: string) {
   return apiJson<LibraryDetail>(`/api/library/${slug}`);
+}
+
+export function getPublicLibraryResult(slug: string) {
+  return apiJson<PublicResult>(`/api/library/${slug}/result`);
+}
+
+export function getPublicLibraryReport(slug: string) {
+  return apiJson<PublicExperimentReport>(`/api/library/${slug}/report`);
+}
+
+export function getPublicLibraryEmbed(slug: string) {
+  return apiJson<PublicEmbed>(`/api/library/${slug}/embed`);
+}
+
+export function flagLibraryEntry(slug: string, reason: string, token?: string | null) {
+  return apiJson<{ id: string; status: string }>(`/api/library/${slug}/flags`, token, {
+    method: "POST",
+    body: JSON.stringify({ reason })
+  });
 }
 
 export function forkLibraryEntry(slug: string, token?: string | null) {

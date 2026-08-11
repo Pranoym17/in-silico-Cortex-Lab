@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import { ArrowRight, Bookmark, Filter, FlaskConical, LibraryBig, Sparkles } from "lucide-react";
 import { LibraryEntry, LibraryListParams, listLibraryEntries } from "@/lib/api";
 import { AppShell, EmptyState, ErrorPanel, LoadingRows, StatusBadge } from "@/components/ui/AppShell";
 
@@ -65,7 +66,7 @@ export function LibraryClient() {
   return (
     <AppShell
       title="Library"
-      description="Browse published experiments and fork useful paradigms into your workspace."
+      description="Inspect public paradigms, their reproducibility record, and fork a private working copy."
       actions={
         <form className="library-filter-form" onSubmit={handleFilter}>
           <input
@@ -89,15 +90,16 @@ export function LibraryClient() {
             <option value="newest">Newest</option>
             <option value="run_count">Most forked</option>
           </select>
-          <button type="submit">Filter</button>
+          <button title="Apply library filters" type="submit"><Filter aria-hidden="true" size={14} /> <span>Filter</span></button>
         </form>
       }
     >
-      <section className="panel stack">
-        <div className="toolbar">
+      <section className="panel stack library-index-panel">
+        <div className="toolbar library-index-toolbar">
           <div>
+            <span className="section-kicker"><LibraryBig aria-hidden="true" size={13} /> Public research record</span>
             <h2>Published paradigms</h2>
-            <p>{isLoading ? "Loading entries" : `${entries.length} entr${entries.length === 1 ? "y" : "ies"}`}</p>
+            <p>{isLoading ? "Loading entries" : `${entries.length} entr${entries.length === 1 ? "y" : "ies"} available to inspect`}</p>
           </div>
           <StatusBadge tone="neutral">{params.sort ?? "featured"}</StatusBadge>
         </div>
@@ -106,7 +108,7 @@ export function LibraryClient() {
         {isLoading ? <LoadingRows rows={4} /> : null}
 
         {!isLoading && !error && entries.length === 0 ? (
-          <EmptyState title="No published experiments yet" message="Published experiments will appear here once the library has entries." />
+          <EmptyState title="No published experiments yet" message="Published research records will appear here once a validated paradigm is shared." />
         ) : null}
 
         <div className="library-grid">
@@ -114,17 +116,18 @@ export function LibraryClient() {
             <article className="library-card" key={entry.id}>
               <div className="library-card-main">
                 <div className="library-card-header">
-                  <h3>{entry.title}</h3>
-                  {entry.featured ? <StatusBadge tone="good">Featured</StatusBadge> : null}
+                  <span className="library-card-glyph">{entry.featured ? <Sparkles aria-hidden="true" size={16} /> : <FlaskConical aria-hidden="true" size={16} />}</span>
+                  {entry.featured ? <StatusBadge tone="good">Featured</StatusBadge> : <StatusBadge tone="neutral">Public</StatusBadge>}
                 </div>
+                <h3>{entry.title}</h3>
                 <p>{entry.description || "No description provided."}</p>
               </div>
               <div className="library-card-meta">
-                <span>{entryTags(entry)}</span>
-                <span>{entry.run_count} forks</span>
-                <span>{formatPublishedAt(entry.published_at)}</span>
+                <span><Bookmark aria-hidden="true" size={12} /> {entryTags(entry)}</span>
+                <span>{entry.run_count} fork{entry.run_count === 1 ? "" : "s"}</span>
+                <span>Published {formatPublishedAt(entry.published_at)}</span>
               </div>
-              <Link href={`/library/${entry.slug}`}>Open</Link>
+              <Link href={`/library/${entry.slug}`}>Inspect record <ArrowRight aria-hidden="true" size={14} /></Link>
             </article>
           ))}
         </div>
