@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { Mic, Save, SlidersHorizontal, Square, Trash2 } from "lucide-react";
 import { StimulusBlock, UpdateBlockInput } from "@/lib/api";
 import { AUDIO_MIME_TYPES, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES, normalizeContentHash } from "@/lib/stimulusMetadata";
 import {
@@ -259,18 +260,18 @@ export function BlockConfigPanel({
 
   if (!block) {
     return (
-      <section className="panel stack">
-        <h2>Selected block</h2>
+      <section className="panel stack block-config-panel">
+        <h2><SlidersHorizontal aria-hidden="true" size={14} /> Selected block</h2>
         <p>Select a block to edit its timing, condition, and payload.</p>
       </section>
     );
   }
 
   return (
-    <section className="panel stack">
+    <section className="panel stack block-config-panel">
       <div className="toolbar">
         <div>
-          <h2>Selected block</h2>
+          <h2><SlidersHorizontal aria-hidden="true" size={14} /> Selected block</h2>
           <p>
             {block.type} | {block.condition ?? "unlabeled"}
           </p>
@@ -455,15 +456,16 @@ export function BlockConfigPanel({
             <div className="recording-controls">
               {recordingStatus !== "recording" ? (
                 <button
+                  className="recording-button"
                   disabled={isSaving || recordingStatus === "processing"}
                   onClick={startRecording}
                   type="button"
                 >
-                  Record microphone
+                  <Mic aria-hidden="true" size={14} /> Record microphone
                 </button>
               ) : (
-                <button onClick={stopRecording} type="button">
-                  Stop recording
+                <button className="recording-button recording-button-active" onClick={stopRecording} type="button">
+                  <Square aria-hidden="true" size={13} fill="currentColor" /> Stop recording
                 </button>
               )}
               <div
@@ -598,11 +600,11 @@ export function BlockConfigPanel({
           </div>
         ) : null}
         <div className="config-actions">
-          <button type="submit" disabled={isSaving}>
-            {isSaving ? "Saving..." : "Save changes"}
+          <button className="config-save" type="submit" disabled={isSaving}>
+            <Save aria-hidden="true" size={14} /> {isSaving ? "Saving..." : "Save changes"}
           </button>
-          <button type="button" onClick={() => onDelete(block.id)} disabled={isSaving}>
-            Delete
+          <button className="config-delete" type="button" onClick={() => onDelete(block.id)} disabled={isSaving}>
+            <Trash2 aria-hidden="true" size={14} /> Delete
           </button>
         </div>
       </form>

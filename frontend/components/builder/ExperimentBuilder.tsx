@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AudioLines, CheckCircle2, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Mic, Play, Plus, Redo2, ScanLine, TextCursorInput, Undo2, Video, ZoomIn, ZoomOut } from "lucide-react";
 import {
   CreateBlockInput,
   Experiment,
@@ -578,28 +579,31 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
           <StatusBadge tone={validationErrors.length === 0 && blocks.length > 0 ? "good" : "warn"}>
             {validationErrors.length === 0 && blocks.length > 0 ? "Valid" : `${validationErrors.length} issue${validationErrors.length === 1 ? "" : "s"}`}
           </StatusBadge>
-          <span>{saveStatus}</span>
+          <span className="builder-save-status"><CheckCircle2 aria-hidden="true" size={13} /> {saveStatus}</span>
           <button type="button" disabled={!canRun} onClick={handleRunExperiment}>
-            {isMutating ? "Working..." : "Run"}
+            <Play aria-hidden="true" size={14} fill="currentColor" /> {isMutating ? "Working..." : "Run inference"}
           </button>
         </div>
       }
     >
       <div className="builder-workspace">
         <aside className="builder-side stack">
-          <section className="panel stack">
-            <h2>Add block</h2>
+          <section className="panel stack builder-palette">
+            <h2><Plus aria-hidden="true" size={14} /> Add stimulus</h2>
             <button type="button" onClick={() => handleAddBlock("image")} disabled={!accessToken || isMutating}>
-              Image
+              <ImageIcon aria-hidden="true" size={15} /> <span>Image</span>
             </button>
             <button type="button" onClick={() => handleAddBlock("text")} disabled={!accessToken || isMutating}>
-              Text
+              <TextCursorInput aria-hidden="true" size={15} /> <span>Text</span>
             </button>
             <button type="button" onClick={() => handleAddBlock("audio")} disabled={!accessToken || isMutating}>
-              Audio
+              <AudioLines aria-hidden="true" size={15} /> <span>Audio</span>
+            </button>
+            <button title="Add audio block then record with your microphone in the inspector" type="button" onClick={() => handleAddBlock("audio")} disabled={!accessToken || isMutating}>
+              <Mic aria-hidden="true" size={15} /> <span>Microphone</span>
             </button>
             <button type="button" onClick={() => handleAddBlock("video")} disabled={!accessToken || isMutating}>
-              Video
+              <Video aria-hidden="true" size={15} /> <span>Video</span>
             </button>
           </section>
 
@@ -610,9 +614,9 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
         <section className="panel stack builder-main-panel">
           <div className="toolbar">
             <div>
+              <span className="section-kicker"><ScanLine aria-hidden="true" size={13} /> Sequence editor</span>
               <h2>Timeline</h2>
-              <p>Experiment: {experimentId}</p>
-              {experiment ? <p>Status: {experiment.status}</p> : null}
+              <p>{experiment ? `${experiment.status} draft - ${experimentId.slice(0, 8)}` : "Loading experiment record"}</p>
             </div>
             <StatusBadge tone={blocks.length === 0 ? "neutral" : validationErrors.length === 0 ? "good" : "warn"}>
               {blocks.length === 0 ? "Draft" : validationErrors.length === 0 ? "Ready" : "Needs work"}
@@ -633,7 +637,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
             <div className="run-result">
               <strong>Published to library</strong>
               <p>{publishedEntry.title} is available as a forkable public experiment.</p>
-              <a href={`/library/${publishedEntry.slug}`}>Open library entry</a>
+              <a href={`/experiments/${publishedEntry.slug}`}>Open public record</a>
             </div>
           ) : null}
 
@@ -705,21 +709,25 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
           ) : null}
 
           <div className="timeline-zoom-controls">
-            <span>Timeline zoom</span>
+            <span>Timeline scale</span>
             <button
               aria-label="Zoom timeline out"
+              className="icon-button"
               onClick={() => setTimelineZoom((value) => Math.max(0.02, value - 0.02))}
+              title="Zoom timeline out"
               type="button"
             >
-              -
+              <ZoomOut aria-hidden="true" size={15} />
             </button>
             <output>{Math.round(timelineZoom * 1000)}%</output>
             <button
               aria-label="Zoom timeline in"
+              className="icon-button"
               onClick={() => setTimelineZoom((value) => Math.min(0.4, value + 0.02))}
+              title="Zoom timeline in"
               type="button"
             >
-              +
+              <ZoomIn aria-hidden="true" size={15} />
             </button>
           </div>
           <BuilderTimeline
@@ -745,34 +753,43 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
             <div className="timeline-actions">
               <button
                 type="button"
+                className="icon-button"
                 disabled={undoStack.length === 0 || isMutating || !accessToken}
                 onClick={() => restoreHistory("undo")}
+                title="Undo timeline change"
               >
-                Undo
+                <Undo2 aria-hidden="true" size={15} />
               </button>
               <button
                 type="button"
+                className="icon-button"
                 disabled={redoStack.length === 0 || isMutating || !accessToken}
                 onClick={() => restoreHistory("redo")}
+                title="Redo timeline change"
               >
-                Redo
+                <Redo2 aria-hidden="true" size={15} />
               </button>
               <button
                 type="button"
+                className="icon-button"
                 disabled={!selectedBlock || isMutating || !accessToken}
                 onClick={() => selectedBlock && handleShiftBlock(selectedBlock.id, -TIMELINE_NUDGE_MS)}
+                title="Move selected block earlier"
               >
-                Earlier
+                <ChevronLeft aria-hidden="true" size={15} />
               </button>
               <button
                 type="button"
+                className="icon-button"
                 disabled={!selectedBlock || isMutating || !accessToken}
                 onClick={() => selectedBlock && handleShiftBlock(selectedBlock.id, TIMELINE_NUDGE_MS)}
+                title="Move selected block later"
               >
-                Later
+                <ChevronRight aria-hidden="true" size={15} />
               </button>
               <button
                 type="button"
+                className="timeline-command"
                 disabled={!selectedBlock || isMutating || !accessToken}
                 onClick={() => selectedBlock && handleResizeBlock(selectedBlock.id, -TIMELINE_DURATION_STEP_MS)}
               >
@@ -780,6 +797,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
               </button>
               <button
                 type="button"
+                className="timeline-command"
                 disabled={!selectedBlock || isMutating || !accessToken}
                 onClick={() => selectedBlock && handleResizeBlock(selectedBlock.id, TIMELINE_DURATION_STEP_MS)}
               >
@@ -787,10 +805,12 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
               </button>
               <button
                 type="button"
+                className="icon-button"
                 disabled={!selectedBlock || isMutating || !accessToken}
                 onClick={() => selectedBlock && handleDuplicateBlock(selectedBlock)}
+                title="Duplicate selected block"
               >
-                Duplicate
+                <Copy aria-hidden="true" size={15} />
               </button>
             </div>
           </div>

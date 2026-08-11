@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pause, Play, Waves } from "lucide-react";
 
 import { StimulusBlock } from "@/lib/api";
 import {
@@ -120,6 +121,10 @@ export function BuilderPlayback({
 
   return (
     <section aria-label="Stimulus playback" className="builder-playback">
+      <div className="builder-playback-heading">
+        <span className="section-kicker"><Waves aria-hidden="true" size={13} /> Stimulus preview</span>
+        <span>{activeBlocks.length > 0 ? `${activeBlocks.length} active` : "Standby"}</span>
+      </div>
       <div className="builder-playback-stage">
         {activeBlocks.length === 0 ? <div className="builder-playback-empty" aria-hidden="true" /> : null}
         {activeBlocks.map((block) => {
@@ -192,14 +197,16 @@ export function BuilderPlayback({
       <div className="builder-playback-controls">
         <button
           aria-label={isPlaying ? "Pause stimulus playback" : "Play stimulus playback"}
+          className="icon-button builder-playback-toggle"
           disabled={durationMs === 0}
           onClick={() => {
             if (!isPlaying && timeMs >= durationMs) setTime(0);
             setPlaying(!isPlaying);
           }}
+          title={isPlaying ? "Pause stimulus playback" : "Play stimulus playback"}
           type="button"
         >
-          {isPlaying ? "Pause" : "Play"}
+          {isPlaying ? <Pause aria-hidden="true" size={16} fill="currentColor" /> : <Play aria-hidden="true" size={16} fill="currentColor" />}
         </button>
         <span className="builder-playback-time" aria-live="off">
           {formatTime(timeMs)} / {formatTime(durationMs)}
