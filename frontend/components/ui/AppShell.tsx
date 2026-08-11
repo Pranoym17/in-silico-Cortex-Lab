@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import NextImage from "next/image";
 import { ReactNode, useState } from "react";
 import { usePathname } from "next/navigation";
 import { BrainCircuit, ChevronDown, CircleUserRound, FlaskConical, LibraryBig, LogOut, Menu, X } from "lucide-react";
@@ -41,40 +42,72 @@ export function AppShell({ title, description, actions, children, width = "wide"
 
   return (
     <div className={`app-frame ${width === "full" ? "app-frame-workspace" : ""}`}>
-      <aside className="app-rail" aria-label="Workspace navigation">
-        <Link aria-label="Cortex Lab home" className="app-mark" href="/" title="Cortex Lab home">
-          <BrainCircuit aria-hidden="true" size={22} strokeWidth={1.7} />
-          <span className="app-mark-copy"><strong>Cortex Lab</strong><small>Research workspace</small></span>
+      <header className="app-globalbar">
+        <Link aria-label="Cortex Lab home" className="app-global-brand" href="/" title="Cortex Lab home">
+          <NextImage alt="Cortex Lab" className="app-global-logo" height={64} priority src="/brand/cortex-lab-logo.png" width={116} />
         </Link>
-        <nav className="app-rail-nav" aria-label="Primary navigation">
+        <nav className="app-global-nav" aria-label="Primary navigation">
           {navigation.map(({ href, label, icon: Icon }) => (
             <Link
               aria-current={isActive(href) ? "page" : undefined}
-              className={isActive(href) ? "app-rail-link active" : "app-rail-link"}
+              className={isActive(href) ? "active" : undefined}
               href={href}
               key={href}
-              title={label}
             >
-              <Icon aria-hidden="true" size={18} strokeWidth={1.7} />
-              <span>{label}</span>
+              <Icon aria-hidden="true" size={15} strokeWidth={1.7} />
+              {label}
             </Link>
           ))}
         </nav>
-      </aside>
+        <div className="app-global-actions">
+          <button
+            aria-controls="mobile-navigation"
+            aria-expanded={mobileNavOpen}
+            aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+            className="icon-button mobile-nav-toggle"
+            onClick={() => setMobileNavOpen((open) => !open)}
+            type="button"
+          >
+            {mobileNavOpen ? <X aria-hidden="true" size={19} /> : <Menu aria-hidden="true" size={19} />}
+          </button>
+          <div className="account-menu">
+            <button
+              aria-expanded={accountOpen}
+              aria-haspopup="menu"
+              aria-label="Account menu"
+              className="account-trigger"
+              onClick={() => setAccountOpen((open) => !open)}
+              type="button"
+            >
+              <span className="account-avatar" aria-hidden="true"><CircleUserRound size={17} strokeWidth={1.6} /></span>
+              <span className="account-copy">{accessToken ? email ?? "Research session" : "Guest session"}</span>
+              <ChevronDown aria-hidden="true" size={15} />
+            </button>
+            {accountOpen ? (
+              <div className="account-popover" role="menu">
+                <div className="account-popover-identity">
+                  <CircleUserRound aria-hidden="true" size={20} />
+                  <span>{accessToken ? email ?? "Research session" : "Not signed in"}</span>
+                </div>
+                {accessToken ? (
+                  <button onClick={handleSignOut} role="menuitem" type="button">
+                    <LogOut aria-hidden="true" size={15} />
+                    Sign out
+                  </button>
+                ) : (
+                  <Link href="/dashboard" onClick={() => setAccountOpen(false)} role="menuitem">
+                    Sign in
+                  </Link>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </header>
 
       <div className="app-canvas">
         <header className="app-topbar">
           <div className="app-heading">
-            <button
-              aria-controls="mobile-navigation"
-              aria-expanded={mobileNavOpen}
-              aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
-              className="icon-button mobile-nav-toggle"
-              onClick={() => setMobileNavOpen((open) => !open)}
-              type="button"
-            >
-              {mobileNavOpen ? <X aria-hidden="true" size={19} /> : <Menu aria-hidden="true" size={19} />}
-            </button>
             <div>
               <span className="eyebrow">Cortex Lab</span>
               <h1>{title}</h1>
@@ -82,38 +115,6 @@ export function AppShell({ title, description, actions, children, width = "wide"
           </div>
           <div className="app-topbar-actions">
             {actions ? <div className="page-actions">{actions}</div> : null}
-            <div className="account-menu">
-              <button
-                aria-expanded={accountOpen}
-                aria-haspopup="menu"
-                aria-label="Account menu"
-                className="account-trigger"
-                onClick={() => setAccountOpen((open) => !open)}
-                type="button"
-              >
-                <span className="account-avatar" aria-hidden="true"><CircleUserRound size={17} strokeWidth={1.6} /></span>
-                <span className="account-copy">{accessToken ? email ?? "Research session" : "Guest session"}</span>
-                <ChevronDown aria-hidden="true" size={15} />
-              </button>
-              {accountOpen ? (
-                <div className="account-popover" role="menu">
-                  <div className="account-popover-identity">
-                    <CircleUserRound aria-hidden="true" size={20} />
-                    <span>{accessToken ? email ?? "Research session" : "Not signed in"}</span>
-                  </div>
-                  {accessToken ? (
-                    <button onClick={handleSignOut} role="menuitem" type="button">
-                      <LogOut aria-hidden="true" size={15} />
-                      Sign out
-                    </button>
-                  ) : (
-                    <Link href="/dashboard" onClick={() => setAccountOpen(false)} role="menuitem">
-                      Sign in
-                    </Link>
-                  )}
-                </div>
-              ) : null}
-            </div>
           </div>
         </header>
 

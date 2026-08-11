@@ -33,12 +33,12 @@ export function HeroBrain() {
             dpr={[1, 1.75]}
             gl={{ antialias: true, preserveDrawingBuffer: true }}
           >
-            <color attach="background" args={["#f5f6f1"]} />
-            <ambientLight intensity={1.5} />
-            <directionalLight color="#fff7ec" intensity={2.1} position={[3, 4, 5]} />
-            <directionalLight color="#9bb6d3" intensity={0.8} position={[-4, -2, 3]} />
-            <pointLight color="#d66a48" intensity={14} position={[0, -2, 4]} />
-            <Bounds fit clip observe margin={1.16}>
+            <color attach="background" args={["#f8faf9"]} />
+            <ambientLight intensity={1.7} />
+            <directionalLight color="#ffffff" intensity={2.25} position={[3, 4, 5]} />
+            <directionalLight color="#76d8db" intensity={0.9} position={[-4, -2, 3]} />
+            <pointLight color="#4b8cc6" intensity={11} position={[0, -2, 4]} />
+            <Bounds fit clip observe margin={0.96}>
               <Center>
                 <group rotation={[0.1, 0.42, 0]}>
                   <HeroHemisphere path={HEMISPHERE_PATHS.left} side="left" />
@@ -76,7 +76,7 @@ function HeroHemisphere({ path, side }: { path: string; side: HemisphereSide }) 
 
 function createPresentationBrain(source: THREE.Object3D, side: HemisphereSide) {
   const clone = source.clone(true);
-  const baseColor = side === "left" ? "#d4e4db" : "#e9d9c6";
+  const baseColor = side === "left" ? "#c9eee6" : "#d4e5f3";
 
   clone.traverse((node) => {
     if (!(node instanceof THREE.Mesh) || !(node.geometry instanceof THREE.BufferGeometry)) {

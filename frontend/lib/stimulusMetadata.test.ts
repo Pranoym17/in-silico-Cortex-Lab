@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { StimulusBlock } from "@/lib/api";
-import { getStimulusReadinessIssues, normalizeContentHash } from "./stimulusMetadata";
+import { createTextContentHash, getStimulusReadinessIssues, normalizeContentHash } from "./stimulusMetadata";
 
 function makeBlock(overrides: Partial<StimulusBlock> = {}): StimulusBlock {
   return {
@@ -35,6 +35,14 @@ describe("stimulusMetadata", () => {
 
   it("accepts ready text metadata", () => {
     expect(getStimulusReadinessIssues(makeBlock({ content_hash: "sha256:text" }))).toEqual([]);
+  });
+
+  it("creates a stable SHA-256 hash for a text stimulus and voice", async () => {
+    const defaultVoiceHash = await createTextContentHash("A visual word", "tribe_official_gtts");
+
+    expect(defaultVoiceHash).toMatch(/^sha256:[a-f0-9]{64}$/);
+    await expect(createTextContentHash("A visual word", "tribe_official_gtts")).resolves.toBe(defaultVoiceHash);
+    await expect(createTextContentHash("A visual word", "another_voice")).resolves.not.toBe(defaultVoiceHash);
   });
 
   it("requires a readable short duration for video blocks", () => {

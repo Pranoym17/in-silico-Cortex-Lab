@@ -3,7 +3,13 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Mic, Save, SlidersHorizontal, Square, Trash2 } from "lucide-react";
 import { StimulusBlock, UpdateBlockInput } from "@/lib/api";
-import { AUDIO_MIME_TYPES, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES, normalizeContentHash } from "@/lib/stimulusMetadata";
+import {
+  AUDIO_MIME_TYPES,
+  createTextContentHash,
+  IMAGE_MIME_TYPES,
+  VIDEO_MIME_TYPES,
+  normalizeContentHash
+} from "@/lib/stimulusMetadata";
 import {
   estimateTextDurationMs,
   formatRecordingElapsed,
@@ -175,7 +181,7 @@ export function BlockConfigPanel({
     if (block.type === "image") {
       return {
         ...basePayload,
-        source: "library",
+        source: typeof basePayload.source === "string" ? basePayload.source : "library",
         library_id: libraryId,
         s3_key: s3Key,
         mime_type: imageMimeType,
@@ -225,11 +231,16 @@ export function BlockConfigPanel({
       return;
     }
 
+    const resolvedContentHash =
+      block.type === "text"
+        ? await createTextContentHash(textValue, voice)
+        : normalizeContentHash(contentHash);
+
     await onSave(block.id, {
       condition: condition.trim() || null,
       start_ms: startMs,
       duration_ms: durationMs,
-      content_hash: normalizeContentHash(contentHash),
+      content_hash: resolvedContentHash,
       payload: buildPayloadFromFields(payload, block)
     });
   }
@@ -328,14 +339,16 @@ export function BlockConfigPanel({
             +500ms
           </button>
         </div>
-        <label>
-          Content hash
-          <input
-            onChange={(event) => setContentHash(event.target.value)}
-            placeholder="sha256:..."
-            value={contentHash}
-          />
-        </label>
+        {block.type !== "text" ? (
+          <label>
+            Content hash
+            <input
+              onChange={(event) => setContentHash(event.target.value)}
+              placeholder="sha256:..."
+              value={contentHash}
+            />
+          </label>
+        ) : null}
         {block.type === "text" ? (
           <>
             <label>
@@ -386,10 +399,6 @@ export function BlockConfigPanel({
             <label>
               Library ID
               <input onChange={(event) => setLibraryId(event.target.value)} value={libraryId} />
-            </label>
-            <label>
-              S3 object key
-              <input onChange={(event) => setS3Key(event.target.value)} value={s3Key} />
             </label>
             <label>
               MIME type
@@ -491,10 +500,6 @@ export function BlockConfigPanel({
               <input onChange={(event) => setFilename(event.target.value)} value={filename} />
             </label>
             <label>
-              S3 object key
-              <input onChange={(event) => setS3Key(event.target.value)} value={s3Key} />
-            </label>
-            <label>
               MIME type
               <select onChange={(event) => setAudioMimeType(event.target.value)} value={audioMimeType}>
                 {AUDIO_MIME_TYPES.map((type) => (
@@ -543,10 +548,6 @@ export function BlockConfigPanel({
               <input onChange={(event) => setFilename(event.target.value)} value={filename} />
             </label>
             <label>
-              S3 object key
-              <input onChange={(event) => setS3Key(event.target.value)} value={s3Key} />
-            </label>
-            <label>
               MIME type
               <select onChange={(event) => setVideoMimeType(event.target.value)} value={videoMimeType}>
                 {VIDEO_MIME_TYPES.map((type) => (
@@ -570,35 +571,8 @@ export function BlockConfigPanel({
             <p>Block duration is the selected clip length. The selected range must remain inside the uploaded video.</p>
           </>
         ) : null}
-        <label>
-          Payload JSON
-          <textarea onChange={(event) => setPayloadText(event.target.value)} rows={10} value={payloadText} />
-        </label>
         {payloadError ? <p className="error-text">{payloadError}</p> : null}
         {uploadError ? <p className="error-text">{uploadError}</p> : null}
-        {(block.type === "image" || block.type === "audio" || block.type === "video") &&
-        (s3Key || filename || contentHash) ? (
-          <div className="metadata-grid">
-            {filename ? (
-              <div>
-                <span>File</span>
-                <strong>{filename}</strong>
-              </div>
-            ) : null}
-            {s3Key ? (
-              <div>
-                <span>S3 key</span>
-                <strong>{s3Key}</strong>
-              </div>
-            ) : null}
-            {contentHash ? (
-              <div>
-                <span>Hash</span>
-                <strong>{contentHash}</strong>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
         <div className="config-actions">
           <button className="config-save" type="submit" disabled={isSaving}>
             <Save aria-hidden="true" size={14} /> {isSaving ? "Saving..." : "Save changes"}

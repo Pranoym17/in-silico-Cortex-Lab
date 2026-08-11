@@ -1,28 +1,29 @@
 "use client";
 
+import NextImage from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowRight,
   ArrowUpRight,
   BrainCircuit,
+  Check,
   FlaskConical,
-  Image,
+  Image as ImageIcon,
   LibraryBig,
   Menu,
   Mic,
   ScanLine,
-  Sparkles,
   Type,
   Video,
   X
 } from "lucide-react";
 import { HeroBrain } from "./HeroBrain";
 
-const modalities = [
+const modalityOptions = [
   { label: "Text", icon: Type },
-  { label: "Images", icon: Image },
+  { label: "Image", icon: ImageIcon },
   { label: "Audio", icon: Mic },
   { label: "Video", icon: Video }
 ];
@@ -36,22 +37,62 @@ const templates = [
   "Reading versus listening"
 ];
 
+function useTypewriter(text: string, speed = 38, startDelay = 600) {
+  const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    let interval: number | undefined;
+    const timeout = window.setTimeout(() => {
+      let index = 0;
+      interval = window.setInterval(() => {
+        index += 1;
+        setDisplayed(text.slice(0, index));
+        if (index >= text.length) {
+          window.clearInterval(interval);
+          setDone(true);
+        }
+      }, speed);
+    }, startDelay);
+
+    return () => {
+      window.clearTimeout(timeout);
+      if (interval) {
+        window.clearInterval(interval);
+      }
+    };
+  }, [speed, startDelay, text]);
+
+  return { displayed, done };
+}
+
 export function CortexLandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedModalities, setSelectedModalities] = useState<string[]>([]);
+  const { displayed, done } = useTypewriter("Cortex Lab\nfor cortical research.");
 
   function closeMenu() {
     setMenuOpen(false);
+  }
+
+  function toggleModality(label: string) {
+    setSelectedModalities((current) =>
+      current.includes(label) ? current.filter((item) => item !== label) : [...current, label]
+    );
   }
 
   return (
     <main className="landing-page" id="top">
       <header className="landing-nav">
         <Link aria-label="Cortex Lab home" className="landing-brand" href="/">
-          <span className="landing-brand-mark"><BrainCircuit aria-hidden="true" size={20} strokeWidth={1.7} /></span>
-          <span className="landing-brand-copy">
-            <strong>Cortex Lab</strong>
-            <small>In-silico cortical research</small>
-          </span>
+          <NextImage
+            alt="Cortex Lab"
+            className="landing-brand-logo"
+            height={76}
+            priority
+            src="/brand/cortex-lab-logo.png"
+            width={138}
+          />
         </Link>
 
         <nav className="landing-nav-links" aria-label="Landing navigation">
@@ -61,47 +102,77 @@ export function CortexLandingPage() {
         </nav>
 
         <div className="landing-nav-actions">
-          <Link className="landing-nav-cta" href="/dashboard">
-            <span>Open workspace</span>
-            <ArrowUpRight aria-hidden="true" size={15} strokeWidth={1.8} />
-          </Link>
+          <Link className="landing-nav-cta" href="/dashboard">Build an experiment</Link>
           <button
             aria-controls="landing-mobile-menu"
             aria-expanded={menuOpen}
             aria-label={menuOpen ? "Close navigation" : "Open navigation"}
-            className="landing-menu-toggle"
+            className={menuOpen ? "landing-menu-toggle open" : "landing-menu-toggle"}
             onClick={() => setMenuOpen((open) => !open)}
             type="button"
           >
-            {menuOpen ? <X aria-hidden="true" size={19} /> : <Menu aria-hidden="true" size={19} />}
+            <span />
+            <span />
+            <span />
           </button>
         </div>
       </header>
 
-      <nav className={menuOpen ? "landing-mobile-menu open" : "landing-mobile-menu"} id="landing-mobile-menu" aria-label="Mobile navigation">
+      <nav
+        className={menuOpen ? "landing-mobile-menu open" : "landing-mobile-menu"}
+        id="landing-mobile-menu"
+        aria-hidden={!menuOpen}
+        aria-label="Mobile navigation"
+      >
         <a href="#method" onClick={closeMenu}>Method</a>
         <a href="#paradigms" onClick={closeMenu}>Paradigms</a>
         <Link href="/library" onClick={closeMenu}>Library</Link>
-        <Link href="/dashboard" onClick={closeMenu}>Open workspace <ArrowUpRight aria-hidden="true" size={17} /></Link>
+        <Link href="/dashboard" onClick={closeMenu}>Build an experiment <ArrowUpRight aria-hidden="true" size={18} /></Link>
       </nav>
 
       <section className="landing-hero" aria-labelledby="landing-title">
-        <div className="landing-hero-copy">
-          <span className="landing-kicker"><i aria-hidden="true" /> Multimodal neural simulation</span>
-          <h1 id="landing-title">Cortex Lab</h1>
-          <p className="landing-hero-lead">Design a stimulus, follow it through time, and inspect a simulated cortical response.</p>
-          <div className="landing-hero-actions">
-            <Link className="landing-primary-action" href="/dashboard">
-              <FlaskConical aria-hidden="true" size={16} strokeWidth={1.8} />
-              Build an experiment
-              <ArrowRight aria-hidden="true" size={16} strokeWidth={1.8} />
-            </Link>
-            <Link className="landing-secondary-action" href="/library">
-              Browse research library
-              <ArrowUpRight aria-hidden="true" size={15} strokeWidth={1.8} />
-            </Link>
-          </div>
-          <p className="landing-hero-note">Research-use simulations. Cortex Lab does not produce measured or diagnostic brain data.</p>
+        <div className="landing-hero-copy landing-enter">
+          <p className="landing-overline">IN-SILICO NEUROSCIENCE LAB</p>
+          <h1 id="landing-title">
+            {displayed}
+            {!done ? <span aria-hidden="true" className="landing-type-cursor" /> : null}
+          </h1>
+          <p className="landing-hero-lead">
+            Design a multimodal stimulus timeline, run a simulated response, and inspect the cortical surface in one research workspace.
+          </p>
+
+          <section className="landing-modality-picker" aria-labelledby="modality-picker-title">
+            <h2 id="modality-picker-title">What will your experiment contain?</h2>
+            <p>Select every stimulus modality that applies.</p>
+            <div className="landing-modality-options">
+              {modalityOptions.map(({ label, icon: Icon }) => {
+                const selected = selectedModalities.includes(label);
+                return (
+                  <button
+                    aria-pressed={selected}
+                    className={selected ? "landing-modality-option active" : "landing-modality-option"}
+                    key={label}
+                    onClick={() => toggleModality(label)}
+                    type="button"
+                  >
+                    <Icon aria-hidden="true" size={15} strokeWidth={1.7} />
+                    {label}
+                    {selected ? <Check aria-hidden="true" className="landing-modality-check" size={15} strokeWidth={2.2} /> : null}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedModalities.length === 0 ? (
+              <p className="landing-selection-placeholder">Choose a modality to shape a new experiment.</p>
+            ) : (
+              <div className="landing-selection-feedback" role="status">
+                <span>Ready to compose with: {selectedModalities.join(", ")}</span>
+                <Link href="/dashboard">Open workspace <ArrowRight aria-hidden="true" size={14} /></Link>
+              </div>
+            )}
+          </section>
+
+          <p className="landing-hero-note">Cortex Lab presents simulated average-subject predictions for research use. It does not produce diagnostic or measured brain data.</p>
         </div>
 
         <div className="landing-hero-visual">
@@ -111,55 +182,46 @@ export function CortexLandingPage() {
             <strong>fsaverage5</strong>
           </div>
           <div className="landing-brain-readout landing-brain-readout-bottom">
-            <span>Output</span>
-            <strong>20,484 vertices</strong>
+            <span>Interactive cortical mesh</span>
+            <strong>Drag to inspect</strong>
           </div>
-          <div className="landing-brain-axis" aria-hidden="true"><i /><span>cortical surface</span></div>
-        </div>
-
-        <div className="landing-hero-footer" aria-label="Supported stimulus modalities">
-          <span>Stimulus inputs</span>
-          <div>
-            {modalities.map(({ label, icon: Icon }) => (
-              <span key={label}><Icon aria-hidden="true" size={15} strokeWidth={1.65} />{label}</span>
-            ))}
-          </div>
+          <div className="landing-brain-axis" aria-hidden="true"><i /><span>20,484 surface vertices</span></div>
         </div>
       </section>
 
       <section className="landing-method" id="method" aria-labelledby="method-title">
         <div className="landing-section-heading">
-          <span className="landing-kicker"><i aria-hidden="true" /> A deliberate research flow</span>
-          <h2 id="method-title">One surface for the whole experiment.</h2>
+          <p className="landing-overline">The workflow</p>
+          <h2 id="method-title">A complete experiment, kept legible from stimulus to surface.</h2>
         </div>
         <div className="landing-method-steps">
           <article>
             <span>01</span>
-            <Type aria-hidden="true" size={21} strokeWidth={1.55} />
+            <Type aria-hidden="true" size={20} strokeWidth={1.5} />
             <h3>Compose</h3>
-            <p>Arrange text, image, audio, and video blocks with precise timing in a private experiment draft.</p>
+            <p>Arrange text, image, audio, and video blocks with their conditions and exact timing in a private draft.</p>
           </article>
           <article>
             <span>02</span>
-            <ScanLine aria-hidden="true" size={21} strokeWidth={1.55} />
+            <ScanLine aria-hidden="true" size={20} strokeWidth={1.5} />
             <h3>Run</h3>
-            <p>Process each stimulus through the experiment pipeline and follow progress as the response is prepared.</p>
+            <p>Process each stimulus through the experiment pipeline while live progress reports stay attached to the job.</p>
           </article>
           <article>
             <span>03</span>
-            <Activity aria-hidden="true" size={21} strokeWidth={1.55} />
+            <Activity aria-hidden="true" size={20} strokeWidth={1.5} />
             <h3>Inspect</h3>
-            <p>Move through activation frames, regions, cognitive-state estimates, and comparison analyses in one viewer.</p>
+            <p>Move through activation frames, regions, cognitive states, and comparison analyses in a dedicated viewer.</p>
           </article>
         </div>
       </section>
 
       <section className="landing-paradigms" id="paradigms" aria-labelledby="paradigms-title">
         <div className="landing-paradigms-intro">
-          <span className="landing-kicker"><i aria-hidden="true" /> Six ready starting points</span>
-          <h2 id="paradigms-title">Begin with a paradigm. Keep the reasoning visible.</h2>
+          <p className="landing-overline">Six research starting points</p>
+          <h2 id="paradigms-title">Start with a paradigm. Keep the reasoning visible.</h2>
           <p>Each template opens as an editable private draft, ready for a real stimulus timeline.</p>
-          <Link className="landing-text-link" href="/library">View the research library <ArrowRight aria-hidden="true" size={15} /></Link>
+          <Link className="landing-text-link" href="/library">Browse the research library <ArrowRight aria-hidden="true" size={15} /></Link>
         </div>
         <ol className="landing-template-list">
           {templates.map((template, index) => (
@@ -174,22 +236,21 @@ export function CortexLandingPage() {
         </ol>
       </section>
 
-      <section className="landing-research-use" id="research-use" aria-labelledby="research-use-title">
+      <section className="landing-research-use" aria-labelledby="research-use-title">
         <div>
-          <span className="landing-kicker"><i aria-hidden="true" /> Built for research clarity</span>
-          <h2 id="research-use-title">Useful when the result stays honest.</h2>
+          <p className="landing-overline">Research clarity</p>
+          <h2 id="research-use-title">A workspace that keeps the result in context.</h2>
         </div>
         <div className="landing-research-points">
-          <p><BrainCircuit aria-hidden="true" size={19} strokeWidth={1.55} /> Simulated average-subject cortical predictions, shown with their timing and provenance.</p>
-          <p><Sparkles aria-hidden="true" size={19} strokeWidth={1.55} /> Private drafts by default, with publication and forking as deliberate research-sharing actions.</p>
-          <p><LibraryBig aria-hidden="true" size={19} strokeWidth={1.55} /> Curated paradigms and modality-aware processing keep the experiment legible from input to result.</p>
+          <p><BrainCircuit aria-hidden="true" size={19} strokeWidth={1.5} /> Simulated average-subject cortical predictions are shown with their timing and provenance.</p>
+          <p><FlaskConical aria-hidden="true" size={19} strokeWidth={1.5} /> Experiments stay private by default. Publication and forking are explicit research-sharing actions.</p>
+          <p><LibraryBig aria-hidden="true" size={19} strokeWidth={1.5} /> Curated paradigms and modality-aware processing preserve the line from input to result.</p>
         </div>
       </section>
 
       <footer className="landing-footer">
-        <Link className="landing-brand landing-footer-brand" href="/">
-          <span className="landing-brand-mark"><BrainCircuit aria-hidden="true" size={18} strokeWidth={1.7} /></span>
-          <span className="landing-brand-copy"><strong>Cortex Lab</strong><small>Research workspace</small></span>
+        <Link aria-label="Cortex Lab home" className="landing-footer-brand" href="/">
+          <NextImage alt="Cortex Lab" className="landing-footer-logo" height={64} src="/brand/cortex-lab-logo.png" width={116} />
         </Link>
         <p>In-silico cortical research for transparent stimulus experiments.</p>
         <nav aria-label="Footer navigation">

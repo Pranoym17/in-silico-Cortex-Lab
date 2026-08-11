@@ -50,8 +50,8 @@ function createTestToken() {
 async function openFreshBuilder(page: Page) {
   const token = createTestToken();
   await page.goto("/dashboard");
-  await page.getByLabel("Access token").fill(token);
-  await page.getByRole("button", { name: "Use token" }).click();
+  await page.getByLabel("Research access token").fill(token);
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Authenticated session")).toBeVisible();
   const experimentName = `Browser QA ${Date.now()} ${randomUUID().slice(0, 8)}`;
   await page.getByLabel("Experiment name").fill(experimentName);

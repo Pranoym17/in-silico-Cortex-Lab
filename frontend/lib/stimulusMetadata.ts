@@ -13,6 +13,18 @@ export function normalizeContentHash(value: string) {
   return trimmed.startsWith("sha256:") ? trimmed : `sha256:${trimmed}`;
 }
 
+export async function createTextContentHash(text: string, voice: string) {
+  const canonicalStimulus = JSON.stringify({
+    text: text.trim(),
+    voice: voice.trim() || "tribe_official_gtts"
+  });
+  const bytes = new TextEncoder().encode(canonicalStimulus);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+
+  return `sha256:${hex}`;
+}
+
 export function getStimulusReadinessIssues(block: StimulusBlock) {
   const issues: string[] = [];
 

@@ -1,5 +1,6 @@
+import NextImage from "next/image";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, BrainCircuit } from "lucide-react";
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
 
 type InformationSection = {
   heading: string;
@@ -18,11 +19,7 @@ export function PublicInformationPage({ eyebrow, title, introduction, sections }
     <main className="landing-info-page">
       <header className="landing-info-nav">
         <Link aria-label="Cortex Lab home" className="landing-brand" href="/">
-          <span className="landing-brand-mark"><BrainCircuit aria-hidden="true" size={20} strokeWidth={1.7} /></span>
-          <span className="landing-brand-copy">
-            <strong>Cortex Lab</strong>
-            <small>In-silico cortical research</small>
-          </span>
+          <NextImage alt="Cortex Lab" className="landing-brand-logo" height={76} priority src="/brand/cortex-lab-logo.png" width={138} />
         </Link>
         <Link className="landing-info-workspace-link" href="/dashboard">Open workspace <ArrowUpRight aria-hidden="true" size={15} /></Link>
       </header>

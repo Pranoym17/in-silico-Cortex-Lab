@@ -215,7 +215,7 @@ export function DashboardClient() {
             </>
           ) : (
             <>
-              <p>Supabase env vars are not set yet. Paste a development JWT to exercise the API contract.</p>
+              <p>Use your research access token to open a private workspace session.</p>
               <form
                 className="token-form"
                 onSubmit={(event) => {
@@ -224,12 +224,12 @@ export function DashboardClient() {
                 }}
               >
                 <input
-                  aria-label="Access token"
+                  aria-label="Research access token"
                   value={tokenDraft}
                   onChange={(event) => setTokenDraft(event.target.value)}
-                  placeholder="Bearer token value"
+                  placeholder="Enter access token"
                 />
-                <button type="submit">Use token</button>
+                <button type="submit">Continue</button>
               </form>
             </>
           )}
