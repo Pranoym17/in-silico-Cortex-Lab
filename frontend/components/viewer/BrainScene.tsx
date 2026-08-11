@@ -68,7 +68,7 @@ export function BrainScene({
       <WebGLErrorBoundary>
         <Suspense fallback={<div className="brain-loading">Loading brain mesh</div>}>
           <Canvas camera={{ position: [0, -180, 70], fov: 42 }} gl={{ preserveDrawingBuffer: true }}>
-            <color attach="background" args={["#101114"]} />
+            <color attach="background" args={["#111718"]} />
             <ambientLight intensity={0.85} />
             <directionalLight position={[2, 4, 5]} intensity={1.4} />
             <directionalLight position={[-4, -2, 3]} intensity={0.45} />

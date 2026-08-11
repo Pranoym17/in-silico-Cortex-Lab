@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Activity, Camera, Download, Pause, Play, Radio, ScanLine, X } from "lucide-react";
 import { BrainPointerPosition, BrainScene } from "./BrainScene";
 import {
   BrainMeshManifest,
@@ -676,6 +677,13 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     >
       <div className="viewer-grid">
         <section className="viewer-canvas-panel">
+          <div className="viewer-canvas-toolbar">
+            <div>
+              <span className="section-kicker"><ScanLine aria-hidden="true" size={13} /> Cortical surface</span>
+              <strong>{manifest ? "fsaverage5 activation field" : "Preparing mesh assets"}</strong>
+            </div>
+            <span>Frame {selectedTimestep}/{maxSelectableTimestep}</span>
+          </div>
           {manifest ? (
             <BrainScene
               colorDomain={activeDomain}
@@ -735,12 +743,18 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           </div>
         </section>
 
-        <aside className="panel stack viewer-sidebar">
-          <div>
-            <h2>Run</h2>
-            <p>Job: {jobId}</p>
+        <aside className="viewer-sidebar">
+          <div className="viewer-run-overview">
+            <span className="section-kicker"><Activity aria-hidden="true" size={13} /> Run monitor</span>
+            <strong>{jobId.slice(0, 8)}</strong>
+            <p>{jobMetadata?.status ?? status} activation stream</p>
           </div>
-          <div className="viewer-controls">
+          <section className="viewer-section viewer-controls-section">
+            <div className="viewer-section-header">
+              <h3>Surface and playback</h3>
+              <span>{surface}</span>
+            </div>
+            <div className="viewer-controls">
             {manifest?.surfaces?.inflated ? (
               <div className="viewer-control-row" role="group" aria-label="Brain surface">
                 <button aria-pressed={surface === "pial"} onClick={() => setSurface("pial")} type="button">
@@ -751,28 +765,47 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 </button>
               </div>
             ) : null}
-            <div className="viewer-control-row">
-              <button type="button" onClick={() => setIsPlaying((value) => !value)}>
-                {isPlaying ? "Pause" : "Play"}
+            <div className="viewer-control-row viewer-command-row">
+              <button
+                aria-label={isPlaying ? "Pause activation playback" : "Play activation playback"}
+                className="icon-button"
+                onClick={() => setIsPlaying((value) => !value)}
+                title={isPlaying ? "Pause activation playback" : "Play activation playback"}
+                type="button"
+              >
+                {isPlaying ? <Pause aria-hidden="true" size={15} fill="currentColor" /> : <Play aria-hidden="true" size={15} fill="currentColor" />}
               </button>
               <button
+                aria-label="Jump to live activation frame"
+                className="icon-button"
                 type="button"
                 onClick={() => {
                   setIsPlaying(true);
                   setSelectedTimestep(maxSelectableTimestep);
                 }}
+                title="Jump to live activation frame"
               >
-                Live
+                <Radio aria-hidden="true" size={15} />
               </button>
               <button
+                aria-label={isCancelling ? "Cancelling active run" : "Cancel active run"}
+                className="icon-button viewer-cancel-button"
                 disabled={isCancelling || isTerminalViewerStatus(status)}
                 onClick={cancelRunningJob}
+                title={isCancelling ? "Cancelling active run" : "Cancel active run"}
                 type="button"
               >
-                {isCancelling ? "Cancelling" : "Cancel"}
+                <X aria-hidden="true" size={16} />
               </button>
-              <button disabled={isExportingScreenshot || !manifest} onClick={exportScreenshot} type="button">
-                {isExportingScreenshot ? "Exporting" : "Export PNG"}
+              <button
+                aria-label={isExportingScreenshot ? "Exporting viewer screenshot" : "Export viewer screenshot as PNG"}
+                className="icon-button"
+                disabled={isExportingScreenshot || !manifest}
+                onClick={exportScreenshot}
+                title={isExportingScreenshot ? "Exporting viewer screenshot" : "Export viewer screenshot as PNG"}
+                type="button"
+              >
+                <Camera aria-hidden="true" size={15} />
               </button>
             </div>
             <div className="viewer-control-row">
@@ -823,11 +856,12 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
             </div>
             <div className="viewer-legend" aria-label={`Activation scale from ${activeDomain[0]} to ${activeDomain[1]}`}>
               <span>{formatDomainValue(activeDomain[0])}</span>
-              <div />
+              <div aria-hidden="true"><i /><i /><i /></div>
               <span>{formatDomainValue(activeDomain[1])}</span>
             </div>
             {manualDomainInvalid ? <p className="error-text">Manual scale must have a numeric min below max.</p> : null}
-          </div>
+            </div>
+          </section>
           <div className="viewer-section">
             <h3>Frame</h3>
             <div className="viewer-stat-grid">
@@ -899,14 +933,17 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
             <div className="viewer-section-header">
               <h3>Region</h3>
               <button
+                aria-label="Clear all selected cortical regions"
+                className="icon-button"
                 disabled={!regionModeEnabled || selectedRegionLabels.length === 0}
                 onClick={() => {
                   setSelectedRegionLabels([]);
                   setSelectedVertex(null);
                 }}
+                title="Clear all selected cortical regions"
                 type="button"
               >
-                Clear all
+                <X aria-hidden="true" size={14} />
               </button>
             </div>
             {showAtlasUnavailable ? (
@@ -1079,8 +1116,8 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 Streamed frames are still visible, but saving the NPZ artifact failed. Rerun the job to create a downloadable result.
               </div>
             ) : null}
-            <button disabled={!result || isDownloadingResult || resultSaveFailed} onClick={downloadResult} type="button">
-              {isDownloadingResult ? "Preparing" : "Download NPZ"}
+            <button className="result-download" disabled={!result || isDownloadingResult || resultSaveFailed} onClick={downloadResult} type="button">
+              <Download aria-hidden="true" size={14} /> {isDownloadingResult ? "Preparing" : "Download NPZ"}
             </button>
           </div>
           <div className="viewer-section">
@@ -1130,8 +1167,8 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                   </div>
                 </div>
                 <div className="rsa-controls">
-                  <button onClick={() => downloadRsaJson(rsaResult)} type="button">Download JSON</button>
-                  <button onClick={() => downloadRsaCsv(rsaResult)} type="button">Download CSV</button>
+                  <button onClick={() => downloadRsaJson(rsaResult)} type="button"><Download aria-hidden="true" size={13} /> Download JSON</button>
+                  <button onClick={() => downloadRsaCsv(rsaResult)} type="button"><Download aria-hidden="true" size={13} /> Download CSV</button>
                 </div>
                 <div className="rsa-grid">
                   <RsaHeatmap title="Current RDM" labels={rsaResult.labels_a} matrix={rsaResult.rdm_a} />
@@ -1178,7 +1215,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 />
               </label>
               <button disabled={!optimizerTarget.trim() || isRunningOptimizer} onClick={runStimulusOptimizer} type="button">
-                {isRunningOptimizer ? "Optimizing" : "Run Optimizer"}
+                <Activity aria-hidden="true" size={14} /> {isRunningOptimizer ? "Optimizing" : "Run Optimizer"}
               </button>
             </div>
             {optimizerGeneration ? (
@@ -1199,7 +1236,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 <p>{optimizerResult.best_stimulus}</p>
                 <span>Score {formatStatValue(optimizerResult.best_score)}</span>
                 <button disabled={isCreatingWinnerExperiment || !optimizerJobId} onClick={createWinnerExperiment} type="button">
-                  {isCreatingWinnerExperiment ? "Creating draft" : "Run as Experiment"}
+                  <Play aria-hidden="true" size={13} fill="currentColor" /> {isCreatingWinnerExperiment ? "Creating draft" : "Run as Experiment"}
                 </button>
               </div>
             ) : (
