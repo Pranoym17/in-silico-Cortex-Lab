@@ -166,7 +166,7 @@ export function LibraryDetailClient({ slug }: { slug: string }) {
 
             <div className="public-record-section-heading">
               <div><span className="section-kicker"><FlaskConical aria-hidden="true" size={13} /> Stimulus timeline</span><h2>{detail.experiment_name}</h2></div>
-              <span>{detail.entry.tags.length ? detail.entry.tags.join(" · ") : "Untyped paradigm"}</span>
+              <span>{detail.entry.tags.length ? detail.entry.tags.join(" / ") : "Untyped paradigm"}</span>
             </div>
             <div className="library-block-list public-block-list">
               {detail.blocks.map((block) => (

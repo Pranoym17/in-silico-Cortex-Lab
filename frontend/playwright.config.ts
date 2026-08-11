@@ -1,6 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "node:path";
 
+const e2eJwtSecret = "cortexlab-playwright-local-secret";
+process.env.E2E_SUPABASE_JWT_SECRET = e2eJwtSecret;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -17,6 +20,10 @@ export default defineConfig({
     {
       command: ".venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001",
       cwd: path.resolve(__dirname, "../backend"),
+      env: {
+        ...process.env,
+        SUPABASE_JWT_SECRET: e2eJwtSecret
+      },
       url: "http://127.0.0.1:8001/health",
       reuseExistingServer: true,
       timeout: 60_000

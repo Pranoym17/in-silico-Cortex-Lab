@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ReactNode, useState } from "react";
 import { usePathname } from "next/navigation";
-import { BookOpen, BrainCircuit, ChevronDown, CircleUserRound, FlaskConical, LibraryBig, LogOut, Menu, X } from "lucide-react";
+import { BrainCircuit, ChevronDown, CircleUserRound, FlaskConical, LibraryBig, LogOut, Menu, X } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
 
@@ -59,10 +59,6 @@ export function AppShell({ title, description, actions, children, width = "wide"
             </Link>
           ))}
         </nav>
-        <a className="app-rail-link app-rail-help" href="#workspace-help" title="Research workspace guidance">
-          <BookOpen aria-hidden="true" size={18} strokeWidth={1.7} />
-          <span>Guide</span>
-        </a>
       </aside>
 
       <div className="app-canvas">

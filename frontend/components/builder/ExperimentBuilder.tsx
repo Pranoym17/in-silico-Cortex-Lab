@@ -752,6 +752,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
             </div>
             <div className="timeline-actions">
               <button
+                aria-label="Undo"
                 type="button"
                 className="icon-button"
                 disabled={undoStack.length === 0 || isMutating || !accessToken}
@@ -761,6 +762,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
                 <Undo2 aria-hidden="true" size={15} />
               </button>
               <button
+                aria-label="Redo"
                 type="button"
                 className="icon-button"
                 disabled={redoStack.length === 0 || isMutating || !accessToken}
@@ -770,6 +772,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
                 <Redo2 aria-hidden="true" size={15} />
               </button>
               <button
+                aria-label="Move selected block earlier"
                 type="button"
                 className="icon-button"
                 disabled={!selectedBlock || isMutating || !accessToken}
@@ -779,6 +782,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
                 <ChevronLeft aria-hidden="true" size={15} />
               </button>
               <button
+                aria-label="Move selected block later"
                 type="button"
                 className="icon-button"
                 disabled={!selectedBlock || isMutating || !accessToken}
@@ -804,6 +808,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
                 Longer
               </button>
               <button
+                aria-label="Duplicate selected block"
                 type="button"
                 className="icon-button"
                 disabled={!selectedBlock || isMutating || !accessToken}

@@ -175,7 +175,7 @@ export function DashboardClient() {
         accessToken ? (
           <form className="compact-create-form" onSubmit={handleCreate}>
             <input value={name} onChange={(event) => setName(event.target.value)} aria-label="Experiment name" />
-            <button title="Create experiment" type="submit" disabled={isCreating || !name.trim()}>
+            <button aria-label="New experiment" title="Create experiment" type="submit" disabled={isCreating || !name.trim()}>
               <Plus aria-hidden="true" size={15} />
               <span>{isCreating ? "Creating..." : "New experiment"}</span>
             </button>

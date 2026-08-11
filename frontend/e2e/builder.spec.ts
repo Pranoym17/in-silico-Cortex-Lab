@@ -27,7 +27,8 @@ function createTestToken() {
     ...(fs.existsSync(envPath) ? readEnv(envPath) : {}),
     ...process.env
   };
-  if (!env.SUPABASE_JWT_SECRET) {
+  const jwtSecret = process.env.E2E_SUPABASE_JWT_SECRET ?? env.SUPABASE_JWT_SECRET;
+  if (!jwtSecret) {
     throw new Error("SUPABASE_JWT_SECRET is required for local authenticated browser tests");
   }
   const now = Math.floor(Date.now() / 1000);
@@ -40,7 +41,7 @@ function createTestToken() {
     ...(env.SUPABASE_JWT_AUDIENCE ? { aud: env.SUPABASE_JWT_AUDIENCE } : {}),
     ...(env.SUPABASE_JWT_ISSUER ? { iss: env.SUPABASE_JWT_ISSUER } : {})
   });
-  const signature = createHmac("sha256", env.SUPABASE_JWT_SECRET)
+  const signature = createHmac("sha256", jwtSecret)
     .update(`${header}.${payload}`)
     .digest("base64url");
   return `${header}.${payload}.${signature}`;
@@ -54,7 +55,7 @@ async function openFreshBuilder(page: Page) {
   await expect(page.getByText("Authenticated session")).toBeVisible();
   const experimentName = `Browser QA ${Date.now()} ${randomUUID().slice(0, 8)}`;
   await page.getByLabel("Experiment name").fill(experimentName);
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("button", { name: "New experiment", exact: true }).click();
   const experimentRow = page.locator(".experiment-row").filter({ hasText: experimentName });
   await expect(experimentRow).toBeVisible();
   await experimentRow.getByRole("link", { name: "Open" }).click();
