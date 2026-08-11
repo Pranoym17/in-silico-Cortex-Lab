@@ -42,8 +42,9 @@ export function AppShell({ title, description, actions, children, width = "wide"
   return (
     <div className={`app-frame ${width === "full" ? "app-frame-workspace" : ""}`}>
       <aside className="app-rail" aria-label="Workspace navigation">
-        <Link aria-label="Cortex Lab experiments" className="app-mark" href="/dashboard" title="Cortex Lab">
+        <Link aria-label="Cortex Lab home" className="app-mark" href="/" title="Cortex Lab home">
           <BrainCircuit aria-hidden="true" size={22} strokeWidth={1.7} />
+          <span className="app-mark-copy"><strong>Cortex Lab</strong><small>Research workspace</small></span>
         </Link>
         <nav className="app-rail-nav" aria-label="Primary navigation">
           {navigation.map(({ href, label, icon: Icon }) => (
