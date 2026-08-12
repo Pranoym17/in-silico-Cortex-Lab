@@ -29,16 +29,19 @@ export function HeroBrain() {
       <HeroBrainErrorBoundary>
         <Suspense fallback={<HeroBrainLoading />}>
           <Canvas
-            camera={{ position: [0, -185, 68], fov: 42 }}
+            camera={{ position: [0, -172, 64], fov: 40 }}
             dpr={[1, 1.75]}
             gl={{ antialias: true, preserveDrawingBuffer: true }}
           >
-            <color attach="background" args={["#f8faf9"]} />
-            <ambientLight intensity={1.7} />
-            <directionalLight color="#ffffff" intensity={2.25} position={[3, 4, 5]} />
-            <directionalLight color="#76d8db" intensity={0.9} position={[-4, -2, 3]} />
-            <pointLight color="#4b8cc6" intensity={11} position={[0, -2, 4]} />
-            <Bounds fit clip observe margin={0.96}>
+            <color attach="background" args={["#f4f8fb"]} />
+            <ambientLight intensity={1.08} />
+            <hemisphereLight args={["#d9fbff", "#25375d", 1.35]} />
+            <directionalLight color="#ffffff" intensity={2.6} position={[3, 4, 5]} />
+            <directionalLight color="#25d6ca" intensity={1.45} position={[-4, -2, 3]} />
+            <directionalLight color="#8a72ef" intensity={1.15} position={[3, -3, 2]} />
+            <pointLight color="#46c7ff" intensity={15} position={[0, -2, 4]} />
+            <pointLight color="#f0a4df" intensity={7} position={[1, 3, -1]} />
+            <Bounds fit clip observe margin={0.84}>
               <Center>
                 <group rotation={[0.1, 0.42, 0]}>
                   <HeroHemisphere path={HEMISPHERE_PATHS.left} side="left" />
@@ -48,7 +51,7 @@ export function HeroBrain() {
             </Bounds>
             <OrbitControls
               autoRotate
-              autoRotateSpeed={0.42}
+              autoRotateSpeed={0.52}
               enablePan={false}
               enableZoom
               maxDistance={480}
@@ -76,7 +79,8 @@ function HeroHemisphere({ path, side }: { path: string; side: HemisphereSide }) 
 
 function createPresentationBrain(source: THREE.Object3D, side: HemisphereSide) {
   const clone = source.clone(true);
-  const baseColor = side === "left" ? "#c9eee6" : "#d4e5f3";
+  const baseColor = side === "left" ? "#24bfc4" : "#7286e5";
+  const emissiveColor = side === "left" ? "#063a4c" : "#181b65";
 
   clone.traverse((node) => {
     if (!(node instanceof THREE.Mesh) || !(node.geometry instanceof THREE.BufferGeometry)) {
@@ -86,10 +90,12 @@ function createPresentationBrain(source: THREE.Object3D, side: HemisphereSide) {
     node.geometry = node.geometry.clone();
     node.material = new THREE.MeshPhysicalMaterial({
       color: baseColor,
-      roughness: 0.54,
-      metalness: 0.02,
-      clearcoat: 0.12,
-      clearcoatRoughness: 0.6
+      emissive: emissiveColor,
+      emissiveIntensity: 0.18,
+      roughness: 0.31,
+      metalness: 0.12,
+      clearcoat: 0.56,
+      clearcoatRoughness: 0.26
     });
     node.castShadow = true;
     node.receiveShadow = true;

@@ -102,7 +102,7 @@ export function CortexLandingPage() {
         </nav>
 
         <div className="landing-nav-actions">
-          <Link className="landing-nav-cta" href="/dashboard">Build an experiment</Link>
+          <Link className="landing-nav-cta pearl-link" href="/dashboard">Build an experiment <ArrowUpRight aria-hidden="true" size={15} /></Link>
           <button
             aria-controls="landing-mobile-menu"
             aria-expanded={menuOpen}

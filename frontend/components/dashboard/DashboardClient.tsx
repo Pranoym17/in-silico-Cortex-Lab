@@ -7,6 +7,7 @@ import { ApiError, Experiment, createExperiment, listExperiments } from "@/lib/a
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
 import { AppShell, EmptyState, ErrorPanel, LoadingRows, StatusBadge } from "@/components/ui/AppShell";
+import { PearlButton } from "@/components/ui/PearlButton";
 
 function formatUpdatedAt(value: string) {
   return new Intl.DateTimeFormat("en", {
@@ -191,31 +192,38 @@ export function DashboardClient() {
       ) : !accessToken ? (
         <section className="panel auth-panel auth-workbench">
           <div className="auth-copy">
-            <span className="section-kicker"><LockKeyhole aria-hidden="true" size={13} /> Research workspace</span>
-            <h2>Sign in</h2>
-            <p>Resume your private experiments, queued runs, and saved stimulus timelines.</p>
+            <span className="auth-brand-mark" aria-hidden="true"><Sparkles size={18} strokeWidth={1.7} /></span>
+            <span className="section-kicker"><LockKeyhole aria-hidden="true" size={13} /> Cortex Lab workspace</span>
+            <h2>Welcome back</h2>
+            <p>Open your private experiments, queued runs, and saved stimulus timelines.</p>
           </div>
           {supabaseConfigured ? (
-            <>
+            <div className="auth-actions">
               <form className="token-form" onSubmit={handleMagicLink}>
-                <input
-                  aria-label="Email"
-                  value={emailDraft}
-                  onChange={(event) => setEmailDraft(event.target.value)}
-                  placeholder="you@example.com"
-                  type="email"
-                />
-                <button type="submit" disabled={isSendingLink || !emailDraft.trim()}>
-                  {isSendingLink ? "Sending..." : "Email link"}
-                </button>
+                <label className="auth-field">
+                  <span>Email address</span>
+                  <input
+                    aria-label="Email"
+                    value={emailDraft}
+                    onChange={(event) => setEmailDraft(event.target.value)}
+                    placeholder="you@example.com"
+                    type="email"
+                  />
+                </label>
+                <PearlButton icon={<ArrowRight size={16} strokeWidth={1.8} />} type="submit" disabled={isSendingLink || !emailDraft.trim()}>
+                  {isSendingLink ? "Sending sign-in link..." : "Continue with email"}
+                </PearlButton>
               </form>
-              <button className="google-sign-in" type="button" onClick={handleGoogleSignIn}>
+              <div className="auth-divider" aria-hidden="true"><span>or</span></div>
+              <PearlButton className="google-sign-in" type="button" onClick={handleGoogleSignIn}>
+                <span aria-hidden="true" className="auth-google-mark" />
                 Continue with Google
-              </button>
-            </>
+              </PearlButton>
+              <p className="auth-legal">A secure sign-in link will be sent to your inbox.</p>
+            </div>
           ) : (
-            <>
-              <p>Use your research access token to open a private workspace session.</p>
+            <div className="auth-actions">
+              <p className="auth-access-copy">Use your research access token to open a private workspace session.</p>
               <form
                 className="token-form"
                 onSubmit={(event) => {
@@ -223,15 +231,18 @@ export function DashboardClient() {
                   setAccessToken(tokenDraft.trim() || null);
                 }}
               >
-                <input
-                  aria-label="Research access token"
-                  value={tokenDraft}
-                  onChange={(event) => setTokenDraft(event.target.value)}
-                  placeholder="Enter access token"
-                />
-                <button type="submit">Continue</button>
+                <label className="auth-field">
+                  <span>Research access token</span>
+                  <input
+                    aria-label="Research access token"
+                    value={tokenDraft}
+                    onChange={(event) => setTokenDraft(event.target.value)}
+                    placeholder="Enter access token"
+                  />
+                </label>
+                <PearlButton icon={<ArrowRight size={16} strokeWidth={1.8} />} type="submit">Continue</PearlButton>
               </form>
-            </>
+            </div>
           )}
           {notice ? <p>{notice}</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
