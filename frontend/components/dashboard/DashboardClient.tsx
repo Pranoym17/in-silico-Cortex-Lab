@@ -3,7 +3,7 @@
 import Link from "next/link";
 import NextImage from "next/image";
 import { FormEvent, useEffect, useState } from "react";
-import { Activity, ArrowRight, BookOpen, CircleCheck, FlaskConical, LockKeyhole, Plus } from "lucide-react";
+import { Activity, ArrowRight, BookOpen, CircleCheck, FlaskConical, LockKeyhole, Plus, Sparkles } from "lucide-react";
 import { ApiError, Experiment, createExperiment, listExperiments } from "@/lib/api";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
