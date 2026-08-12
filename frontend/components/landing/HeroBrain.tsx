@@ -35,12 +35,12 @@ export function HeroBrain() {
           >
             <color attach="background" args={["#f4f8fb"]} />
             <ambientLight intensity={1.08} />
-            <hemisphereLight args={["#d9fbff", "#25375d", 1.35]} />
+            <hemisphereLight args={["#eff3ff", "#25182b", 1.2]} />
             <directionalLight color="#ffffff" intensity={2.6} position={[3, 4, 5]} />
-            <directionalLight color="#25d6ca" intensity={1.45} position={[-4, -2, 3]} />
-            <directionalLight color="#8a72ef" intensity={1.15} position={[3, -3, 2]} />
-            <pointLight color="#46c7ff" intensity={15} position={[0, -2, 4]} />
-            <pointLight color="#f0a4df" intensity={7} position={[1, 3, -1]} />
+            <directionalLight color="#ee506a" intensity={1.3} position={[-4, -2, 3]} />
+            <directionalLight color="#4f80ed" intensity={1.3} position={[3, -3, 2]} />
+            <pointLight color="#e63f63" intensity={11} position={[0, -2, 4]} />
+            <pointLight color="#5d86f2" intensity={10} position={[1, 3, -1]} />
             <Bounds fit clip observe margin={0.84}>
               <Center>
                 <group rotation={[0.1, 0.42, 0]}>
@@ -79,8 +79,8 @@ function HeroHemisphere({ path, side }: { path: string; side: HemisphereSide }) 
 
 function createPresentationBrain(source: THREE.Object3D, side: HemisphereSide) {
   const clone = source.clone(true);
-  const baseColor = side === "left" ? "#24bfc4" : "#7286e5";
-  const emissiveColor = side === "left" ? "#063a4c" : "#181b65";
+  const baseColor = side === "left" ? "#e54862" : "#4f7ee8";
+  const emissiveColor = side === "left" ? "#4c0718" : "#10185e";
 
   clone.traverse((node) => {
     if (!(node instanceof THREE.Mesh) || !(node.geometry instanceof THREE.BufferGeometry)) {
@@ -91,11 +91,13 @@ function createPresentationBrain(source: THREE.Object3D, side: HemisphereSide) {
     node.material = new THREE.MeshPhysicalMaterial({
       color: baseColor,
       emissive: emissiveColor,
-      emissiveIntensity: 0.18,
-      roughness: 0.31,
-      metalness: 0.12,
-      clearcoat: 0.56,
-      clearcoatRoughness: 0.26
+      emissiveIntensity: 0.14,
+      roughness: 0.27,
+      metalness: 0.08,
+      clearcoat: 0.48,
+      clearcoatRoughness: 0.3,
+      transparent: true,
+      opacity: 0.93
     });
     node.castShadow = true;
     node.receiveShadow = true;
