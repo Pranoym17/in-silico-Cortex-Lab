@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import NextImage from "next/image";
 import { FormEvent, useEffect, useState } from "react";
-import { Activity, ArrowRight, BookOpen, CircleCheck, FlaskConical, LockKeyhole, Plus, Sparkles } from "lucide-react";
+import { Activity, ArrowRight, BookOpen, CircleCheck, FlaskConical, LockKeyhole, Plus } from "lucide-react";
 import { ApiError, Experiment, createExperiment, listExperiments } from "@/lib/api";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
@@ -192,7 +193,9 @@ export function DashboardClient() {
       ) : !accessToken ? (
         <section className="panel auth-panel auth-workbench">
           <div className="auth-copy">
-            <span className="auth-brand-mark" aria-hidden="true"><Sparkles size={18} strokeWidth={1.7} /></span>
+            <span className="auth-brand-mark" aria-hidden="true">
+              <NextImage alt="" className="auth-brand-logo" height={64} src="/brand/cortex-lab-logo.png" width={86} />
+            </span>
             <span className="section-kicker"><LockKeyhole aria-hidden="true" size={13} /> Cortex Lab workspace</span>
             <h2>Welcome back</h2>
             <p>Open your private experiments, queued runs, and saved stimulus timelines.</p>

@@ -41,7 +41,7 @@ export function HeroBrain() {
             <directionalLight color="#4f80ed" intensity={1.3} position={[3, -3, 2]} />
             <pointLight color="#e63f63" intensity={11} position={[0, -2, 4]} />
             <pointLight color="#5d86f2" intensity={10} position={[1, 3, -1]} />
-            <Bounds fit clip observe margin={0.84}>
+            <Bounds fit clip observe margin={1.12}>
               <Center>
                 <group rotation={[0.1, 0.42, 0]}>
                   <HeroHemisphere path={HEMISPHERE_PATHS.left} side="left" />
