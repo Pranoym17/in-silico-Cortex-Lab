@@ -26,17 +26,14 @@ export function DashboardClient() {
   const setSession = useAuthStore((state) => state.setSession);
   const supabaseConfigured = isSupabaseConfigured();
   const [tokenDraft, setTokenDraft] = useState("");
-  const [emailDraft, setEmailDraft] = useState("");
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [name, setName] = useState("Untitled experiment");
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoringSession, setIsRestoringSession] = useState(supabaseConfigured);
   const [isCreating, setIsCreating] = useState(false);
-  const [isSendingLink, setIsSendingLink] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -120,33 +117,6 @@ export function DashboardClient() {
     }
   }
 
-  async function handleMagicLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase || !emailDraft.trim()) {
-      return;
-    }
-
-    setIsSendingLink(true);
-    setError(null);
-    setNotice(null);
-
-    const { error: signInError } = await supabase.auth.signInWithOtp({
-      email: emailDraft.trim(),
-      options: {
-        emailRedirectTo: window.location.origin + "/dashboard"
-      }
-    });
-
-    if (signInError) {
-      setError(signInError.message);
-    } else {
-      setNotice("Check your email for a sign-in link.");
-    }
-
-    setIsSendingLink(false);
-  }
-
   async function handleGoogleSignIn() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
@@ -171,8 +141,8 @@ export function DashboardClient() {
 
   return (
     <AppShell
-      title="Experiments"
-      description="Build precisely timed stimuli, validate a run, and read the cortical response."
+      title={accessToken ? "Experiments" : "Cortex Lab"}
+      description={accessToken ? "Build precisely timed stimuli, validate a run, and read the cortical response." : "Sign in to access your private research workspace."}
       actions={
         accessToken ? (
           <form className="compact-create-form" onSubmit={handleCreate}>
@@ -190,39 +160,23 @@ export function DashboardClient() {
           <h2>Restoring session</h2>
           <LoadingRows rows={2} />
         </section>
-      ) : !accessToken ? (
-        <section className="panel auth-panel auth-workbench">
-          <div className="auth-copy">
-            <span className="auth-brand-mark" aria-hidden="true">
-              <NextImage alt="" className="auth-brand-logo" height={64} src="/brand/cortex-lab-logo.png" width={86} />
-            </span>
+          ) : !accessToken ? (
+            <section className="panel auth-panel auth-workbench">
+              <div className="auth-copy">
+                <span className="auth-brand-mark" aria-hidden="true">
+                  <NextImage alt="" className="auth-brand-logo" height={64} src="/brand/cortex-lab-logo.png" width={86} />
+                </span>
             <span className="section-kicker"><LockKeyhole aria-hidden="true" size={13} /> Cortex Lab workspace</span>
-            <h2>Welcome back</h2>
-            <p>Open your private experiments, queued runs, and saved stimulus timelines.</p>
+            <h2>Sign in to your account</h2>
+            <p>Access your private experiments, queued runs, and saved stimulus timelines.</p>
           </div>
           {supabaseConfigured ? (
-            <div className="auth-actions">
-              <form className="token-form" onSubmit={handleMagicLink}>
-                <label className="auth-field">
-                  <span>Email address</span>
-                  <input
-                    aria-label="Email"
-                    value={emailDraft}
-                    onChange={(event) => setEmailDraft(event.target.value)}
-                    placeholder="you@example.com"
-                    type="email"
-                  />
-                </label>
-                <PearlButton icon={<ArrowRight size={16} strokeWidth={1.8} />} type="submit" disabled={isSendingLink || !emailDraft.trim()}>
-                  {isSendingLink ? "Sending sign-in link..." : "Continue with email"}
-                </PearlButton>
-              </form>
-              <div className="auth-divider" aria-hidden="true"><span>or</span></div>
+            <div className="auth-actions auth-google-only">
               <PearlButton className="google-sign-in" type="button" onClick={handleGoogleSignIn}>
                 <span aria-hidden="true" className="auth-google-mark" />
                 Continue with Google
               </PearlButton>
-              <p className="auth-legal">A secure sign-in link will be sent to your inbox.</p>
+              <p className="auth-legal">Google securely verifies your account before returning you to Cortex Lab.</p>
             </div>
           ) : (
             <div className="auth-actions">
@@ -247,7 +201,6 @@ export function DashboardClient() {
               </form>
             </div>
           )}
-          {notice ? <p>{notice}</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
         </section>
       ) : (
