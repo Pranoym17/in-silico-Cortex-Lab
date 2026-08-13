@@ -149,6 +149,24 @@ def build_report(
     }
 
 
+def reject_duplicate_fixture(output: Path, report: dict[str, Any]) -> None:
+    """Reject reuse of an activation artifact across distinct reference classes."""
+    fixture = report["fixture"]
+    fixture_hash = fixture["sha256"]
+    stimulus_class = fixture["stimulus_class"]
+    for existing_path in output.parent.glob("*.json"):
+        if existing_path == output or not existing_path.is_file():
+            continue
+        try:
+            existing_fixture = json.loads(existing_path.read_text(encoding="utf-8")).get("fixture", {})
+        except (OSError, json.JSONDecodeError):
+            continue
+        if existing_fixture.get("stimulus_class") != stimulus_class and existing_fixture.get("sha256") == fixture_hash:
+            raise ValueError(
+                f"reference artifact duplicates {existing_path.name}; run independent real inference for {stimulus_class}"
+            )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate a real TRIBE reference artifact against Cortex Lab contracts.")
     parser.add_argument("activation", type=Path)
@@ -175,6 +193,7 @@ def main() -> int:
         minimum_percentile=args.minimum_percentile,
     )
     output = args.output or Path("evidence") / "scientific" / f"{args.stimulus_class}.json"
+    reject_duplicate_fixture(output, report)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     print(f"Scientific validation: {'PASS' if report['passed'] else 'FAIL'}")

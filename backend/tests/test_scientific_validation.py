@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "validate_scientific_output.py"
@@ -79,3 +80,17 @@ def test_build_report_hashes_fixture_and_states_limitations(tmp_path):
     assert report["passed"] is True
     assert len(report["fixture"]["sha256"]) == 64
     assert "not measured fMRI" in report["limitations"]
+
+
+def test_duplicate_reference_fixtures_are_rejected(tmp_path):
+    output = tmp_path / "faces.json"
+    (tmp_path / "visual.json").write_text(
+        json.dumps({"fixture": {"stimulus_class": "visual", "sha256": "same-hash"}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicates visual.json"):
+        validation.reject_duplicate_fixture(
+            output,
+            {"fixture": {"stimulus_class": "faces", "sha256": "same-hash"}},
+        )
