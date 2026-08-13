@@ -56,7 +56,26 @@ def test_run_probes_sanitizes_failures():
     def fail(*args, **kwargs):
         raise RuntimeError("secret-bearing provider message")
 
-    results = probe.run_probes({}, {}, aws_probe=fail, redis_probe=fail, supabase_probe=fail)
+    results = probe.run_probes({}, {}, aws_probe=fail, redis_probe=fail, supabase_probe=fail, api_probe=fail)
     assert all(item.ready is False for item in results)
     assert all(item.evidence == {"error_type": "RuntimeError"} for item in results)
     assert all("secret-bearing" not in str(item) for item in results)
+
+
+def test_api_probe_uses_configured_frontend_api_url():
+    response = SimpleNamespace(status=200, headers=SimpleNamespace(get_content_type=lambda: "application/json"))
+
+    class FakeResponse:
+        def __enter__(self):
+            return response
+
+        def __exit__(self, *_):
+            return False
+
+    result = probe.probe_api(
+        {"NEXT_PUBLIC_API_URL": "https://api.cortexlab.example/"},
+        opener=lambda *_args, **_kwargs: FakeResponse(),
+    )
+
+    assert result.ready is True
+    assert result.evidence["api_url"] == "https://api.cortexlab.example"

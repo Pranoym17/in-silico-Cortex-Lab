@@ -4,6 +4,16 @@ export type ApiErrorBody = {
   detail?: string | { code?: string; message?: string };
 };
 
+export class ApiConnectionError extends Error {
+  endpoint: string;
+
+  constructor(endpoint: string) {
+    super(`Cortex Lab could not reach the API at ${endpoint}. Start the backend and confirm NEXT_PUBLIC_API_URL matches its address.`);
+    this.name = "ApiConnectionError";
+    this.endpoint = endpoint;
+  }
+}
+
 export class ApiError extends Error {
   status: number;
   body: ApiErrorBody | unknown;
@@ -331,7 +341,15 @@ export async function apiFetch(path: string, token?: string | null, init: Reques
 }
 
 export async function apiJson<T>(path: string, token?: string | null, init: RequestInit = {}): Promise<T> {
-  const response = await apiFetch(path, token, init);
+  let response: Response;
+  try {
+    response = await apiFetch(path, token, init);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new ApiConnectionError(API_URL);
+    }
+    throw error;
+  }
 
   if (response.status === 204) {
     return undefined as T;

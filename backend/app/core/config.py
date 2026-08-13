@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     supabase_jwt_audience: str | None = None
     supabase_jwt_issuer: str | None = None
     frontend_origin: str = "http://localhost:3000"
+    frontend_origins: str = ""
     admin_email_addresses: str = ""
     job_execution_mode: Literal["background", "celery", "manual"] = "background"
     inference_provider: Literal["fake", "modal"] = "fake"
@@ -47,6 +48,12 @@ class Settings(BaseSettings):
     cognitive_classifier_artifact_path: str | None = None
 
     model_config = SettingsConfigDict(env_file=ROOT_ENV_FILE, extra="ignore")
+
+    @property
+    def cors_origins(self) -> list[str]:
+        configured = [origin.strip().rstrip("/") for origin in self.frontend_origins.split(",") if origin.strip()]
+        legacy_origin = self.frontend_origin.strip().rstrip("/")
+        return list(dict.fromkeys([legacy_origin, *configured]))
 
 
 @lru_cache

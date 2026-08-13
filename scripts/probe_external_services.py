@@ -94,6 +94,23 @@ def probe_supabase(
         )
 
 
+def probe_api(frontend: dict[str, str], *, opener: Any = urlopen) -> Probe:
+    base = frontend.get("NEXT_PUBLIC_API_URL", "").rstrip("/")
+    if not base:
+        raise ValueError("NEXT_PUBLIC_API_URL is not configured")
+
+    request = Request(f"{base}/health")
+    with opener(request, timeout=15) as response:
+        content_type = response.headers.get_content_type()
+        ready = response.status == 200 and content_type == "application/json"
+        return Probe(
+            "api",
+            ready,
+            "Backend API health endpoint is reachable",
+            {"status": str(response.status), "content_type": content_type, "api_url": base},
+        )
+
+
 def run_probes(
     backend: dict[str, str],
     frontend: dict[str, str],
@@ -101,12 +118,14 @@ def run_probes(
     aws_probe: Any = probe_aws,
     redis_probe: Any = probe_redis,
     supabase_probe: Any = probe_supabase,
+    api_probe: Any = probe_api,
 ) -> list[Probe]:
     probes: list[Probe] = []
     for name, operation in (
         ("aws", lambda: aws_probe(backend)),
         ("redis", lambda: redis_probe(backend)),
         ("supabase", lambda: supabase_probe(backend, frontend)),
+        ("api", lambda: api_probe(frontend)),
     ):
         try:
             probes.append(operation())

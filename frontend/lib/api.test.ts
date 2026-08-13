@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ApiConnectionError,
   ApiError,
   applyExperimentTemplate,
   apiFetch,
@@ -42,6 +43,14 @@ describe("apiFetch", () => {
 });
 
 describe("apiJson", () => {
+  it("explains how to recover from a backend connection failure", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await expect(apiJson("/api/me")).rejects.toMatchObject(
+      new ApiConnectionError("http://localhost:8000")
+    );
+  });
+
   it("throws ApiError for non-ok responses", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ detail: "Authentication required" }), { status: 401 })
