@@ -2,13 +2,13 @@
 
 import NextImage from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Activity,
   ArrowRight,
   ArrowUpRight,
   BrainCircuit,
-  Check,
+  CircleUserRound,
   FlaskConical,
   Image as ImageIcon,
   LibraryBig,
@@ -19,14 +19,6 @@ import {
   Video,
   X
 } from "lucide-react";
-import { HeroBrain } from "./HeroBrain";
-
-const modalityOptions = [
-  { label: "Text", icon: Type },
-  { label: "Image", icon: ImageIcon },
-  { label: "Audio", icon: Mic },
-  { label: "Video", icon: Video }
-];
 
 const templates = [
   "FFA faces versus houses",
@@ -39,53 +31,28 @@ const templates = [
 
 const templateIcons = [BrainCircuit, Type, ImageIcon, Activity, Mic, LibraryBig];
 
-function useTypewriter(text: string, speed = 38, startDelay = 600) {
-  const [displayed, setDisplayed] = useState("");
-  const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    let interval: number | undefined;
-    const timeout = window.setTimeout(() => {
-      let index = 0;
-      interval = window.setInterval(() => {
-        index += 1;
-        setDisplayed(text.slice(0, index));
-        if (index >= text.length) {
-          window.clearInterval(interval);
-          setDone(true);
-        }
-      }, speed);
-    }, startDelay);
-
-    return () => {
-      window.clearTimeout(timeout);
-      if (interval) {
-        window.clearInterval(interval);
-      }
-    };
-  }, [speed, startDelay, text]);
-
-  return { displayed, done };
-}
-
 export function CortexLandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [selectedModalities, setSelectedModalities] = useState<string[]>([]);
-  const { displayed, done } = useTypewriter("Cortex Lab\nfor cortical research.");
 
   function closeMenu() {
     setMenuOpen(false);
   }
 
-  function toggleModality(label: string) {
-    setSelectedModalities((current) =>
-      current.includes(label) ? current.filter((item) => item !== label) : [...current, label]
-    );
-  }
-
   return (
     <main className="landing-page" id="top">
-      <header className="landing-nav">
+      <section className="landing-hero" aria-labelledby="landing-title">
+        <video
+          aria-hidden="true"
+          autoPlay
+          className="landing-hero-video"
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260715_082433_69699cf8-444b-4484-93cc-053e57896dfd.mp4"
+        />
+        <div aria-hidden="true" className="landing-hero-contrast" />
+        <header className="landing-nav">
         <Link aria-label="Cortex Lab home" className="landing-brand" href="/">
           <NextImage
             alt="Cortex Lab"
@@ -97,14 +64,14 @@ export function CortexLandingPage() {
           />
         </Link>
 
-        <nav className="landing-nav-links" aria-label="Landing navigation">
+        <nav className="landing-nav-links liquid-glass" aria-label="Landing navigation">
+          <a href="#top">Home</a>
           <a href="#method">Method</a>
-          <a href="#paradigms">Paradigms</a>
           <Link href="/library">Library</Link>
         </nav>
 
         <div className="landing-nav-actions">
-          <Link className="landing-nav-cta pearl-link" href="/dashboard">Build an experiment <ArrowUpRight aria-hidden="true" size={15} /></Link>
+          <Link aria-label="Sign in to Cortex Lab" className="landing-account-link liquid-glass" href="/sign-in"><CircleUserRound aria-hidden="true" size={19} strokeWidth={1.5} /></Link>
           <button
             aria-controls="landing-mobile-menu"
             aria-expanded={menuOpen}
@@ -113,89 +80,48 @@ export function CortexLandingPage() {
             onClick={() => setMenuOpen((open) => !open)}
             type="button"
           >
-            <span />
-            <span />
-            <span />
+            {menuOpen ? <X aria-hidden="true" size={19} /> : <Menu aria-hidden="true" size={19} />}
           </button>
         </div>
-      </header>
+        </header>
 
-      <nav
+        <nav
         className={menuOpen ? "landing-mobile-menu open" : "landing-mobile-menu"}
         id="landing-mobile-menu"
         aria-hidden={!menuOpen}
         aria-label="Mobile navigation"
       >
+        <a href="#top" onClick={closeMenu}>Home</a>
         <a href="#method" onClick={closeMenu}>Method</a>
-        <a href="#paradigms" onClick={closeMenu}>Paradigms</a>
         <Link href="/library" onClick={closeMenu}>Library</Link>
-        <Link href="/dashboard" onClick={closeMenu}>Build an experiment <ArrowUpRight aria-hidden="true" size={18} /></Link>
-      </nav>
+        <Link className="landing-mobile-account" href="/sign-in" onClick={closeMenu}><CircleUserRound aria-hidden="true" size={19} /> Account</Link>
+        </nav>
 
-      <section className="landing-hero" aria-labelledby="landing-title">
-        <div className="landing-hero-copy landing-enter">
-          <p className="landing-overline">IN-SILICO NEUROSCIENCE LAB</p>
+        <div className={menuOpen ? "landing-hero-content menu-open" : "landing-hero-content"}>
+          <div className="landing-hero-copy">
+          <div className="landing-hero-badge liquid-glass">
+            <span className="landing-badge-avatars" aria-hidden="true">
+              <img alt="" src="https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=100" />
+              <img alt="" src="https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=100" />
+              <img alt="" src="https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=100" />
+              <img alt="" src="https://images.pexels.com/photos/697509/pexels-photo-697509.jpeg?auto=compress&cs=tinysrgb&w=100" />
+            </span>
+            <span>multimodal cortical research</span>
+          </div>
           <h1 id="landing-title">
-            {displayed}
-            {!done ? <span aria-hidden="true" className="landing-type-cursor" /> : null}
+            Cortex Lab<br />
+            <span>for cortical research.</span>
           </h1>
           <p className="landing-hero-lead">
-            Design a multimodal stimulus timeline, run a simulated response, and inspect the cortical surface in one research workspace.
+            Design multimodal experiments. Inspect simulated cortical responses.
           </p>
-
-          <section className="landing-modality-picker" aria-labelledby="modality-picker-title">
-            <h2 id="modality-picker-title">What will your experiment contain?</h2>
-            <p>Select every stimulus modality that applies.</p>
-            <div className="landing-modality-options">
-              {modalityOptions.map(({ label, icon: Icon }) => {
-                const selected = selectedModalities.includes(label);
-                return (
-                  <button
-                    aria-pressed={selected}
-                    className={selected ? "landing-modality-option active" : "landing-modality-option"}
-                    key={label}
-                    onClick={() => toggleModality(label)}
-                    type="button"
-                  >
-                    <Icon aria-hidden="true" size={15} strokeWidth={1.7} />
-                    {label}
-                    {selected ? <Check aria-hidden="true" className="landing-modality-check" size={15} strokeWidth={2.2} /> : null}
-                  </button>
-                );
-              })}
-            </div>
-            {selectedModalities.length === 0 ? (
-              <p className="landing-selection-placeholder">Choose a modality to shape a new experiment.</p>
-            ) : (
-              <div className="landing-selection-feedback" role="status">
-                <span>Ready to compose with: {selectedModalities.join(", ")}</span>
-                <Link href="/dashboard">Open workspace <ArrowRight aria-hidden="true" size={14} /></Link>
-              </div>
-            )}
-          </section>
-
-          <p className="landing-hero-note">Cortex Lab presents simulated average-subject predictions for research use. It does not produce diagnostic or measured brain data.</p>
-        </div>
-
-        <div className="landing-hero-visual">
-          <HeroBrain />
-          <div className="landing-brain-readout landing-brain-readout-top">
-            <span>Surface</span>
-            <strong>fsaverage5</strong>
+          <Link className="landing-hero-cta liquid-glass" href="/dashboard">Build an experiment <ArrowRight aria-hidden="true" size={16} /></Link>
           </div>
-          <div className="landing-brain-readout landing-brain-readout-bottom">
-            <span>Interactive cortical mesh</span>
-            <strong>Drag to inspect</strong>
+          <div className="landing-hero-stats" aria-label="Cortex Lab research capabilities">
+            <div><Activity aria-hidden="true" size={19} strokeWidth={1.45} /><strong>20,484</strong><span>surface vertices</span></div>
+            <div><ScanLine aria-hidden="true" size={19} strokeWidth={1.45} /><strong>4 modalities</strong><span>one timeline</span></div>
           </div>
-          <div className="landing-brain-axis" aria-hidden="true"><i /><span>20,484 surface vertices</span></div>
         </div>
-      </section>
-
-      <section className="landing-stat-strip" aria-label="Cortex Lab research capabilities">
-        <div><strong>20,484</strong><span>surface vertices</span></div>
-        <div><strong>6</strong><span>validated paradigms</span></div>
-        <div><strong>4</strong><span>stimulus modalities</span></div>
-        <div><strong>fsaverage5</strong><span>surface resolution</span></div>
       </section>
 
       <section className="landing-method" id="method" aria-labelledby="method-title">
