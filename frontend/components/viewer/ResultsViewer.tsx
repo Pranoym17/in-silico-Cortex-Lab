@@ -148,6 +148,10 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     () => (renderableChunk ? getActivationFrame(renderableChunk, selectedFrameIndex) : null),
     [renderableChunk, selectedFrameIndex]
   );
+  const activityTrace = useMemo(() => {
+    if (!renderableChunk) return [];
+    return Array.from({ length: renderableChunk.timestep_count }, (_, index) => Math.abs(getActivationStats(renderableChunk, index).mean));
+  }, [renderableChunk]);
   const hoveredRegion = useMemo(
     () => getVertexRegionSnapshot(hoveredVertex, regionAtlas, manifest, selectedFrame),
     [hoveredVertex, manifest, regionAtlas, selectedFrame]
@@ -876,7 +880,8 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
           </section>
           <div className="viewer-section">
             <h3>Frame</h3>
-            <div className="viewer-stat-grid">
+            {activityTrace.length > 0 ? <ActivityTrace current={selectedFrameIndex} values={activityTrace} /> : <AwaitingResult message="Activation statistics appear when the result stream reaches this viewer." />}
+            {activityTrace.length > 0 ? <div className="viewer-stat-grid">
               <div>
                 <span>Min</span>
                 <strong>{formatStatValue(selectedStats.min)}</strong>
@@ -901,7 +906,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 <span>Sample Hz</span>
                 <strong>{selectedChunk?.sample_rate_hz ?? latestChunk?.sample_rate_hz ?? "none"}</strong>
               </div>
-            </div>
+            </div> : null}
           </div>
           <div className="viewer-section">
             <h3>Cognitive State</h3>
@@ -933,7 +938,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 </div>
               </>
             ) : (
-              <p>Labels appear after the saved result is available.</p>
+              <AwaitingResult message="Cognitive-state labels appear after the saved result is available." />
             )}
             {cognitiveStateError ? <ErrorPanel message={cognitiveStateError} /> : null}
           </div>
@@ -1056,7 +1061,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 </div>
               </>
             ) : (
-              <p>Select a region to plot its mean activation over time.</p>
+              <AwaitingResult message="Select a cortical region to plot its activation over time." />
             )}
           </div>
           <div className="viewer-section">
@@ -1362,6 +1367,19 @@ function CognitiveStateTimeline({
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+function AwaitingResult({ message }: { message: string }) {
+  return <div className="viewer-awaiting-result"><Activity aria-hidden="true" size={16} /><strong>Awaiting result</strong><p>{message}</p></div>;
+}
+
+function ActivityTrace({ current, values }: { current: number; values: readonly number[] }) {
+  const maximum = Math.max(...values, 0.00001);
+  return (
+    <div className="viewer-activity-trace" aria-label="Activation activity over time">
+      {values.map((value, index) => <i className={index === current ? "active" : undefined} key={index} style={{ height: `${Math.max(12, (value / maximum) * 100)}%` }} />)}
     </div>
   );
 }

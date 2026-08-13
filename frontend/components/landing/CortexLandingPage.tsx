@@ -258,6 +258,21 @@ export function CortexLandingPage() {
           <p><FlaskConical aria-hidden="true" size={19} strokeWidth={1.5} /> Experiments stay private by default. Publication and forking are explicit research-sharing actions.</p>
           <p><LibraryBig aria-hidden="true" size={19} strokeWidth={1.5} /> Curated paradigms and modality-aware processing preserve the line from input to result.</p>
         </div>
+        <div className="landing-workspace-preview" aria-label="Cortex Lab workspace preview">
+          <div className="workspace-preview-bar"><span /><span /><span /><strong>Visual eccentricity</strong><b>Validated</b></div>
+          <div className="workspace-preview-body">
+            <div className="workspace-preview-timeline">
+              <span>Stimulus timeline</span>
+              <div><i className="preview-image" /><i className="preview-text" /><i className="preview-audio" /><i className="preview-video" /></div>
+              <small>00:00</small><small>00:10</small><small>00:20</small>
+            </div>
+            <div className="workspace-preview-surface">
+              <span>Activation surface</span>
+              <div className="workspace-preview-brain" aria-hidden="true"><i /><i /><i /><i /><i /></div>
+              <div className="workspace-preview-scale"><i /><i /><i /><span>activation</span></div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <footer className="landing-footer">
