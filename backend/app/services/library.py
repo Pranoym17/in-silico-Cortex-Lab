@@ -24,9 +24,7 @@ from app.schemas.library import (
     PublicLibraryExperimentBlock,
     PublicResultResponse,
 )
-from app.core.config import get_settings
 from app.services.experiments import get_owned_experiment
-from app.services.result_storage import create_result_download_url
 
 
 def normalize_tags(tags: list[str]) -> list[str]:
@@ -192,6 +190,11 @@ def public_block_payload(block_type: str, payload: dict) -> dict:
 
 
 async def get_public_result(session: AsyncSession, slug: str) -> PublicResultResponse:
+    result, job = await get_public_result_record(session, slug)
+    return public_result_response(result, job)
+
+
+async def get_public_result_record(session: AsyncSession, slug: str) -> tuple[Result, Job]:
     entry = await get_library_entry_by_slug(session, slug)
     query = (
         select(Result, Job)
@@ -203,8 +206,7 @@ async def get_public_result(session: AsyncSession, slug: str) -> PublicResultRes
     row = (await session.execute(query)).first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No public result is available for this experiment")
-    result, job = row
-    return public_result_response(result, job)
+    return row
 
 
 async def get_public_report(session: AsyncSession, slug: str) -> PublicExperimentReportResponse:
@@ -254,8 +256,6 @@ def public_result_response(result: Result, job: Job) -> PublicResultResponse:
         model_version=result.model_version,
         metadata=metadata,
         completed_at=job.completed_at,
-        download_url=create_result_download_url(result.s3_key),
-        expires_in_seconds=get_settings().result_download_expires_seconds,
     )
 
 

@@ -27,6 +27,7 @@ ANTHROPIC_MODEL = "claude-3-5-haiku-20241022"
 @dataclass
 class OptimizerJobRecord:
     id: UUID
+    owner_id: UUID
     request: OptimizerRequest
     status: str = "queued"
     events: list[tuple[str, dict]] = field(default_factory=list)
@@ -50,6 +51,7 @@ def _persist_record(record: OptimizerJobRecord) -> None:
     payload = json.dumps(
         {
             "id": str(record.id),
+            "owner_id": str(record.owner_id),
             "request": record.request.model_dump(mode="json"),
             "status": record.status,
             "events": record.events,
@@ -77,6 +79,7 @@ def _load_persisted_record(job_id: UUID) -> OptimizerJobRecord | None:
         events = [(str(name), dict(payload)) for name, payload in data.get("events", [])]
         return OptimizerJobRecord(
             id=UUID(data["id"]),
+            owner_id=UUID(data["owner_id"]),
             request=OptimizerRequest.model_validate(data["request"]),
             status=str(data["status"]),
             events=events,
@@ -87,14 +90,14 @@ def _load_persisted_record(job_id: UUID) -> OptimizerJobRecord | None:
         return None
 
 
-def start_optimizer_job(request: OptimizerRequest) -> OptimizerStartResponse:
+def start_optimizer_job(request: OptimizerRequest, owner_id: UUID) -> OptimizerStartResponse:
     settings = get_settings()
     requested_candidates = request.generations * request.candidates_per_generation
     limit = settings.optimizer_real_max_candidates_per_job if settings.optimizer_provider == "real" else settings.optimizer_max_candidates_per_job
     if requested_candidates > limit:
         raise ValueError(f"Optimizer request exceeds the {limit}-candidate safety limit.")
     job_id = uuid4()
-    record = OptimizerJobRecord(id=job_id, request=request)
+    record = OptimizerJobRecord(id=job_id, owner_id=owner_id, request=request)
     _persist_record(record)
     if settings.optimizer_provider == "real":
         from app.tasks.optimizer_task import run_optimizer
@@ -111,6 +114,11 @@ def start_optimizer_job(request: OptimizerRequest) -> OptimizerStartResponse:
 
 def get_optimizer_job(job_id: UUID) -> OptimizerJobRecord | None:
     return _OPTIMIZER_JOBS.get(job_id) or _load_persisted_record(job_id)
+
+
+def get_owned_optimizer_job(job_id: UUID, owner_id: UUID) -> OptimizerJobRecord | None:
+    record = get_optimizer_job(job_id)
+    return record if record is not None and record.owner_id == owner_id else None
 
 
 def cancel_optimizer_job(job_id: UUID) -> OptimizerJobRecord | None:

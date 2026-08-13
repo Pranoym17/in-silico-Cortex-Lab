@@ -235,11 +235,22 @@ export function getRegionConditionSummaries(
 export function compareTopConditions(
   summaries: readonly BrainRegionConditionSummary[]
 ): BrainRegionConditionComparison {
-  if (summaries.length < 2) {
+  const grouped = new Map<string, { totalMean: number; peak: number; count: number }>();
+  for (const summary of summaries) {
+    const aggregate = grouped.get(summary.condition) ?? { totalMean: 0, peak: Number.NEGATIVE_INFINITY, count: 0 };
+    aggregate.totalMean += summary.mean;
+    aggregate.peak = Math.max(aggregate.peak, summary.peak);
+    aggregate.count += 1;
+    grouped.set(summary.condition, aggregate);
+  }
+  const conditions = [...grouped.entries()]
+    .map(([condition, aggregate]) => ({ condition, mean: aggregate.totalMean / aggregate.count, peak: aggregate.peak }))
+    .sort((left, right) => left.condition.localeCompare(right.condition));
+  if (conditions.length < 2) {
     return null;
   }
 
-  const [first, second] = summaries;
+  const [first, second] = conditions;
   const meanDifference = first.mean - second.mean;
   const peakDifference = first.peak - second.peak;
   return {

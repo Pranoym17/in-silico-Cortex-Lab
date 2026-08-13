@@ -161,4 +161,20 @@ describe("brainRegions", () => {
       dominantCondition: "Faces"
     });
   });
+
+  it("does not compare repeated blocks with the same condition label", () => {
+    expect(
+      compareTopConditions([
+        { condition: "Faces", blockId: "block_a", mean: 2, peak: 3, samples: 1 },
+        { condition: "Faces", blockId: "block_b", mean: 4, peak: 5, samples: 1 },
+        { condition: "Houses", blockId: "block_c", mean: 1, peak: 2, samples: 1 }
+      ])
+    ).toEqual({
+      conditionA: "Faces",
+      conditionB: "Houses",
+      meanDifference: 2,
+      peakDifference: 3,
+      dominantCondition: "Faces"
+    });
+  });
 });

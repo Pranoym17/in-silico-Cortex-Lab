@@ -163,8 +163,9 @@ async def test_start_optimizer_requires_authentication():
 async def test_start_optimizer(auth_user, monkeypatch):
     optimizer_job_id = uuid4()
 
-    def fake_start_optimizer_job(body):
+    def fake_start_optimizer_job(body, owner_id):
         assert body.target_region == "Left Fusiform"
+        assert owner_id == auth_user.id
         return {
             "optimizer_job_id": optimizer_job_id,
             "status": "complete",
@@ -189,12 +190,14 @@ async def test_stream_optimizer(auth_user, monkeypatch):
     optimizer_job_id = uuid4()
 
     class FakeRecord:
+        owner_id = auth_user.id
+        status = "complete"
         events = [
             ("queued", {"optimizer_job_id": str(optimizer_job_id), "status": "queued"}),
             ("complete", {"optimizer_job_id": str(optimizer_job_id), "status": "complete"}),
         ]
 
-    monkeypatch.setattr("app.api.ml.get_optimizer_job", lambda requested_id: FakeRecord() if requested_id == optimizer_job_id else None)
+    monkeypatch.setattr("app.api.ml.get_owned_optimizer_job", lambda requested_id, owner_id: FakeRecord() if requested_id == optimizer_job_id and owner_id == auth_user.id else None)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(

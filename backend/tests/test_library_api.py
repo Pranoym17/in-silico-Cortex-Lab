@@ -161,7 +161,6 @@ async def test_public_result_report_and_embed_do_not_require_authentication(monk
     result = PublicResultResponse(
         format="npz", dtype="float32", shape=[2, 20_484], vertex_count=20_484, timestep_count=2,
         model_name="tribev2", model_version="v2", metadata={"vertex_space": "fsaverage5"},
-        download_url="https://signed.example/result", expires_in_seconds=900,
     )
 
     async def fake_get_public_result(session, slug):
@@ -191,10 +190,31 @@ async def test_public_result_report_and_embed_do_not_require_authentication(monk
     assert result_response.status_code == 200
     assert result_response.json()["vertex_count"] == 20_484
     assert "s3_key" not in result_response.json()
+    assert "download_url" not in result_response.json()
     assert report_response.status_code == 200
     assert report_response.json()["author"]["display_name"] == "Researcher"
     assert embed_response.status_code == 200
     assert embed_response.json()["iframe_path"] == f"/embed/{entry.slug}"
+
+
+@pytest.mark.asyncio
+async def test_public_artifact_is_proxied_without_a_signed_url(monkeypatch):
+    entry = make_library_entry()
+    result = SimpleNamespace(s3_key="results/private-key/activations.npz")
+
+    async def fake_get_public_result_record(session, slug):
+        assert slug == entry.slug
+        return result, SimpleNamespace()
+
+    monkeypatch.setattr("app.api.library.get_public_result_record", fake_get_public_result_record)
+    monkeypatch.setattr("app.api.library.download_result_npz", lambda s3_key: b"npz-bytes")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(f"/api/library/{entry.slug}/result/artifact")
+
+    assert response.status_code == 200
+    assert response.content == b"npz-bytes"
+    assert "amazonaws.com" not in response.text
 
 
 @pytest.mark.asyncio

@@ -27,6 +27,7 @@ export type OptimizerStreamEvent =
   | { id: number | null; event: "queued"; data: { optimizer_job_id: string; status: string; target_region: string; direction: string } }
   | { id: number | null; event: "generation"; data: OptimizerGenerationEvent }
   | { id: number | null; event: "complete"; data: OptimizerCompleteEvent }
+  | { id: number | null; event: "cancelled"; data: { optimizer_job_id: string; status: "cancelled" } }
   | { id: number | null; event: "error"; data: { optimizer_job_id: string; code: string; message: string } };
 
 export function parseOptimizerSseFrame(frame: string): OptimizerStreamEvent | null {
@@ -123,5 +124,5 @@ export async function streamOptimizerEvents({
 }
 
 function isKnownOptimizerEvent(event: string): event is OptimizerStreamEvent["event"] {
-  return event === "queued" || event === "generation" || event === "complete" || event === "error";
+  return event === "queued" || event === "generation" || event === "complete" || event === "cancelled" || event === "error";
 }

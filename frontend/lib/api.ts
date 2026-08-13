@@ -300,8 +300,6 @@ export type PublicResult = {
   model_version: string | null;
   metadata: Record<string, unknown>;
   completed_at: string | null;
-  download_url: string;
-  expires_in_seconds: number;
 };
 
 export type PublicExperimentReport = {
@@ -498,6 +496,10 @@ export function createOptimizerWinnerExperiment(optimizerJobId: string, token?: 
   return apiJson<{ experiment_id: string; block_id: string }>(`/api/ml/optimize/${optimizerJobId}/winner-experiment`, token, { method: "POST" });
 }
 
+export function cancelOptimizer(optimizerJobId: string, token?: string | null) {
+  return apiJson<{ optimizer_job_id: string; status: string }>(`/api/ml/optimize/${optimizerJobId}/cancel`, token, { method: "POST" });
+}
+
 export function listLibraryEntries(params: LibraryListParams = {}) {
   const search = new URLSearchParams();
 
@@ -517,6 +519,10 @@ export function getLibraryEntry(slug: string) {
 
 export function getPublicLibraryResult(slug: string) {
   return apiJson<PublicResult>(`/api/library/${slug}/result`);
+}
+
+export function publicLibraryResultArtifactUrl(slug: string) {
+  return `${API_URL}/api/library/${encodeURIComponent(slug)}/result/artifact`;
 }
 
 export function getPublicLibraryReport(slug: string) {

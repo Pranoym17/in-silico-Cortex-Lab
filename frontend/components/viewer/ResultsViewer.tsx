@@ -24,7 +24,8 @@ import {
   RsaResult,
   runRsa,
   startOptimizer,
-  createOptimizerWinnerExperiment
+  createOptimizerWinnerExperiment,
+  cancelOptimizer
 } from "@/lib/api";
 import {
   ActivationDomain,
@@ -626,6 +627,16 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
     }
   }
 
+  async function cancelStimulusOptimizer() {
+    if (!accessToken || !optimizerJobId) return;
+    try {
+      await cancelOptimizer(optimizerJobId, accessToken);
+      setOptimizerError("Optimizer cancelled.");
+    } catch (caught) {
+      setOptimizerError(caught instanceof Error ? caught.message : "Could not cancel optimizer");
+    }
+  }
+
   function selectVertex(vertexIndex: number) {
     if (!regionModeEnabled) {
       return;
@@ -733,6 +744,7 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
                 setIsPlaying(false);
                 setSelectedTimestep(Number(event.target.value));
               }}
+              onPointerDown={() => setIsPlaying(false)}
               type="range"
               value={selectedTimestep}
             />
@@ -1217,6 +1229,11 @@ export function ResultsViewer({ jobId }: { jobId: string }) {
               <button disabled={!optimizerTarget.trim() || isRunningOptimizer} onClick={runStimulusOptimizer} type="button">
                 <Activity aria-hidden="true" size={14} /> {isRunningOptimizer ? "Optimizing" : "Run Optimizer"}
               </button>
+              {isRunningOptimizer && optimizerJobId ? (
+                <button onClick={cancelStimulusOptimizer} type="button">
+                  Cancel optimizer
+                </button>
+              ) : null}
             </div>
             {optimizerGeneration ? (
               <div className="viewer-stat-grid">

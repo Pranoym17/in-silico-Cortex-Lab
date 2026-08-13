@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Mic, Save, SlidersHorizontal, Square, Trash2 } from "lucide-react";
+import { Image as ImageIcon, Mic, Save, SlidersHorizontal, Square, Trash2, Type, Video } from "lucide-react";
 import { StimulusBlock, UpdateBlockInput } from "@/lib/api";
 import {
   AUDIO_MIME_TYPES,
@@ -273,7 +273,18 @@ export function BlockConfigPanel({
     return (
       <section className="panel stack block-config-panel">
         <h2><SlidersHorizontal aria-hidden="true" size={14} /> Selected block</h2>
-        <p>Select a block to edit its timing, condition, and payload.</p>
+        <p>Select a block to edit its timing, condition, media, and playback behavior.</p>
+        <div className="block-config-empty-legend" aria-label="Stimulus block guide">
+          <span><Type aria-hidden="true" size={14} /> Text</span>
+          <span><ImageIcon aria-hidden="true" size={14} /> Image</span>
+          <span><Mic aria-hidden="true" size={14} /> Audio</span>
+          <span><Video aria-hidden="true" size={14} /> Video</span>
+        </div>
+        <ul className="block-config-empty-tips">
+          <li>Select a timeline block to configure it.</li>
+          <li>Drag block edges to adjust duration.</li>
+          <li>Use arrow controls to make precise timing changes.</li>
+        </ul>
       </section>
     );
   }

@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_user
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.library import LibraryDetailResponse, LibraryFlagRequest, LibraryFlagResponse, LibraryForkResponse, LibraryListResponse, PublicEmbedResponse, PublicExperimentReportResponse, PublicResultResponse
-from app.services.library import flag_library_entry, fork_library_entry, get_library_detail, get_public_embed, get_public_report, get_public_result, list_library_entries
+from app.services.library import flag_library_entry, fork_library_entry, get_library_detail, get_public_embed, get_public_report, get_public_result, get_public_result_record, list_library_entries
+from app.services.ml_results import MlResultLoadError, download_result_npz
 
 router = APIRouter()
 
@@ -23,6 +25,21 @@ async def list_library_route(
 @router.get("/{slug}/result", response_model=PublicResultResponse)
 async def get_public_result_route(slug: str, session: AsyncSession = Depends(get_db)):
     return await get_public_result(session, slug)
+
+
+@router.get("/{slug}/result/artifact")
+async def get_public_result_artifact_route(slug: str, session: AsyncSession = Depends(get_db)) -> Response:
+    """Proxy public result bytes without ever exposing an S3 signed URL."""
+    result, _ = await get_public_result_record(session, slug)
+    try:
+        payload = download_result_npz(result.s3_key)
+    except MlResultLoadError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="The public result artifact is temporarily unavailable") from exc
+    return Response(
+        content=payload,
+        media_type="application/octet-stream",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 @router.get("/{slug}/report", response_model=PublicExperimentReportResponse)

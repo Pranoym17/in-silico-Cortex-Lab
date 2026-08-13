@@ -76,8 +76,6 @@ class PublicResultResponse(BaseModel):
     model_version: str | None = None
     metadata: dict
     completed_at: datetime | None = None
-    download_url: str
-    expires_in_seconds: int
 
 
 class PublicExperimentReportResponse(BaseModel):

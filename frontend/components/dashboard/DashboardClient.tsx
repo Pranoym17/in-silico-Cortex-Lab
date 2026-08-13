@@ -3,12 +3,11 @@
 import Link from "next/link";
 import NextImage from "next/image";
 import { FormEvent, useEffect, useState } from "react";
-import { Activity, ArrowRight, BookOpen, CircleCheck, FlaskConical, LockKeyhole, Plus, Sparkles } from "lucide-react";
+import { Activity, ArrowRight, BookOpen, CircleCheck, FlaskConical, Plus, Sparkles } from "lucide-react";
 import { ApiError, Experiment, createExperiment, listExperiments } from "@/lib/api";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
 import { AppShell, EmptyState, ErrorPanel, LoadingRows, StatusBadge } from "@/components/ui/AppShell";
-import { PearlButton } from "@/components/ui/PearlButton";
 
 function formatUpdatedAt(value: string) {
   return new Intl.DateTimeFormat("en", {
@@ -22,10 +21,8 @@ function formatUpdatedAt(value: string) {
 export function DashboardClient() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const email = useAuthStore((state) => state.email);
-  const setAccessToken = useAuthStore((state) => state.setAccessToken);
   const setSession = useAuthStore((state) => state.setSession);
   const supabaseConfigured = isSupabaseConfigured();
-  const [tokenDraft, setTokenDraft] = useState("");
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [name, setName] = useState("Untitled experiment");
   const [search, setSearch] = useState("");
@@ -117,24 +114,6 @@ export function DashboardClient() {
     }
   }
 
-  async function handleGoogleSignIn() {
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) {
-      return;
-    }
-
-    const { error: signInError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: window.location.origin + "/dashboard"
-      }
-    });
-
-    if (signInError) {
-      setError(signInError.message);
-    }
-  }
-
   const filteredExperiments = experiments
     .filter((experiment) => experiment.name.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
@@ -166,41 +145,14 @@ export function DashboardClient() {
                 <span className="auth-brand-mark" aria-hidden="true">
                   <NextImage alt="" className="auth-brand-logo" height={64} src="/brand/cortex-lab-logo.png" width={86} />
                 </span>
-            <span className="section-kicker"><LockKeyhole aria-hidden="true" size={13} /> Cortex Lab workspace</span>
-            <h2>Sign in to your account</h2>
+            <span className="section-kicker">Cortex Lab workspace</span>
+            <h2>Open your workspace</h2>
             <p>Access your private experiments, queued runs, and saved stimulus timelines.</p>
           </div>
-          {supabaseConfigured ? (
-            <div className="auth-actions auth-google-only">
-              <PearlButton className="google-sign-in" type="button" onClick={handleGoogleSignIn}>
-                <span aria-hidden="true" className="auth-google-mark" />
-                Continue with Google
-              </PearlButton>
-              <p className="auth-legal">Google securely verifies your account before returning you to Cortex Lab.</p>
-            </div>
-          ) : (
-            <div className="auth-actions">
-              <p className="auth-access-copy">Use your research access token to open a private workspace session.</p>
-              <form
-                className="token-form"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setAccessToken(tokenDraft.trim() || null);
-                }}
-              >
-                <label className="auth-field">
-                  <span>Research access token</span>
-                  <input
-                    aria-label="Research access token"
-                    value={tokenDraft}
-                    onChange={(event) => setTokenDraft(event.target.value)}
-                    placeholder="Enter access token"
-                  />
-                </label>
-                <PearlButton icon={<ArrowRight size={16} strokeWidth={1.8} />} type="submit">Continue</PearlButton>
-              </form>
-            </div>
-          )}
+          <div className="auth-actions auth-google-only">
+            <Link className="google-sign-in" href="/sign-in"><span>Sign in securely</span><ArrowRight aria-hidden="true" size={16} /></Link>
+            <p className="auth-legal">Choose Google or a secure email link from the sign-in page.</p>
+          </div>
           {error ? <p className="error-text">{error}</p> : null}
         </section>
       ) : (
@@ -281,9 +233,9 @@ export function DashboardClient() {
               <Link href="/library">Open library <ArrowRight aria-hidden="true" size={14} /></Link>
             </div>
             <div className="reference-list">
-              <span><Sparkles aria-hidden="true" size={15} /> FFA faces versus houses</span>
-              <span><Activity aria-hidden="true" size={15} /> Speech versus music</span>
-              <span><FlaskConical aria-hidden="true" size={15} /> Semantic N400</span>
+              <Link href="/library"><Sparkles aria-hidden="true" size={15} /> FFA faces versus houses</Link>
+              <Link href="/library"><Activity aria-hidden="true" size={15} /> Speech versus music</Link>
+              <Link href="/library"><FlaskConical aria-hidden="true" size={15} /> Semantic N400</Link>
             </div>
           </section>
         </>

@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, Expand, Pause, Play, ScanEye, Waves } from "lucide-react";
+import { Expand, Pause, Play, ScanEye, Waves } from "lucide-react";
 import { BrainScene } from "./BrainScene";
-import { getPublicLibraryResult, PublicResult } from "@/lib/api";
+import { getPublicLibraryResult, publicLibraryResultArtifactUrl, PublicResult } from "@/lib/api";
 import { BrainMeshManifest, loadBrainManifest } from "@/lib/brainAssets";
 import { getActivationDomain, getActivationStats } from "@/lib/brainActivation";
 import { parseActivationNpz } from "@/lib/npz";
@@ -29,7 +29,7 @@ export function PublicResultsViewer({ slug }: { slug: string }) {
     let active = true;
     Promise.all([loadBrainManifest(), getPublicLibraryResult(slug)])
       .then(async ([loadedManifest, loadedResult]) => {
-        const response = await fetch(loadedResult.download_url);
+        const response = await fetch(publicLibraryResultArtifactUrl(slug));
         if (!response.ok) throw new Error("The public activation artifact could not be downloaded.");
         const matrix = parseActivationNpz(await response.arrayBuffer());
         if (matrix.shape[1] !== loadedManifest.vertex_count || matrix.shape[1] !== loadedResult.vertex_count) {
@@ -98,7 +98,6 @@ export function PublicResultsViewer({ slug }: { slug: string }) {
         <div className="public-viewer-control-group">
           <label>Surface<select onChange={(event) => setSurface(event.target.value as "pial" | "inflated")} value={surface}><option value="pial">Pial</option><option value="inflated">Inflated</option></select></label>
           <button className="icon-button" onClick={toggleFullscreen} title="Fullscreen viewer" type="button"><Expand aria-hidden="true" size={15} /></button>
-          <a className="icon-link" href={result.download_url} title="Download public NPZ result"><Download aria-hidden="true" size={15} /></a>
         </div>
       </div>
       <div className="public-viewer-readout">

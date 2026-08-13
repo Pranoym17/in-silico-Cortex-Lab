@@ -108,7 +108,11 @@ export function LibraryClient() {
         {isLoading ? <LoadingRows rows={4} /> : null}
 
         {!isLoading && !error && entries.length === 0 ? (
-          <EmptyState title="No published experiments yet" message="Published research records will appear here once a validated paradigm is shared." />
+          <EmptyState
+            title="No published experiments yet"
+            message="Start with a research template, then publish a validated result when it is ready to share."
+            action={<Link className="empty-state-action" href="/dashboard">Build an experiment <ArrowRight aria-hidden="true" size={14} /></Link>}
+          />
         ) : null}
 
         <div className="library-grid">

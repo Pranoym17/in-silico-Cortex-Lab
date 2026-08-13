@@ -37,6 +37,8 @@ const templates = [
   "Reading versus listening"
 ];
 
+const templateIcons = [BrainCircuit, Type, ImageIcon, Activity, Mic, LibraryBig];
+
 function useTypewriter(text: string, speed = 38, startDelay = 600) {
   const [displayed, setDisplayed] = useState("");
   const [done, setDone] = useState(false);
@@ -189,6 +191,13 @@ export function CortexLandingPage() {
         </div>
       </section>
 
+      <section className="landing-stat-strip" aria-label="Cortex Lab research capabilities">
+        <div><strong>20,484</strong><span>surface vertices</span></div>
+        <div><strong>6</strong><span>validated paradigms</span></div>
+        <div><strong>4</strong><span>stimulus modalities</span></div>
+        <div><strong>fsaverage5</strong><span>surface resolution</span></div>
+      </section>
+
       <section className="landing-method" id="method" aria-labelledby="method-title">
         <div className="landing-section-heading">
           <p className="landing-overline">The workflow</p>
@@ -224,15 +233,18 @@ export function CortexLandingPage() {
           <Link className="landing-text-link" href="/library">Browse the research library <ArrowRight aria-hidden="true" size={15} /></Link>
         </div>
         <ol className="landing-template-list">
-          {templates.map((template, index) => (
+          {templates.map((template, index) => {
+            const Icon = templateIcons[index];
+            return (
             <li key={template}>
               <Link aria-label={`Browse ${template} in the research library`} href="/library">
-                <span>{String(index + 1).padStart(2, "0")}</span>
+                <span className="landing-template-icon"><Icon aria-hidden="true" size={17} strokeWidth={1.7} /></span>
                 <strong>{template}</strong>
                 <ArrowUpRight aria-hidden="true" size={17} strokeWidth={1.55} />
               </Link>
             </li>
-          ))}
+            );
+          })}
         </ol>
       </section>
 

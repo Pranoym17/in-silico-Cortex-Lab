@@ -83,7 +83,7 @@ export function LibraryDetailClient({ slug }: { slug: string }) {
 
   async function handleFork() {
     if (!accessToken) {
-      router.push("/dashboard");
+      router.push(`/sign-in?next=${encodeURIComponent(`/experiments/${slug}`)}`);
       return;
     }
     setIsForking(true);
@@ -164,8 +164,8 @@ export function LibraryDetailClient({ slug }: { slug: string }) {
               <div><span>Result</span><strong>{report?.result ? "Available" : "Pending"}</strong></div>
             </div>
 
-            <div className="public-record-section-heading">
-              <div><span className="section-kicker"><FlaskConical aria-hidden="true" size={13} /> Stimulus timeline</span><h2>{detail.experiment_name}</h2></div>
+              <div className="public-record-section-heading">
+              <div><span className="section-kicker"><FlaskConical aria-hidden="true" size={13} /> Stimulus timeline</span><h2>{detail.entry.title}</h2></div>
               <span>{detail.entry.tags.length ? detail.entry.tags.join(" / ") : "Untyped paradigm"}</span>
             </div>
             <div className="library-block-list public-block-list">

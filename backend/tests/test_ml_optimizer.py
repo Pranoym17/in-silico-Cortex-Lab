@@ -18,6 +18,8 @@ from app.services.ml_optimizer import (
     start_optimizer_job,
 )
 
+OWNER_ID = UUID("00000000-0000-0000-0000-000000000001")
+
 
 @pytest.fixture(autouse=True)
 def optimizer_test_settings(monkeypatch):
@@ -40,7 +42,7 @@ def test_fake_candidates_are_deterministic():
 
 def test_start_optimizer_job_records_generation_and_complete_events():
     response = start_optimizer_job(
-        OptimizerRequest(target_region="Left Fusiform", direction="maximize", generations=2, candidates_per_generation=2)
+        OptimizerRequest(target_region="Left Fusiform", direction="maximize", generations=2, candidates_per_generation=2), OWNER_ID
     )
 
     record = get_optimizer_job(response.optimizer_job_id)
@@ -72,7 +74,7 @@ def test_optimizer_record_survives_local_memory_reset(monkeypatch):
             return stored.get(key)
 
     monkeypatch.setattr(ml_optimizer, "_redis_client", lambda: FakeRedis())
-    response = start_optimizer_job(OptimizerRequest(target_region="Left Fusiform", direction="maximize", generations=1, candidates_per_generation=1))
+    response = start_optimizer_job(OptimizerRequest(target_region="Left Fusiform", direction="maximize", generations=1, candidates_per_generation=1), OWNER_ID)
     clear_optimizer_jobs()
 
     recovered = get_optimizer_job(response.optimizer_job_id)
@@ -96,6 +98,7 @@ def test_cancel_optimizer_job_persists_terminal_status(monkeypatch):
     monkeypatch.setattr(ml_optimizer, "_redis_client", lambda: FakeRedis())
     record = ml_optimizer.OptimizerJobRecord(
         id=UUID("00000000-0000-0000-0000-000000000099"),
+        owner_id=OWNER_ID,
         request=OptimizerRequest(target_region="Left Fusiform", direction="maximize"),
         status="running",
     )
@@ -110,12 +113,12 @@ def test_cancel_optimizer_job_persists_terminal_status(monkeypatch):
 
 def test_cached_optimizer_result_is_replayed_with_new_job_id(monkeypatch):
     request = OptimizerRequest(target_region="Left Fusiform", direction="maximize", generations=1, candidates_per_generation=1)
-    first = start_optimizer_job(request)
+    first = start_optimizer_job(request, OWNER_ID)
     cached = get_optimizer_job(first.optimizer_job_id).result
     clear_optimizer_jobs()
 
     monkeypatch.setattr(ml_optimizer, "get_cached_optimizer_result", lambda request, provider: cached)
-    response = start_optimizer_job(request)
+    response = start_optimizer_job(request, OWNER_ID)
     record = get_optimizer_job(response.optimizer_job_id)
 
     assert record.result.optimizer_job_id == response.optimizer_job_id
@@ -127,7 +130,7 @@ def test_anthropic_provider_fails_without_api_key(monkeypatch):
     monkeypatch.setenv("OPTIMIZER_PROVIDER", "anthropic")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-    response = start_optimizer_job(OptimizerRequest(target_region="Left Fusiform", direction="maximize"))
+    response = start_optimizer_job(OptimizerRequest(target_region="Left Fusiform", direction="maximize"), OWNER_ID)
     record = get_optimizer_job(response.optimizer_job_id)
 
     assert response.status == "failed"
@@ -142,7 +145,7 @@ def test_real_provider_enqueues_worker(monkeypatch):
     dispatched: list[str] = []
     monkeypatch.setattr("app.tasks.optimizer_task.run_optimizer.delay", lambda job_id: dispatched.append(job_id))
 
-    response = start_optimizer_job(OptimizerRequest(target_region="Left Fusiform", direction="maximize", generations=1, candidates_per_generation=1))
+    response = start_optimizer_job(OptimizerRequest(target_region="Left Fusiform", direction="maximize", generations=1, candidates_per_generation=1), OWNER_ID)
 
     assert response.status == "queued"
     assert dispatched == [str(response.optimizer_job_id)]

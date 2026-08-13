@@ -95,7 +95,7 @@ export function AppShell({ title, description, actions, children, width = "wide"
                     Sign out
                   </button>
                 ) : (
-                  <Link href="/dashboard" onClick={() => setAccountOpen(false)} role="menuitem">
+                  <Link href={`/sign-in?next=${encodeURIComponent(pathname)}`} onClick={() => setAccountOpen(false)} role="menuitem">
                     Sign in
                   </Link>
                 )}

@@ -21,6 +21,7 @@ import {
   updateBlock
 } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useExperimentStore } from "@/store/experimentStore";
 import { BlockConfigPanel } from "./BlockConfigPanel";
 import { BuilderTimeline } from "./BuilderTimeline";
@@ -122,6 +123,7 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const removeBlock = useExperimentStore((state) => state.removeBlock);
   const selectBlock = useExperimentStore((state) => state.selectBlock);
   const accessToken = useAuthStore((state) => state.accessToken);
+  const setSession = useAuthStore((state) => state.setSession);
   const [experiment, setExperiment] = useState<Experiment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -137,6 +139,18 @@ export function ExperimentBuilder({ experimentId }: { experimentId: string }) {
   const [redoStack, setRedoStack] = useState<StimulusBlock[][]>([]);
   const [timelineZoom, setTimelineZoom] = useState(DEFAULT_TIMELINE_ZOOM);
   const timelineMutationRef = useRef(false);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      setSession({ accessToken: data.session?.access_token ?? null, email: data.session?.user.email ?? null });
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession({ accessToken: session?.access_token ?? null, email: session?.user.email ?? null });
+    });
+    return () => data.subscription.unsubscribe();
+  }, [setSession]);
 
   function rememberSnapshot(snapshot: StimulusBlock[]) {
     setUndoStack((history) => [...history.slice(-19), cloneBlocks(snapshot)]);

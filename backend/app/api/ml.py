@@ -1,3 +1,4 @@
+import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,7 +14,7 @@ from app.models.block import Block, BlockType
 from app.models.experiment import Experiment
 from app.schemas.ml import CognitiveStatesResponse, OptimizerJobStatusResponse, OptimizerRequest, OptimizerStartResponse, OptimizerWinnerExperimentResponse, RsaRequest, RsaResponse
 from app.services.ml_cognitive_states import get_cognitive_states
-from app.services.ml_optimizer import cancel_optimizer_job, get_optimizer_job, start_optimizer_job
+from app.services.ml_optimizer import cancel_optimizer_job, get_optimizer_job, get_owned_optimizer_job, start_optimizer_job
 from app.services.ml_rsa import run_rsa
 from app.services.sse import encode_sse
 
@@ -46,10 +47,10 @@ async def get_cognitive_states_route(
 @router.post("/optimize", response_model=OptimizerStartResponse, status_code=status.HTTP_202_ACCEPTED)
 async def start_optimizer_route(
     body: OptimizerRequest,
-    _: User = Depends(require_user),
+    user: User = Depends(require_user),
 ) -> OptimizerStartResponse:
     try:
-        return start_optimizer_job(body)
+        return start_optimizer_job(body, user.id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
@@ -65,18 +66,19 @@ def optimizer_status_response(record) -> OptimizerJobStatusResponse:
 
 
 @router.get("/optimize/{optimizer_job_id}", response_model=OptimizerJobStatusResponse)
-async def get_optimizer_route(optimizer_job_id: UUID, _: User = Depends(require_user)) -> OptimizerJobStatusResponse:
-    record = get_optimizer_job(optimizer_job_id)
+async def get_optimizer_route(optimizer_job_id: UUID, user: User = Depends(require_user)) -> OptimizerJobStatusResponse:
+    record = get_owned_optimizer_job(optimizer_job_id, user.id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Optimizer job not found")
     return optimizer_status_response(record)
 
 
 @router.post("/optimize/{optimizer_job_id}/cancel", response_model=OptimizerJobStatusResponse)
-async def cancel_optimizer_route(optimizer_job_id: UUID, _: User = Depends(require_user)) -> OptimizerJobStatusResponse:
-    record = cancel_optimizer_job(optimizer_job_id)
+async def cancel_optimizer_route(optimizer_job_id: UUID, user: User = Depends(require_user)) -> OptimizerJobStatusResponse:
+    record = get_owned_optimizer_job(optimizer_job_id, user.id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Optimizer job not found")
+    record = cancel_optimizer_job(optimizer_job_id)
     return optimizer_status_response(record)
 
 
@@ -86,7 +88,7 @@ async def create_winner_experiment_route(
     user: User = Depends(require_user),
     session: AsyncSession = Depends(get_db),
 ) -> OptimizerWinnerExperimentResponse:
-    record = get_optimizer_job(optimizer_job_id)
+    record = get_owned_optimizer_job(optimizer_job_id, user.id)
     if record is None or record.result is None or record.status != "complete":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Optimizer winner is not available")
     text = record.result.best_stimulus
@@ -111,14 +113,24 @@ async def create_winner_experiment_route(
 @router.get("/optimize/{optimizer_job_id}/stream")
 async def stream_optimizer_route(
     optimizer_job_id: UUID,
-    _: User = Depends(require_user),
+    user: User = Depends(require_user),
 ) -> StreamingResponse:
-    record = get_optimizer_job(optimizer_job_id)
+    record = get_owned_optimizer_job(optimizer_job_id, user.id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Optimizer job not found")
 
     async def events():
-        for index, (event_name, data) in enumerate(record.events, start=1):
-            yield encode_sse(event_name, data, event_id=index)
+        emitted = 0
+        while True:
+            current = get_owned_optimizer_job(optimizer_job_id, user.id)
+            if current is None:
+                return
+            for index, (event_name, data) in enumerate(current.events[emitted:], start=emitted + 1):
+                yield encode_sse(event_name, data, event_id=index)
+            emitted = len(current.events)
+            if current.status in {"complete", "failed", "cancelled"}:
+                return
+            yield ": keep-alive\n\n"
+            await asyncio.sleep(0.25)
 
-    return StreamingResponse(events(), media_type="text/event-stream")
+    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
