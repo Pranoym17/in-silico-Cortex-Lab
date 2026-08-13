@@ -4,7 +4,7 @@ import Link from "next/link";
 import NextImage from "next/image";
 import { FormEvent, Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, Building2, CheckCircle2, Mail } from "lucide-react";
+import { ArrowRight, Building2, CheckCircle2, Eye, EyeOff, KeyRound, Mail } from "lucide-react";
 import { HeroBrain } from "@/components/landing/HeroBrain";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 
@@ -16,11 +16,15 @@ function SignInContent() {
   const searchParams = useSearchParams();
   const nextPath = useMemo(() => safeNextPath(searchParams.get("next")), [searchParams]);
   const [email, setEmail] = useState("");
-  const [showEmail, setShowEmail] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"sign-in" | "create-account">("sign-in");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showMagicLink, setShowMagicLink] = useState(false);
   const [showInstitutional, setShowInstitutional] = useState(false);
-  const [isConnecting, setIsConnecting] = useState<"google" | "email" | null>(null);
+  const [isConnecting, setIsConnecting] = useState<"google" | "credentials" | "magic-link" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [emailSent, setEmailSent] = useState(false);
+  const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
 
   const configured = isSupabaseConfigured();
 
@@ -42,12 +46,43 @@ function SignInContent() {
     }
   }
 
-  async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
+  async function continueWithCredentials(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || !email.trim() || !password) return;
+
+    if (authMode === "create-account" && password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setError(null);
+    setIsConnecting("credentials");
+    const result = authMode === "sign-in"
+      ? await supabase.auth.signInWithPassword({ email: email.trim(), password })
+      : await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { emailRedirectTo: `${window.location.origin}${nextPath}` }
+      });
+    setIsConnecting(null);
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (authMode === "create-account" && !result.data.session) {
+      setConfirmationMessage("Check your email to confirm the new account before signing in.");
+      return;
+    }
+    window.location.assign(nextPath);
+  }
+
+  async function sendMagicLink() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase || !email.trim()) return;
     setError(null);
-    setIsConnecting("email");
+    setIsConnecting("magic-link");
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: { emailRedirectTo: `${window.location.origin}${nextPath}` }
@@ -57,7 +92,7 @@ function SignInContent() {
       setError(signInError.message);
       return;
     }
-    setEmailSent(true);
+    setConfirmationMessage(`We sent a secure sign-in link to ${email.trim()}. It can be used once and expires shortly.`);
   }
 
   return (
@@ -67,12 +102,12 @@ function SignInContent() {
           <NextImage alt="Cortex Lab" height={52} src="/brand/cortex-lab-logo.png" width={92} />
           <span>Cortex Lab</span>
         </Link>
-        {emailSent ? (
+        {confirmationMessage ? (
           <div className="sign-in-confirmation" role="status">
             <CheckCircle2 aria-hidden="true" size={28} />
             <h1 id="sign-in-title">Check your email</h1>
-            <p>We sent a secure sign-in link to <strong>{email}</strong>. It can be used once and expires shortly.</p>
-            <button className="auth-secondary-button" onClick={() => setEmailSent(false)} type="button">Use a different email</button>
+            <p>{confirmationMessage}</p>
+            <button className="auth-secondary-button" onClick={() => setConfirmationMessage(null)} type="button">Use a different email</button>
           </div>
         ) : (
           <>
@@ -83,26 +118,42 @@ function SignInContent() {
             </div>
             {configured ? (
               <div className="sign-in-options">
+                <div aria-label="Account action" className="auth-mode-tabs" role="tablist">
+                  <button aria-selected={authMode === "sign-in"} className={authMode === "sign-in" ? "active" : ""} onClick={() => { setAuthMode("sign-in"); setError(null); }} role="tab" type="button">Sign in</button>
+                  <button aria-selected={authMode === "create-account"} className={authMode === "create-account" ? "active" : ""} onClick={() => { setAuthMode("create-account"); setError(null); }} role="tab" type="button">Create account</button>
+                </div>
                 <button className="google-auth-button" disabled={isConnecting !== null} onClick={continueWithGoogle} type="button">
                   <span aria-hidden="true" className="google-glyph">G</span>
                   {isConnecting === "google" ? "Connecting..." : "Continue with Google"}
                   <ArrowRight aria-hidden="true" size={16} />
                 </button>
                 <div className="auth-divider"><span>or</span></div>
-                {!showEmail ? (
-                  <button className="auth-secondary-button" disabled={isConnecting !== null} onClick={() => setShowEmail(true)} type="button">
-                    <Mail aria-hidden="true" size={16} /> Continue with email
-                  </button>
-                ) : (
-                  <form className="sign-in-email-form" onSubmit={sendMagicLink}>
-                    <label htmlFor="sign-in-email">Email address</label>
-                    <input autoComplete="email" id="sign-in-email" onChange={(event) => setEmail(event.target.value)} placeholder="you@university.edu" required type="email" value={email} />
-                    <button className="primary-auth-button" disabled={isConnecting !== null || !email.trim()} type="submit">
-                      {isConnecting === "email" ? "Sending link..." : "Send magic link"}
-                      <ArrowRight aria-hidden="true" size={16} />
+                <form className="sign-in-email-form" onSubmit={continueWithCredentials}>
+                  <label htmlFor="sign-in-email">Email address</label>
+                  <input autoComplete="email" id="sign-in-email" onChange={(event) => setEmail(event.target.value)} placeholder="you@university.edu" required type="email" value={email} />
+                  <label htmlFor="sign-in-password">Password</label>
+                  <div className="password-field">
+                    <input autoComplete={authMode === "sign-in" ? "current-password" : "new-password"} id="sign-in-password" minLength={6} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" required type={showPassword ? "text" : "password"} value={password} />
+                    <button aria-label={showPassword ? "Hide password" : "Show password"} className="password-visibility" onClick={() => setShowPassword((visible) => !visible)} title={showPassword ? "Hide password" : "Show password"} type="button">
+                      {showPassword ? <EyeOff aria-hidden="true" size={17} /> : <Eye aria-hidden="true" size={17} />}
                     </button>
-                  </form>
-                )}
+                  </div>
+                  {authMode === "create-account" ? <>
+                    <label htmlFor="sign-in-password-confirm">Confirm password</label>
+                    <input autoComplete="new-password" id="sign-in-password-confirm" minLength={6} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Repeat your password" required type="password" value={confirmPassword} />
+                  </> : null}
+                  <button className="primary-auth-button" disabled={isConnecting !== null || !email.trim() || !password} type="submit">
+                    <KeyRound aria-hidden="true" size={16} />
+                    {isConnecting === "credentials" ? "Please wait..." : authMode === "sign-in" ? "Sign in" : "Create account"}
+                    <ArrowRight aria-hidden="true" size={16} />
+                  </button>
+                </form>
+                <button className="auth-text-button" disabled={isConnecting !== null || !email.trim()} onClick={() => { setShowMagicLink((visible) => !visible); setError(null); }} type="button">
+                  <Mail aria-hidden="true" size={15} /> Prefer a passwordless email link?
+                </button>
+                {showMagicLink ? <button className="auth-secondary-button" disabled={isConnecting !== null || !email.trim()} onClick={sendMagicLink} type="button">
+                  <Mail aria-hidden="true" size={16} /> {isConnecting === "magic-link" ? "Sending link..." : "Send secure email link"}
+                </button> : null}
                 <button aria-expanded={showInstitutional} className="auth-secondary-button" onClick={() => setShowInstitutional((value) => !value)} type="button">
                   <Building2 aria-hidden="true" size={16} /> Institutional access
                 </button>
