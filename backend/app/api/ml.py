@@ -14,7 +14,7 @@ from app.models.block import Block, BlockType
 from app.models.experiment import Experiment
 from app.schemas.ml import CognitiveStatesResponse, OptimizerJobStatusResponse, OptimizerRequest, OptimizerStartResponse, OptimizerWinnerExperimentResponse, RsaRequest, RsaResponse
 from app.services.ml_cognitive_states import get_cognitive_states
-from app.services.ml_optimizer import cancel_optimizer_job, get_optimizer_job, get_owned_optimizer_job, start_optimizer_job
+from app.services.ml_optimizer import cancel_optimizer_job, get_owned_optimizer_job, start_optimizer_job
 from app.services.ml_rsa import run_rsa
 from app.services.sse import encode_sse
 
