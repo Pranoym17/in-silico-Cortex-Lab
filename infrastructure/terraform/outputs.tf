@@ -1,5 +1,7 @@
 output "ecr_repository_url" { value = aws_ecr_repository.backend.repository_url }
 output "media_bucket_name" { value = aws_s3_bucket.media.id }
+output "public_assets_bucket_name" { value = aws_s3_bucket.public_assets.id }
+output "public_assets_cloudfront_url" { value = "https://${aws_cloudfront_distribution.public_assets.domain_name}" }
 output "api_load_balancer_dns_name" { value = aws_lb.api.dns_name }
 output "api_cloudflare_cname" {
   value       = aws_lb.api.dns_name
