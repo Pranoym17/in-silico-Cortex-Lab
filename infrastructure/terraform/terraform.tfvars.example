@@ -5,6 +5,7 @@ api_domain_name    = "api.staging.cortex-lab.uk"
 frontend_origins   = ["https://staging.cortex-lab.uk"]
 api_image          = "ACCOUNT_ID.dkr.ecr.us-east-2.amazonaws.com/cortex-lab-staging:REPLACE_ME"
 worker_image       = "ACCOUNT_ID.dkr.ecr.us-east-2.amazonaws.com/cortex-lab-staging:REPLACE_ME"
+alarm_email        = "you@example.com"
 runtime_secrets = {
   SUPABASE_URL          = "https://YOUR_REF.supabase.co"
   SUPABASE_JWT_SECRET   = "replace-me"

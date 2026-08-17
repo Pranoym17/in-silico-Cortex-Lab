@@ -1,3 +1,14 @@
+resource "aws_sns_topic" "alarms" {
+  name = "${local.name_prefix}-alarms"
+}
+
+resource "aws_sns_topic_subscription" "alarm_email" {
+  count     = var.alarm_email == null || trimspace(var.alarm_email) == "" ? 0 : 1
+  topic_arn = aws_sns_topic.alarms.arn
+  protocol  = "email"
+  endpoint  = var.alarm_email
+}
+
 resource "aws_cloudwatch_metric_alarm" "api_unhealthy" {
   alarm_name          = "${local.name_prefix}-api-unhealthy"
   alarm_description   = "The load balancer has no healthy Cortex Lab API target."
@@ -10,6 +21,7 @@ resource "aws_cloudwatch_metric_alarm" "api_unhealthy" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 1
   treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "database_cpu" {
@@ -24,6 +36,7 @@ resource "aws_cloudwatch_metric_alarm" "database_cpu" {
   comparison_operator = "GreaterThanThreshold"
   threshold           = 80
   treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
 }
 
 resource "aws_cloudwatch_dashboard" "runtime" {

@@ -27,4 +27,5 @@ resource "aws_cloudwatch_metric_alarm" "dlq_messages" {
   comparison_operator = "GreaterThanThreshold"
   threshold           = 0
   treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
 }

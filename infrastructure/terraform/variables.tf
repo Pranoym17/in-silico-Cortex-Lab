@@ -74,6 +74,13 @@ variable "worker_max_count" {
   default = 4
 }
 
+variable "alarm_email" {
+  type        = string
+  default     = null
+  nullable    = true
+  description = "Optional email address that receives CloudWatch alarm notifications."
+}
+
 variable "runtime_secrets" {
   type        = map(string)
   sensitive   = true

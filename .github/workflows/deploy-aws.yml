@@ -35,6 +35,7 @@ jobs:
       TF_VAR_domain_name: ${{ vars.FRONTEND_ORIGIN }}
       TF_VAR_api_domain_name: ${{ vars.API_DOMAIN }}
       TF_VAR_frontend_origins: ${{ vars.FRONTEND_ORIGINS_JSON }}
+      TF_VAR_alarm_email: ${{ vars.ALARM_EMAIL }}
       TF_VAR_runtime_secrets: ${{ secrets.RUNTIME_SECRETS_JSON }}
     steps:
       - uses: actions/checkout@v4
