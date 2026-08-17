@@ -1,0 +1,109 @@
+name: Deploy AWS Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options: [staging, production]
+      image_tag:
+        description: "Optional image tag; defaults to this commit SHA"
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cortex-lab-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      AWS_REGION: us-east-2
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE }}
+      TF_VAR_environment: ${{ inputs.environment }}
+      # These are GitHub Environment variables, so staging and production use
+      # the same names but resolve to their own isolated values.
+      TF_VAR_domain_name: ${{ vars.FRONTEND_ORIGIN }}
+      TF_VAR_api_domain_name: ${{ vars.API_DOMAIN }}
+      TF_VAR_frontend_origins: ${{ vars.FRONTEND_ORIGINS_JSON }}
+      TF_VAR_runtime_secrets: ${{ secrets.RUNTIME_SECRETS_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+      - uses: hashicorp/setup-terraform@v3
+      - name: Initialise remote state
+        run: >-
+          terraform -chdir=infrastructure/terraform init
+          -backend-config="bucket=$TF_STATE_BUCKET"
+          -backend-config="key=cortex-lab/${{ inputs.environment }}.tfstate"
+          -backend-config="region=$AWS_REGION"
+          -backend-config="dynamodb_table=$TF_LOCK_TABLE"
+          -backend-config="encrypt=true"
+      - name: Create ECR repository when bootstrapping
+        env:
+          TF_VAR_api_image: bootstrap
+          TF_VAR_worker_image: bootstrap
+        run: terraform -chdir=infrastructure/terraform apply -auto-approve -target=aws_ecr_repository.backend
+      - name: Build and publish backend image
+        id: image
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REPOSITORY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/cortex-lab-${{ inputs.environment }}"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REPOSITORY"
+          docker build --tag "$REPOSITORY:$IMAGE_TAG" backend
+          docker push "$REPOSITORY:$IMAGE_TAG"
+          echo "uri=$REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+      - name: Create infrastructure with services stopped
+        env:
+          TF_VAR_api_image: ${{ steps.image.outputs.uri }}
+          TF_VAR_worker_image: ${{ steps.image.outputs.uri }}
+          TF_VAR_api_desired_count: "0"
+          TF_VAR_worker_desired_count: "0"
+        run: terraform -chdir=infrastructure/terraform apply -auto-approve
+      - name: Run Alembic migration task
+        env:
+          TF_VAR_api_image: ${{ steps.image.outputs.uri }}
+          TF_VAR_worker_image: ${{ steps.image.outputs.uri }}
+        run: |
+          CLUSTER=$(terraform -chdir=infrastructure/terraform output -raw ecs_cluster_name)
+          TASK_DEFINITION=$(terraform -chdir=infrastructure/terraform output -raw migration_task_definition_arn)
+          SUBNETS=$(terraform -chdir=infrastructure/terraform output -json app_subnet_ids | jq -r 'join(",")')
+          SECURITY_GROUP=$(terraform -chdir=infrastructure/terraform output -raw api_security_group_id)
+          TASK_ARN=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE --task-definition "$TASK_DEFINITION" --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" --query 'tasks[0].taskArn' --output text)
+          test "$TASK_ARN" != "None"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --query 'tasks[0].containers[0].exitCode' --output text)
+          test "$EXIT_CODE" = "0"
+      - name: Start ECS services
+        env:
+          TF_VAR_api_image: ${{ steps.image.outputs.uri }}
+          TF_VAR_worker_image: ${{ steps.image.outputs.uri }}
+        run: terraform -chdir=infrastructure/terraform apply -auto-approve
+      - name: Smoke test deployed API
+        env:
+          TF_VAR_api_image: ${{ steps.image.outputs.uri }}
+          TF_VAR_worker_image: ${{ steps.image.outputs.uri }}
+        run: |
+          API_URL="https://${TF_VAR_api_domain_name}/health"
+          for attempt in {1..18}; do
+            if curl --fail --silent --show-error "$API_URL"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "API health check did not pass: $API_URL" >&2
+          exit 1

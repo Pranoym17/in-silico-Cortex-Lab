@@ -17,3 +17,6 @@ output "runtime_secret_arn" { value = aws_secretsmanager_secret.runtime.arn }
 output "sqs_queue_url" { value = aws_sqs_queue.jobs.url }
 output "sqs_dead_letter_queue_url" { value = aws_sqs_queue.dead_letter.url }
 output "migration_task_definition_arn" { value = aws_ecs_task_definition.migration.arn }
+output "ecs_cluster_name" { value = aws_ecs_cluster.main.name }
+output "app_subnet_ids" { value = values(aws_subnet.app)[*].id }
+output "api_security_group_id" { value = aws_security_group.api.id }
