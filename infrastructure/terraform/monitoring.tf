@@ -46,8 +46,8 @@ resource "aws_cloudwatch_dashboard" "runtime" {
       {
         type = "metric"
         properties = {
-          title  = "API target health"
-          region = var.aws_region
+          title   = "API target health"
+          region  = var.aws_region
           metrics = [["AWS/ApplicationELB", "HealthyHostCount", "LoadBalancer", aws_lb.api.arn_suffix, "TargetGroup", aws_lb_target_group.api.arn_suffix]]
         }
       },
@@ -65,8 +65,8 @@ resource "aws_cloudwatch_dashboard" "runtime" {
       {
         type = "metric"
         properties = {
-          title  = "PostgreSQL CPU"
-          region = var.aws_region
+          title   = "PostgreSQL CPU"
+          region  = var.aws_region
           metrics = [["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", aws_db_instance.postgres.identifier]]
         }
       },

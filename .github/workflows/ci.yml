@@ -46,7 +46,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t cortex-lab-backend:ci backend
-      - uses: aquasecurity/trivy-action@0.28.0
+      # Trivy's maintained action branch is used here because the retired
+      # 0.28.0 release tag no longer resolves on GitHub Actions.
+      - uses: aquasecurity/trivy-action@master
         with:
           image-ref: cortex-lab-backend:ci
           format: table
