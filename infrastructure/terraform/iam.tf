@@ -48,6 +48,20 @@ resource "aws_secretsmanager_secret_version" "runtime" {
   secret_string = jsonencode(local.runtime_secret_values)
 }
 
+# ECS retrieves container secrets before the task process starts, using this role.
+resource "aws_iam_role_policy" "ecs_execution_runtime_secret" {
+  name = "runtime-secret-read"
+  role = aws_iam_role.ecs_execution.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = aws_secretsmanager_secret.runtime.arn
+    }]
+  })
+}
+
 data "aws_iam_policy_document" "task" {
   statement {
     actions   = ["secretsmanager:GetSecretValue"]

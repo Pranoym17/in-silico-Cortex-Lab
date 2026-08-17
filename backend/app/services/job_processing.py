@@ -96,6 +96,22 @@ async def get_job_for_processing(session: AsyncSession, job_id: UUID) -> Job:
     return job
 
 
+async def requeue_retryable_failed_job(session: AsyncSession, job_id: UUID) -> Job:
+    """Restore a transiently failed job immediately before Celery retries it."""
+    job = await get_job_for_processing(session, job_id)
+    if job.status != JobStatus.failed or not is_retryable_job_error(job.error_code):
+        return job
+
+    job.status = JobStatus.queued
+    job.started_at = None
+    job.completed_at = None
+    job.error_code = None
+    job.error_message = None
+    await session.commit()
+    await session.refresh(job)
+    return job
+
+
 async def mark_job_failed(
     session: AsyncSession,
     job: Job,

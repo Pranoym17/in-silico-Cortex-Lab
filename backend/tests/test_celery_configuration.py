@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.tasks.celery_app import create_celery_app
+from app.tasks.inference_task import retry_delay_seconds
 
 
 def settings(**overrides):
@@ -45,3 +46,9 @@ def test_sqs_uses_predefined_queue_and_redis_results():
 def test_sqs_requires_a_real_https_queue_url():
     with pytest.raises(ValueError, match="SQS_QUEUE_URL"):
         create_celery_app(settings(resolved_celery_broker_url="sqs://"))
+
+
+def test_retry_delay_uses_bounded_exponential_backoff():
+    assert retry_delay_seconds(0, 30) == 30
+    assert retry_delay_seconds(2, 30) == 120
+    assert retry_delay_seconds(10, 30) == 900

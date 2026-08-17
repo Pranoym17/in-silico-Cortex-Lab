@@ -139,12 +139,41 @@ resource "aws_ecs_task_definition" "worker" {
   }])
 }
 
+# This task is deliberately not a service. CI runs it once, waits for completion,
+# and only then deploys the API that depends on the migrated schema.
+resource "aws_ecs_task_definition" "migration" {
+  family                   = "${local.name_prefix}-migration"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "512"
+  memory                   = "1024"
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+  task_role_arn            = aws_iam_role.api_task.arn
+  container_definitions = jsonencode([{
+    name        = "migration"
+    image       = var.api_image
+    essential   = true
+    command     = ["alembic", "upgrade", "head"]
+    environment = local.common_container_environment
+    secrets     = local.ecs_secrets
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.api.name
+        awslogs-region        = var.aws_region
+        awslogs-stream-prefix = "migration"
+      }
+    }
+  }])
+}
+
 resource "aws_ecs_service" "api" {
   name            = "api"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.api.arn
   desired_count   = var.api_desired_count
-  launch_type     = "FARGATE"
+  launch_type           = "FARGATE"
+  enable_execute_command = true
   network_configuration {
     subnets          = values(aws_subnet.app)[*].id
     security_groups  = [aws_security_group.api.id]
@@ -156,6 +185,11 @@ resource "aws_ecs_service" "api" {
     container_port   = 8000
   }
   depends_on = [aws_lb_listener.https]
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
 }
 
 resource "aws_ecs_service" "worker" {
@@ -163,11 +197,17 @@ resource "aws_ecs_service" "worker" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.worker.arn
   desired_count   = var.worker_desired_count
-  launch_type     = "FARGATE"
+  launch_type           = "FARGATE"
+  enable_execute_command = true
   network_configuration {
     subnets          = values(aws_subnet.app)[*].id
     security_groups  = [aws_security_group.worker.id]
     assign_public_ip = false
+  }
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
   }
 }
 

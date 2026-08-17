@@ -16,3 +16,4 @@ output "acm_cloudflare_validation_records" {
 output "runtime_secret_arn" { value = aws_secretsmanager_secret.runtime.arn }
 output "sqs_queue_url" { value = aws_sqs_queue.jobs.url }
 output "sqs_dead_letter_queue_url" { value = aws_sqs_queue.dead_letter.url }
+output "migration_task_definition_arn" { value = aws_ecs_task_definition.migration.arn }
