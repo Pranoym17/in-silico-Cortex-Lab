@@ -46,6 +46,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t cortex-lab-backend:ci backend
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: cortex-lab-backend:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
 
   terraform:
     runs-on: ubuntu-latest
