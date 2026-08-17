@@ -1,7 +1,7 @@
 fastapi==0.141.1
 uvicorn[standard]==0.34.0
 pydantic-settings==2.7.1
-python-jose[cryptography]==3.4.0
+python-jose[cryptography]==3.5.0
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
 alembic==1.14.0
@@ -15,4 +15,5 @@ nibabel==5.3.2
 trimesh==4.5.3
 # Pin the Python slim image's vulnerable packaging helpers as well.
 jaraco.context==6.1.0
+setuptools==84.0.0
 wheel==0.46.2
