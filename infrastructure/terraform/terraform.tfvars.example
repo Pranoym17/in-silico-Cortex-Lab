@@ -1,0 +1,18 @@
+environment        = "staging"
+aws_region         = "us-east-2"
+domain_name        = "https://staging.cortex-lab.uk"
+api_domain_name    = "api.staging.cortex-lab.uk"
+frontend_origins   = ["https://staging.cortex-lab.uk"]
+api_image          = "ACCOUNT_ID.dkr.ecr.us-east-2.amazonaws.com/cortex-lab-staging:REPLACE_ME"
+worker_image       = "ACCOUNT_ID.dkr.ecr.us-east-2.amazonaws.com/cortex-lab-staging:REPLACE_ME"
+runtime_secrets = {
+  SUPABASE_URL          = "https://YOUR_REF.supabase.co"
+  SUPABASE_JWT_SECRET   = "replace-me"
+  MODAL_TOKEN_ID        = "replace-me"
+  MODAL_TOKEN_SECRET    = "replace-me"
+  MODAL_APP_NAME        = "cortex-lab-tribe-staging"
+  MODAL_FUNCTION_NAME   = "run_real"
+  TRIBE_INFERENCE_MODE  = "real"
+  INFERENCE_PROVIDER    = "modal"
+  ADMIN_EMAIL_ADDRESSES = "you@example.com"
+}

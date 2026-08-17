@@ -161,3 +161,11 @@ vite.config.ts.timestamp-*
 # Playwright output
 frontend/test-results/
 frontend/playwright-report/
+
+# Terraform local plugins, state, plans, and environment credentials.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
