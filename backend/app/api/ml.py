@@ -52,7 +52,7 @@ async def start_optimizer_route(
     try:
         return start_optimizer_job(body, user.id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
 
 def optimizer_status_response(record) -> OptimizerJobStatusResponse:

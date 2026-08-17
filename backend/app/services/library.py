@@ -36,7 +36,7 @@ def normalize_tags(tags: list[str]) -> list[str]:
         if not value or value in seen:
             continue
         if len(value) > 64:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Tags must be 64 characters or less")
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Tags must be 64 characters or less")
         normalized.append(value)
         seen.add(value)
 

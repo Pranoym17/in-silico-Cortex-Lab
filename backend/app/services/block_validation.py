@@ -20,7 +20,7 @@ class TimelineBlock:
 def validate_timeline(blocks: list[TimelineBlock]) -> None:
     if len(blocks) > MAX_BLOCKS_PER_EXPERIMENT:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"experiments cannot exceed {MAX_BLOCKS_PER_EXPERIMENT} blocks",
         )
 
@@ -29,10 +29,10 @@ def validate_timeline(blocks: list[TimelineBlock]) -> None:
     for block in sorted_blocks:
         block_end = block.start_ms + block.duration_ms
         if block.start_ms < previous_end:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="stimulus blocks cannot overlap")
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="stimulus blocks cannot overlap")
         if block_end > MAX_EXPERIMENT_DURATION_MS:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"experiment duration cannot exceed {MAX_EXPERIMENT_DURATION_MS}ms",
             )
 

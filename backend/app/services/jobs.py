@@ -20,13 +20,13 @@ from app.services.sse_broker import JobEventBroker, get_job_event_broker
 def _required_payload_string(block: Block, key: str, label: str) -> str:
     value = block.payload.get(key)
     if not isinstance(value, str) or not value.strip():
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=label)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=label)
     return value
 
 
 def _base_run_block(block: Block) -> dict[str, Any]:
     if not block.content_hash:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="all blocks require content_hash")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="all blocks require content_hash")
 
     return {
         "id": str(block.id),
@@ -88,7 +88,7 @@ async def create_job_from_experiment(
 
     blocks = await list_blocks(session, owner, experiment_id)
     if not blocks:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="experiment has no blocks")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="experiment has no blocks")
 
     request = RunExperimentRequest(
         blocks=[block_to_run_spec(block) for block in blocks],

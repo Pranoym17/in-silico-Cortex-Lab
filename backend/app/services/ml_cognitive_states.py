@@ -141,4 +141,4 @@ async def get_cognitive_states(session: AsyncSession, owner: User, job_id: UUID)
             result_matrix.result.sample_rate_hz,
         )
     except (ValueError, ClassifierArtifactError) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc

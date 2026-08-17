@@ -24,19 +24,19 @@ def _expected_upload_prefix(owner: User, experiment_id: UUID) -> str:
 def validate_block_content(block: Block, owner: User | None = None) -> None:
     if block.type.value == "image" and not 500 <= block.duration_ms <= 30000:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="image block duration must be between 500ms and 30000ms",
         )
 
     if block.type.value == "audio" and block.duration_ms > 60000:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="audio block duration cannot exceed 60000ms",
         )
 
     if block.type.value == "video" and not 500 <= block.duration_ms <= 10000:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="video block duration must be between 500ms and 10000ms",
         )
     if block.type.value == "audio":
@@ -45,7 +45,7 @@ def validate_block_content(block: Block, owner: User | None = None) -> None:
             tolerance_ms = max(1000, int(source_duration * 0.10))
             if abs(block.duration_ms - source_duration) > tolerance_ms:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="audio block duration must match the uploaded media duration",
                 )
 
@@ -54,7 +54,7 @@ def validate_block_content(block: Block, owner: User | None = None) -> None:
         if isinstance(source_duration, (int, float)) and source_duration > 0:
             if abs(block.duration_ms - source_duration) > 250:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="video block duration must match the uploaded media duration",
                 )
 
@@ -63,7 +63,7 @@ def validate_block_content(block: Block, owner: User | None = None) -> None:
         if s3_key is not None:
             if not isinstance(s3_key, str) or not s3_key.strip():
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=f"{block.type.value} blocks require a valid s3_key",
                 )
             if owner is not None:
@@ -71,14 +71,14 @@ def validate_block_content(block: Block, owner: User | None = None) -> None:
                 trusted_library_key = s3_key.startswith("stimulus-library/v1/")
                 if not trusted_library_key and not s3_key.startswith(expected_prefix):
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                         detail="block media must reference an upload owned by this experiment",
                     )
 
     text = block.payload.get("text") if block.type.value == "text" else None
     if isinstance(text, str) and len(text.split()) > 1024:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="text blocks cannot exceed 1024 words",
         )
 
