@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     result_cache_enabled: bool = True
     result_cache_ttl_seconds: int = 2_592_000
     sqs_queue_url: str = "http://localhost:4566/000000000000/cortexlab-jobs"
+    celery_broker_url: str | None = None
+    celery_result_backend: str | None = None
+    celery_default_queue: str = "cortexlab"
+    celery_sqs_region: str | None = None
+    celery_sqs_visibility_timeout_seconds: int = 1_800
+    celery_task_max_retries: int = 2
+    celery_task_retry_backoff_seconds: int = 30
     supabase_jwt_secret: str = "replace-me"
     supabase_url: str | None = None
     supabase_jwt_audience: str | None = None
@@ -54,6 +61,15 @@ class Settings(BaseSettings):
         configured = [origin.strip().rstrip("/") for origin in self.frontend_origins.split(",") if origin.strip()]
         legacy_origin = self.frontend_origin.strip().rstrip("/")
         return list(dict.fromkeys([legacy_origin, *configured]))
+
+    @property
+    def resolved_celery_broker_url(self) -> str:
+        """Use Redis locally and an explicit broker such as SQS in ECS."""
+        return self.celery_broker_url or self.redis_url
+
+    @property
+    def resolved_celery_result_backend(self) -> str:
+        return self.celery_result_backend or self.redis_url
 
 
 @lru_cache
