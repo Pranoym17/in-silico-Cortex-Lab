@@ -33,14 +33,14 @@ def test_sqs_uses_predefined_queue_and_redis_results():
     app = create_celery_app(
         settings(
             resolved_celery_broker_url="sqs://",
-            resolved_celery_result_backend="rediss://cache.example:6379/0?ssl_cert_reqs=CERT_REQUIRED",
+            resolved_celery_result_backend="rediss://cache.example:6379/0?ssl_cert_reqs=required",
             sqs_queue_url="https://sqs.us-east-2.amazonaws.com/123456789012/cortexlab-staging",
         )
     )
 
     assert app.conf.broker_transport_options["region"] == "us-east-2"
     assert app.conf.broker_transport_options["predefined_queues"]["cortexlab"]["url"].endswith("cortexlab-staging")
-    assert app.conf.result_backend == "rediss://cache.example:6379/0?ssl_cert_reqs=CERT_REQUIRED"
+    assert app.conf.result_backend == "rediss://cache.example:6379/0?ssl_cert_reqs=required"
 
 
 def test_sqs_requires_a_real_https_queue_url():
