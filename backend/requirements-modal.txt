@@ -1,2 +1,1 @@
 -r requirements.txt
-modal==1.4.3
