@@ -26,12 +26,12 @@ resource "aws_secretsmanager_secret" "runtime" {
 locals {
   runtime_secret_values = merge(var.runtime_secrets, {
     DATABASE_URL          = "postgresql+asyncpg://${var.database_username}:${random_password.database.result}@${aws_db_instance.postgres.address}:5432/${var.database_name}"
-    REDIS_URL             = "rediss://${aws_elasticache_replication_group.redis.primary_endpoint_address}:6379/0"
+    REDIS_URL             = "rediss://${aws_elasticache_replication_group.redis.primary_endpoint_address}:6379/0?ssl_cert_reqs=CERT_REQUIRED"
     AWS_REGION            = var.aws_region
     S3_BUCKET_NAME        = aws_s3_bucket.media.id
     SQS_QUEUE_URL         = aws_sqs_queue.jobs.url
     CELERY_BROKER_URL     = "sqs://"
-    CELERY_RESULT_BACKEND = "rediss://${aws_elasticache_replication_group.redis.primary_endpoint_address}:6379/0"
+    CELERY_RESULT_BACKEND = "rediss://${aws_elasticache_replication_group.redis.primary_endpoint_address}:6379/0?ssl_cert_reqs=CERT_REQUIRED"
     CELERY_DEFAULT_QUEUE  = aws_sqs_queue.jobs.name
     CELERY_SQS_REGION     = var.aws_region
     SSE_EVENT_BACKEND     = "redis"
