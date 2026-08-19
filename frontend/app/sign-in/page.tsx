@@ -123,7 +123,7 @@ function SignInContent() {
                   <button aria-selected={authMode === "create-account"} className={authMode === "create-account" ? "active" : ""} onClick={() => { setAuthMode("create-account"); setError(null); }} role="tab" type="button">Create account</button>
                 </div>
                 <button className="google-auth-button" disabled={isConnecting !== null} onClick={continueWithGoogle} type="button">
-                  <span aria-hidden="true" className="google-glyph">G</span>
+                  <img alt="" aria-hidden="true" className="google-glyph" src="/brand/google-g.svg" />
                   {isConnecting === "google" ? "Connecting..." : "Continue with Google"}
                   <ArrowRight aria-hidden="true" size={16} />
                 </button>
