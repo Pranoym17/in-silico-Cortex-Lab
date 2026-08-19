@@ -98,6 +98,12 @@ jobs:
           TF_VAR_api_image: ${{ steps.image.outputs.uri }}
           TF_VAR_worker_image: ${{ steps.image.outputs.uri }}
         run: terraform -chdir=infrastructure/terraform apply -auto-approve
+      - name: Reload ECS services with current runtime configuration
+        run: |
+          CLUSTER=$(terraform -chdir=infrastructure/terraform output -raw ecs_cluster_name)
+          aws ecs update-service --cluster "$CLUSTER" --service api --force-new-deployment >/dev/null
+          aws ecs update-service --cluster "$CLUSTER" --service worker --force-new-deployment >/dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services api worker
       - name: Smoke test deployed API
         env:
           TF_VAR_api_image: ${{ steps.image.outputs.uri }}
