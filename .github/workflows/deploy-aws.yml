@@ -64,9 +64,13 @@ jobs:
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           REPOSITORY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/cortex-lab-${{ inputs.environment }}"
-          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REPOSITORY"
-          docker build --tag "$REPOSITORY:$IMAGE_TAG" backend
-          docker push "$REPOSITORY:$IMAGE_TAG"
+          if aws ecr describe-images --repository-name "cortex-lab-${{ inputs.environment }}" --image-ids imageTag="$IMAGE_TAG" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "Reusing existing immutable image tag: $IMAGE_TAG"
+          else
+            aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REPOSITORY"
+            docker build --tag "$REPOSITORY:$IMAGE_TAG" backend
+            docker push "$REPOSITORY:$IMAGE_TAG"
+          fi
           echo "uri=$REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
       - name: Create infrastructure with services stopped
         env:
