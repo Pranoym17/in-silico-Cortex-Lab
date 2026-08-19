@@ -137,20 +137,22 @@ resource "aws_db_subnet_group" "postgres" {
 }
 
 resource "aws_db_instance" "postgres" {
-  identifier                 = "${local.name_prefix}-postgres"
-  engine                     = "postgres"
-  engine_version             = "16"
-  instance_class             = var.database_instance_class
-  allocated_storage          = 20
-  max_allocated_storage      = 100
-  storage_encrypted          = true
-  db_name                    = var.database_name
-  username                   = var.database_username
-  password                   = random_password.database.result
-  db_subnet_group_name       = aws_db_subnet_group.postgres.name
-  vpc_security_group_ids     = [aws_security_group.data.id]
-  publicly_accessible        = false
-  backup_retention_period    = var.environment == "production" ? 14 : 7
+  identifier             = "${local.name_prefix}-postgres"
+  engine                 = "postgres"
+  engine_version         = "16"
+  instance_class         = var.database_instance_class
+  allocated_storage      = 20
+  max_allocated_storage  = 100
+  storage_encrypted      = true
+  db_name                = var.database_name
+  username               = var.database_username
+  password               = random_password.database.result
+  db_subnet_group_name   = aws_db_subnet_group.postgres.name
+  vpc_security_group_ids = [aws_security_group.data.id]
+  publicly_accessible    = false
+  # Free Tier accounts permit one day of automated RDS backups. Keep manual
+  # release snapshots and the restore drill as the recovery safeguard.
+  backup_retention_period    = 1
   deletion_protection        = var.environment == "production"
   skip_final_snapshot        = var.environment != "production"
   final_snapshot_identifier  = var.environment == "production" ? "${local.name_prefix}-final" : null
