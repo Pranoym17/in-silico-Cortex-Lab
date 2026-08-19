@@ -3,7 +3,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Cortex Lab | In-silico fMRI workspace",
-  description: "Build multimodal research stimuli and inspect simulated cortical activation on fsaverage5."
+  description: "Build multimodal research stimuli and inspect simulated cortical activation on fsaverage5.",
+  icons: {
+    icon: "/brand/cortex-lab-logo.png",
+    apple: "/brand/cortex-lab-logo.png"
+  }
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

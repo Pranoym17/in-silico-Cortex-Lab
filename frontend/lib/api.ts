@@ -1,4 +1,6 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL
+  ?? process.env.NEXT_PUBLIC_API_BASE_URL
+  ?? "http://localhost:8000";
 
 export type ApiErrorBody = {
   detail?: string | { code?: string; message?: string };
@@ -8,7 +10,7 @@ export class ApiConnectionError extends Error {
   endpoint: string;
 
   constructor(endpoint: string) {
-    super(`Cortex Lab could not reach the API at ${endpoint}. Start the backend and confirm NEXT_PUBLIC_API_URL matches its address.`);
+    super(`Cortex Lab could not reach the API at ${endpoint}. Confirm NEXT_PUBLIC_API_URL matches the deployed backend address.`);
     this.name = "ApiConnectionError";
     this.endpoint = endpoint;
   }
