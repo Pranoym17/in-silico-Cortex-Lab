@@ -101,7 +101,7 @@ def _modal_secret_name() -> str:
 
 
 def _modal_aws_secret_name() -> str:
-    return os.environ.get("MODAL_AWS_SECRET_NAME", "cortex-aws").strip() or "cortex-aws"
+    return os.environ.get("MODAL_AWS_SECRET_NAME", "aws-secret").strip() or "aws-secret"
 
 
 def _real_tribe_env() -> dict[str, str]:
