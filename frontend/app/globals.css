@@ -3204,6 +3204,9 @@ button, input, textarea, select { font: inherit; }
 .experiment-row { min-height: 76px; border: 1px solid var(--line); border-radius: var(--radius-md); margin-bottom: 10px; padding: 16px 20px; }
 .experiment-list { border: 0; }
 .experiment-row:hover { border-color: #badce2; background: var(--accent-050); }
+.experiment-remove-button { min-height: 32px; border-color: rgba(194, 75, 63, .28); background: #fff8f7; color: var(--danger); }
+.experiment-remove-button:hover:not(:disabled) { border-color: var(--danger); background: #fff0ed; color: #982d22; }
+.experiment-remove-button:disabled { cursor: wait; opacity: .65; }
 .dashboard-instrument-strip { gap: 12px; margin-bottom: 24px; border: 0; background: transparent; }
 .dashboard-instrument-strip > div { min-height: 96px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-0); padding: 16px; box-shadow: var(--shadow-sm); }
 .dashboard-instrument-strip > div:last-child { border-right: 1px solid var(--line); }

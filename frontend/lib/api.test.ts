@@ -5,6 +5,7 @@ import {
   applyExperimentTemplate,
   apiFetch,
   apiJson,
+  archiveExperiment,
   cancelJob,
   createBlock,
   createExperiment,
@@ -134,6 +135,17 @@ describe("block helpers", () => {
     expect(fetchMock.mock.calls[0][1]?.body).toBe(JSON.stringify(input));
     const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
     expect(headers.get("authorization")).toBe("Bearer token-123");
+  });
+});
+
+describe("archiveExperiment", () => {
+  it("removes an owned experiment", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+
+    await archiveExperiment("exp_1", "token-123");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/experiments/exp_1");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("DELETE");
   });
 });
 

@@ -3,8 +3,8 @@
 import Link from "next/link";
 import NextImage from "next/image";
 import { FormEvent, useEffect, useState } from "react";
-import { Activity, ArrowRight, BookOpen, CircleCheck, FlaskConical, Plus, Sparkles } from "lucide-react";
-import { ApiError, Experiment, createExperiment, listExperiments } from "@/lib/api";
+import { Activity, ArrowRight, BookOpen, CircleCheck, FlaskConical, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ApiError, Experiment, archiveExperiment, createExperiment, listExperiments } from "@/lib/api";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
 import { AppShell, EmptyState, ErrorPanel, LoadingRows, StatusBadge } from "@/components/ui/AppShell";
@@ -29,6 +29,7 @@ export function DashboardClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoringSession, setIsRestoringSession] = useState(supabaseConfigured);
   const [isCreating, setIsCreating] = useState(false);
+  const [deletingExperimentId, setDeletingExperimentId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,6 +112,30 @@ export function DashboardClient() {
       setError(message);
     } finally {
       setIsCreating(false);
+    }
+  }
+
+  async function handleArchive(experiment: Experiment) {
+    if (!accessToken || deletingExperimentId) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Remove \"${experiment.name}\" from your workspace? This cannot be undone from Cortex Lab.`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingExperimentId(experiment.id);
+    setError(null);
+
+    try {
+      await archiveExperiment(experiment.id, accessToken);
+      setExperiments((current) => current.filter((item) => item.id !== experiment.id));
+    } catch (caught) {
+      const message = caught instanceof ApiError ? caught.message : "Failed to remove experiment";
+      setError(message);
+    } finally {
+      setDeletingExperimentId(null);
     }
   }
 
@@ -220,6 +245,17 @@ export function DashboardClient() {
                     <span className={experiment.is_public ? "visibility-mark public" : "visibility-mark"}>{experiment.is_public ? "Public" : "Private"}</span>
                     <StatusBadge tone={experiment.status === "ready" ? "good" : "neutral"}>{experiment.status}</StatusBadge>
                     <Link href={`/builder/${experiment.id}`}>Open <ArrowRight aria-hidden="true" size={14} /></Link>
+                    <button
+                      aria-label={`Remove ${experiment.name}`}
+                      className="experiment-remove-button"
+                      disabled={deletingExperimentId === experiment.id}
+                      onClick={() => void handleArchive(experiment)}
+                      title="Remove experiment"
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" size={14} />
+                      <span>{deletingExperimentId === experiment.id ? "Removing..." : "Remove"}</span>
+                    </button>
                   </div>
                 </article>
               ))}
