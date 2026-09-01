@@ -66,12 +66,36 @@ variable "api_desired_count" {
 
 variable "worker_desired_count" {
   type    = number
-  default = 1
+  default = 0
 }
 
 variable "worker_max_count" {
   type    = number
-  default = 4
+  default = 1
+}
+
+variable "api_task_cpu" {
+  type        = number
+  default     = 256
+  description = "Fargate CPU units for the always-on API."
+}
+
+variable "api_task_memory" {
+  type        = number
+  default     = 512
+  description = "Fargate MiB for the always-on API."
+}
+
+variable "worker_task_cpu" {
+  type        = number
+  default     = 512
+  description = "Fargate CPU units for the queue-driven worker."
+}
+
+variable "worker_task_memory" {
+  type        = number
+  default     = 1024
+  description = "Fargate MiB for the queue-driven worker."
 }
 
 variable "alarm_email" {

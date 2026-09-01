@@ -45,25 +45,7 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-resource "aws_eip" "nat" { domain = "vpc" }
-resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = values(aws_subnet.public)[0].id
-  depends_on    = [aws_internet_gateway.main]
-}
-resource "aws_route_table" "private" { vpc_id = aws_vpc.main.id }
-resource "aws_route" "private_nat" {
-  route_table_id         = aws_route_table.private.id
-  destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id         = aws_nat_gateway.main.id
-}
-resource "aws_route_table_association" "app" {
-  for_each       = aws_subnet.app
-  subnet_id      = each.value.id
-  route_table_id = aws_route_table.private.id
-}
-resource "aws_route_table_association" "data" {
-  for_each       = aws_subnet.data
-  subnet_id      = each.value.id
-  route_table_id = aws_route_table.private.id
-}
+# Portfolio cost profile: ECS tasks use public subnets only for outbound access
+# to Supabase, Modal, and S3. Their security groups still prevent direct inbound
+# access; RDS and Redis remain in subnets with no internet route. This removes
+# the always-on NAT Gateway and its public IPv4 charge.

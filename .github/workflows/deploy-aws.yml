@@ -86,9 +86,9 @@ jobs:
         run: |
           CLUSTER=$(terraform -chdir=infrastructure/terraform output -raw ecs_cluster_name)
           TASK_DEFINITION=$(terraform -chdir=infrastructure/terraform output -raw migration_task_definition_arn)
-          SUBNETS=$(terraform -chdir=infrastructure/terraform output -json app_subnet_ids | jq -r 'join(",")')
+          SUBNETS=$(terraform -chdir=infrastructure/terraform output -json public_subnet_ids | jq -r 'join(",")')
           SECURITY_GROUP=$(terraform -chdir=infrastructure/terraform output -raw api_security_group_id)
-          TASK_ARN=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE --task-definition "$TASK_DEFINITION" --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" --query 'tasks[0].taskArn' --output text)
+          TASK_ARN=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE --task-definition "$TASK_DEFINITION" --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" --query 'tasks[0].taskArn' --output text)
           test "$TASK_ARN" != "None"
           aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
           EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --query 'tasks[0].containers[0].exitCode' --output text)

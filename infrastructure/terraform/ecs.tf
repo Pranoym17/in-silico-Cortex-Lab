@@ -83,8 +83,8 @@ resource "aws_ecs_task_definition" "api" {
   family                   = "${local.name_prefix}-api"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "512"
-  memory                   = "1024"
+  cpu                      = tostring(var.api_task_cpu)
+  memory                   = tostring(var.api_task_memory)
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.api_task.arn
   container_definitions = jsonencode([{
@@ -117,8 +117,8 @@ resource "aws_ecs_task_definition" "worker" {
   family                   = "${local.name_prefix}-worker"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "1024"
-  memory                   = "2048"
+  cpu                      = tostring(var.worker_task_cpu)
+  memory                   = tostring(var.worker_task_memory)
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.worker_task.arn
   container_definitions = jsonencode([{
@@ -175,9 +175,9 @@ resource "aws_ecs_service" "api" {
   launch_type            = "FARGATE"
   enable_execute_command = true
   network_configuration {
-    subnets          = values(aws_subnet.app)[*].id
+    subnets          = values(aws_subnet.public)[*].id
     security_groups  = [aws_security_group.api.id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
   load_balancer {
     target_group_arn = aws_lb_target_group.api.arn
@@ -200,9 +200,9 @@ resource "aws_ecs_service" "worker" {
   launch_type            = "FARGATE"
   enable_execute_command = true
   network_configuration {
-    subnets          = values(aws_subnet.app)[*].id
+    subnets          = values(aws_subnet.public)[*].id
     security_groups  = [aws_security_group.worker.id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
 
   deployment_circuit_breaker {
